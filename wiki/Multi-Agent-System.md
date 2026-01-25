@@ -15,7 +15,7 @@
 5. [Agent Communication & Coordination](#agent-communication--coordination)
 6. [Model Selection](#model-selection)
 7. [Agent Presets](#agent-presets)
-   - [📊 Quality Comparison (QII)](#quality-comparison-qii)
+    - [📊 Quality Comparison (QII)](#quality-comparison-qii)
 8. [Self-Correction & Error Handling](#self-correction--error-handling)
 9. [Workflow State Machine](#workflow-state-machine)
 10. [Practical Examples](#practical-examples)
