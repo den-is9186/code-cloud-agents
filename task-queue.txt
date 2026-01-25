@@ -6,3 +6,9 @@ Add Coach Agent with Claude API
 Add Code Agent with file operations
 Add Supervisor Agent orchestrator
 Add integration tests
+Add POST /api/agents/build endpoint that triggers Supervisor
+Supervisor: orchestrate Coach → Code → Test flow
+Add agent execution state logging to Redis
+Add error recovery: retry failed agent tasks 3 times
+Integrate Supervisor with task-queue.txt auto-processing
+Add end-to-end agent orchestration tests
