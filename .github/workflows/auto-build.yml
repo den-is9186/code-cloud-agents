@@ -18,8 +18,8 @@ on:
           - gpt-4
 
   schedule:
-    # Alle 15 Minuten (Fallback wenn Queue-Processor ausfällt)
-    - cron: '*/15 * * * *'
+    # Alle 3 Minuten - checkt Queue und baut nächste Task
+    - cron: '*/3 * * * *'
 
 jobs:
   build:
