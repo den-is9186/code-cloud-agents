@@ -274,6 +274,103 @@ presets:
       - "Komplette Repo-Analyse"
 
   # ═══════════════════════════════════════════════════════════════
+  # LOCAL PRESET - Scout für Docs/Vision, API für Rest
+  # ═══════════════════════════════════════════════════════════════
+
+  LOCAL:
+    name: "Local Scout Hybrid"
+    description: "Scout lokal für Docs/Vision, beste APIs für kritische Tasks"
+    estimated_cost_per_build: 6
+    quality_score: 85
+    error_rate: 0.10
+    recommended_for: "Teams mit eigenem Server"
+    
+    agents:
+      supervisor:
+        model: deepseek-r1-0528
+        role: "Orchestriert alle Agents"
+        why_api: "Kritisch - braucht bestes Reasoning"
+      
+      architect:
+        model: deepseek-r1-0528
+        role: "Erstellt Runbook"
+        why_api: "Kritisch - Architektur-Entscheidungen"
+        context_tool: llama-4-scout-local
+        context_tool_usage: "Holt Repo-Übersicht vor Entscheidung"
+      
+      coach:
+        model: deepseek-r1-0528
+        role: "Definiert Sub-Tasks"
+        why_api: "Kritisch - Task-Planung"
+      
+      code:
+        model: deepseek-v3.2
+        role: "Schreibt Code"
+        why_api: "Kritisch - Code-Qualität"
+      
+      review:
+        model: deepseek-r1-0528
+        role: "Prüft Code"
+        why_api: "Kritisch - Bug-Finding"
+      
+      test:
+        model: deepseek-v3.2
+        role: "Schreibt Tests"
+        why_api: "Kritisch - Test-Qualität"
+      
+      docs:
+        model: llama-4-scout-local
+        role: "Schreibt Dokumentation (LOKAL)"
+        why_local: "Weniger kritisch, braucht viel Kontext"
+      
+      vision:
+        model: llama-4-scout-local
+        role: "Analysiert Screenshots/Bilder (LOKAL)"
+        why_local: "Perfekt für Vision, keine API-Kosten"
+    
+    context_tool:
+      model: llama-4-scout-local
+      purpose: "Gibt anderen Agents Repo-Kontext"
+      usage: |
+        Architect ruft Scout: "Gib mir Übersicht über /src"
+        Scout liest 10M Tokens, gibt 2000-Token-Summary
+        Architect entscheidet basierend auf Summary
+    
+    special_capabilities:
+      - local_inference
+      - vision
+      - unlimited_docs
+      - context_tool
+    
+    cost_breakdown:
+      supervisor: "$0.50 (API)"
+      architect: "$0.50 (API) + $0 (Scout-Context)"
+      coach: "$0.50 (API)"
+      code: "$2.00 (API)"
+      review: "$0.50 (API)"
+      test: "$2.00 (API)"
+      docs: "$0.00 (LOKAL)"
+      vision: "$0.00 (LOKAL)"
+      total: "$6.00"
+    
+    vs_full_api:
+      preset_a_cost: 8
+      local_preset_cost: 6
+      savings_percent: 25
+      quality_difference: "-3% (nur Docs)"
+    
+    use_cases:
+      - "Standard-Entwicklung mit eigenem Server"
+      - "Unbegrenzte Dokumentation"
+      - "Vision-Tasks ohne API-Kosten"
+      - "Langfristig kosteneffizient"
+    
+    requirements:
+      server: "24-48GB VRAM GPU"
+      software: "vLLM, Ollama, oder llama.cpp"
+      network: "Server muss erreichbar sein"
+
+  # ═══════════════════════════════════════════════════════════════
   # TASK-SPECIFIC PRESETS (E, F)
   # ═══════════════════════════════════════════════════════════════
 
@@ -337,22 +434,42 @@ presets:
 
 selection_guide:
   by_priority:
-    cost: ["A", "B+", "V", "L"]
-    quality: ["C", "D", "B"]
+    cost: ["LOCAL", "A", "B+", "V", "L"]
+    quality: ["C", "D", "B", "LOCAL"]
     speed: ["B+", "A"]
-    vision: ["V"]
+    vision: ["LOCAL", "V"]
     large_repos: ["L"]
+    own_server: ["LOCAL"]
   
   by_use_case:
     prototype: "A"
     standard_dev: "B"
+    standard_dev_with_server: "LOCAL"
     live_debugging: "B+"
     production: "C"
     cost_optimized_quality: "D"
-    screenshot_to_code: "V"
+    screenshot_to_code: "LOCAL"
     legacy_refactor: "L"
     code_cleanup: "E"
     merge_conflicts: "F"
+    unlimited_docs: "LOCAL"
+  
+  decision_tree: |
+    Hast du eigenen Server (24GB+ VRAM)?
+      JA → LOCAL (beste Kosten/Qualität Balance)
+      NEIN → Weiter...
+    
+    Ist es ein Prototyp?
+      JA → A (Budget)
+      NEIN → Weiter...
+    
+    Brauchst du Vision/Screenshots?
+      JA → V (Vision)
+      NEIN → Weiter...
+    
+    Ist es Production-kritisch?
+      JA → C (Premium) oder D (Smart)
+      NEIN → B (Optimal)
 
 # ═══════════════════════════════════════════════════════════════
 # TWO-PHASE WORKFLOW
@@ -386,6 +503,7 @@ two_phase_workflow:
 
 cost_comparison:
   per_build:
+    LOCAL: 6
     A: 8
     "B+": 12
     V: 15
@@ -395,6 +513,7 @@ cost_comparison:
     C: 130
   
   per_100_builds:
+    LOCAL: 600
     A: 800
     "B+": 1200
     V: 1500
@@ -402,3 +521,46 @@ cost_comparison:
     B: 2500
     D: 8000
     C: 13000
+  
+  local_vs_api_savings:
+    vs_A: "25% günstiger"
+    vs_B: "76% günstiger"
+    note: "Plus unbegrenzte Docs/Vision"
+
+# ═══════════════════════════════════════════════════════════════
+# LOCAL SERVER SETUP GUIDE
+# ═══════════════════════════════════════════════════════════════
+
+local_server_setup:
+  option_1_vllm:
+    name: "vLLM (Empfohlen für Production)"
+    install: |
+      pip install vllm
+      vllm serve meta-llama/Llama-4-Scout-Instruct \
+        --host 0.0.0.0 \
+        --port 8000 \
+        --tensor-parallel-size 1 \
+        --max-model-len 131072
+    endpoint: "http://server:8000/v1"
+    
+  option_2_ollama:
+    name: "Ollama (Einfachstes Setup)"
+    install: |
+      curl -fsSL https://ollama.com/install.sh | sh
+      ollama pull llama4-scout:instruct
+      ollama serve
+    endpoint: "http://server:11434/v1"
+    
+  option_3_llamacpp:
+    name: "llama.cpp (Beste Performance/VRAM)"
+    install: |
+      git clone https://github.com/ggerganov/llama.cpp
+      cd llama.cpp && make -j
+      ./server -m llama-4-scout-Q4_K_M.gguf \
+        --host 0.0.0.0 --port 8000 \
+        --ctx-size 131072
+    endpoint: "http://server:8000/v1"
+
+  env_config: |
+    # In .env setzen:
+    LOCAL_LLM_ENDPOINT=http://euer-server:8000

@@ -1,8 +1,51 @@
 # Models Configuration
-# Version: 2.1.0
+# Version: 2.2.0
 # Updated: 2025-01-25
 
 models:
+  # ═══════════════════════════════════════════════════════════════
+  # LOCAL TIER - Selbst gehostet, keine API-Kosten
+  # ═══════════════════════════════════════════════════════════════
+  
+  llama-4-scout-local:
+    provider: local
+    endpoint: "${LOCAL_LLM_ENDPOINT:-http://localhost:8000}/v1"
+    model_id: "llama-4-scout-instruct"
+    display_name: "Llama 4 Scout (Lokal)"
+    tier: local
+    
+    pricing:
+      input_per_million: 0.00
+      output_per_million: 0.00
+      note: "Selbst gehostet - nur Stromkosten"
+    
+    context_window: 10000000
+    max_output: 32000
+    
+    capabilities:
+      reasoning: 7
+      coding: 7
+      tool_calling: 8
+      agentic: 7
+      speed: 6
+      vision: 9
+      long_context: 10
+    
+    best_for:
+      - "Docs Agent (FEST)"
+      - "Vision Agent (FEST)"
+      - "Kontext-Tool für andere Agents"
+      - "Repo-Übersicht generieren"
+      - "Unbegrenzte Nutzung"
+    
+    hardware_requirements:
+      vram_minimum: "24GB"
+      vram_recommended: "48GB"
+      quantization: "Q4_K_M oder Q5_K_M"
+      server: "vLLM, Ollama, oder llama.cpp"
+    
+    notes: "10M Kontext! Für Docs, Vision, und als Kontext-Helfer."
+
   # ═══════════════════════════════════════════════════════════════
   # BUDGET TIER - Günstig, aber leistungsstark
   # ═══════════════════════════════════════════════════════════════
