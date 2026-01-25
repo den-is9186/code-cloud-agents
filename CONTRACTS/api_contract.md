@@ -3,7 +3,7 @@
 > **Contract-First:** Diese Datei definiert ALLE API Endpoints.
 > Änderungen hier MÜSSEN vor Code-Implementierung dokumentiert werden.
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Letzte Änderung:** 2026-01-25
 
 ---
@@ -55,6 +55,158 @@ GET /health
   "status": "error",
   "timestamp": "2026-01-25T12:00:00Z",
   "error": "Service unavailable"
+}
+```
+
+---
+
+## Code Agent - File Operations
+
+### List Files
+
+**Zweck:** Liste alle Dateien in einem Verzeichnis
+
+```http
+GET /api/v1/files?path=src
+```
+
+**Query Parameters:**
+- `path` (optional): Relativer Pfad vom Projekt-Root (default: ".")
+- `recursive` (optional): Boolean, rekursiv listen (default: false)
+
+**Response 200:**
+```json
+{
+  "path": "src",
+  "files": [
+    {
+      "name": "index.js",
+      "type": "file",
+      "size": 1234,
+      "modified": "2026-01-25T12:00:00Z"
+    },
+    {
+      "name": "utils",
+      "type": "directory"
+    }
+  ]
+}
+```
+
+**Response 400:**
+```json
+{
+  "error": {
+    "code": "INVALID_PATH",
+    "message": "Path traversal not allowed"
+  }
+}
+```
+
+---
+
+### Read File
+
+**Zweck:** Lese Inhalt einer Datei
+
+```http
+GET /api/v1/files/content?path=src/index.js
+```
+
+**Query Parameters:**
+- `path` (required): Relativer Pfad zur Datei
+
+**Response 200:**
+```json
+{
+  "path": "src/index.js",
+  "content": "const express = require('express');\n...",
+  "encoding": "utf8",
+  "size": 1234,
+  "modified": "2026-01-25T12:00:00Z"
+}
+```
+
+**Response 404:**
+```json
+{
+  "error": {
+    "code": "FILE_NOT_FOUND",
+    "message": "File not found: src/index.js"
+  }
+}
+```
+
+---
+
+### Write File
+
+**Zweck:** Schreibe oder aktualisiere eine Datei
+
+```http
+POST /api/v1/files/content
+Content-Type: application/json
+
+{
+  "path": "src/newfile.js",
+  "content": "console.log('Hello');",
+  "createDirs": true
+}
+```
+
+**Request Body:**
+- `path` (required): Relativer Pfad zur Datei
+- `content` (required): Datei-Inhalt
+- `createDirs` (optional): Erstelle Verzeichnisse falls nötig (default: false)
+
+**Response 200:**
+```json
+{
+  "path": "src/newfile.js",
+  "size": 22,
+  "created": true,
+  "modified": "2026-01-25T12:00:00Z"
+}
+```
+
+**Response 400:**
+```json
+{
+  "error": {
+    "code": "INVALID_PATH",
+    "message": "Path traversal not allowed"
+  }
+}
+```
+
+---
+
+### Delete File
+
+**Zweck:** Lösche eine Datei
+
+```http
+DELETE /api/v1/files/content?path=src/oldfile.js
+```
+
+**Query Parameters:**
+- `path` (required): Relativer Pfad zur Datei
+
+**Response 200:**
+```json
+{
+  "path": "src/oldfile.js",
+  "deleted": true
+}
+```
+
+**Response 404:**
+```json
+{
+  "error": {
+    "code": "FILE_NOT_FOUND",
+    "message": "File not found: src/oldfile.js"
+  }
 }
 ```
 
@@ -123,16 +275,35 @@ Alle Errors folgen diesem Schema:
 
 **Error Codes:**
 - `INVALID_INPUT` - 400
+- `INVALID_PATH` - 400
 - `UNAUTHORIZED` - 401
 - `NOT_FOUND` - 404
+- `FILE_NOT_FOUND` - 404
 - `RATE_LIMIT` - 429
 - `SERVER_ERROR` - 500
+
+---
+
+## Security
+
+### Path Traversal Protection
+
+Alle File Operations validieren Pfade:
+- Keine `..` Segmente erlaubt
+- Nur relative Pfade vom Projekt-Root
+- Whitelist von erlaubten Verzeichnissen
+
+### File Size Limits
+
+- Max File Size: 10MB
+- Max Files per Request: 100
 
 ---
 
 ## Rate Limiting
 
 - **Default:** 100 requests/minute
+- **File Operations:** 50 requests/minute
 - **Header:** `X-RateLimit-Remaining`
 
 ---
