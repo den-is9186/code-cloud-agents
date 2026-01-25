@@ -16,8 +16,12 @@ describe('GET /health', () => {
   let mockRedis;
 
   beforeEach(() => {
-    // Get the mocked Redis instance
-    mockRedis = Redis.mock.results[0].value;
+    // Clear all mocks before each test
+    jest.clearAllMocks();
+    
+    // Get the mocked Redis constructor
+    const RedisMock = Redis;
+    mockRedis = RedisMock.mock.instances[0];
   });
 
   afterEach(() => {
@@ -63,5 +67,19 @@ describe('GET /', () => {
     expect(response.body).toEqual({
       message: 'Hello World'
     });
+  });
+
+  test('should return JSON content type', async () => {
+    const response = await request(app).get('/');
+
+    expect(response.headers['content-type']).toMatch(/json/);
+  });
+});
+
+describe('Error handling', () => {
+  test('should return 404 for unknown routes', async () => {
+    const response = await request(app).get('/unknown-route');
+
+    expect(response.status).toBe(404);
   });
 });
