@@ -1,66 +1,130 @@
-/**
- * Type Definitions for Multi-Agent System
- */
+// Agent Roles
+export type AgentRole = "supervisor" | "architect" | "coach" | "code" | "review" | "test" | "docs" | "vision";
 
-export type AgentName =
-  | 'architect'
-  | 'coach'
-  | 'code'
-  | 'review'
-  | 'test'
-  | 'docs';
+// Agent Status
+export type AgentStatus = "idle" | "working" | "waiting" | "error" | "done";
 
-export type BuildStatus =
-  | 'queued'
-  | 'running'
-  | 'completed'
-  | 'failed';
-
-export type AgentStatus =
-  | 'success'
-  | 'error';
-
-export type PresetType = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
-
-export interface AgentResult {
-  agent: AgentName;
-  status: AgentStatus;
-  output: any;
-  cost: number;
-  duration: number;
-  error?: string;
-}
-
-export interface BuildContext {
-  buildId: string;
-  teamId: string;
-  requirements: string;
-  preset: PresetType;
-}
-
-export interface BuildState {
-  buildId: string;
-  teamId: string;
-  status: BuildStatus;
-  current_agent: AgentName | null;
-  started_at: string;
-  completed_at?: string;
-  total_cost: number;
-  total_duration: number;
-  error?: string;
-}
-
-export interface AgentInput {
-  requirements?: string;
-  runbook?: string;
-  tasks?: any[];
-  code_changes?: any[];
-  review_result?: any;
-  test_files?: any[];
-}
-
-export interface AgentConfig {
+// Base Agent Interface
+export interface Agent {
+  role: AgentRole;
   model: string;
-  maxTokens: number;
-  temperature: number;
+  status: AgentStatus;
+  execute(input: any): Promise<any>;
+}
+
+// Runbook Types
+export interface Step {
+  id: string;
+  description: string;
+  files: string[];
+  expectedOutcome: string;
+  estimatedTokens: number;
+}
+
+export interface SubTask {
+  id: string;
+  stepId: string;
+  assignedAgent: AgentRole;
+  description: string;
+  input: Record<string, any>;
+  expectedOutput: string;
+  status: "pending" | "in_progress" | "completed" | "failed";
+}
+
+export interface Dependency {
+  taskId: string;
+  dependsOn: string[];
+}
+
+// File Types
+export interface FileChange {
+  path: string;
+  action: "create" | "modify" | "delete";
+  content?: string;
+  diff?: string;
+}
+
+// Review Types
+export interface Issue {
+  severity: "error" | "warning" | "info";
+  file: string;
+  line?: number;
+  message: string;
+  suggestion?: string;
+  rule?: string;
+}
+
+export interface ReviewFeedback {
+  approved: boolean;
+  issues: Issue[];
+  mustFix: Issue[];
+}
+
+// Test Types
+export interface TestFile {
+  path: string;
+  testCount: number;
+  content: string;
+}
+
+export interface TestResult {
+  passed: number;
+  failed: number;
+  skipped: number;
+  duration: number;
+}
+
+export interface TestFailure {
+  testName: string;
+  file: string;
+  error: string;
+  expected?: string;
+  actual?: string;
+}
+
+// LLM Types
+export interface Message {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cost: number;
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, any>;
+}
+
+export interface LLMResponse {
+  content: string;
+  toolCalls?: ToolCall[];
+  usage: TokenUsage;
+}
+
+// Project Context
+export interface ProjectContext {
+  path: string;
+  language: string;
+  framework?: string;
+  files: string[];
+  dependencies: Record<string, string>;
+}
+
+// Build Result
+export interface BuildResult {
+  success: boolean;
+  filesChanged: FileChange[];
+  testsWritten: TestFile[];
+  testResults?: TestResult;
+  docsUpdated: FileChange[];
+  totalCost: number;
+  totalTokens: number;
+  duration: number;
+  errors?: string[];
 }
