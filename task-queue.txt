@@ -2,3 +2,4 @@
 # Eine Task pro Zeile
 # GitHub Actions arbeitet alle 4h die nächste Task ab
 # Queue processing started - Sun Jan 25 21:06:34 CET 2026
+Create Multi-Agent Supervisor System: 1) Create src/agents/supervisor.ts with runBuildWorkflow() function that orchestrates 6 agents sequentially (architect→coach→code→review→test→docs). 2) Create src/agents/types.ts with AgentResult interface (agent, status, output, cost, duration). 3) Each agent receives previous agent's output as input. 4) Store build state in Redis: build:{buildId} for status, build:{buildId}:agents for results. 5) On error, abort workflow and set build status to 'failed'. 6) Implement sequential execution with Redis state updates after each agent.

@@ -1,0 +1,351 @@
+# MODELS CONFIGURATION
+# Multi-Agent System - Verfügbare KI-Modelle
+
+schema_version: "1.0"
+
+# ═══════════════════════════════════════════════════════════════
+# DEEPSEEK MODELLE (via OpenRouter)
+# ═══════════════════════════════════════════════════════════════
+
+models:
+
+  deepseek-v3.2:
+    display_name: "DeepSeek V3.2"
+    provider: openrouter
+    model_id: "deepseek/deepseek-chat"
+    
+    pricing:
+      input_per_1m_tokens: 0.14
+      output_per_1m_tokens: 0.28
+      currency: "USD"
+    
+    capabilities:
+      context_window: 128000
+      max_output: 8192
+      supports_streaming: true
+      supports_functions: true
+      supports_vision: false
+    
+    strengths:
+      - "Beste Coding-Benchmarks (~75% LiveCodeBench)"
+      - "Extrem günstig"
+      - "Multi-Language Support"
+      - "Wenig Halluzinationen"
+    
+    weaknesses:
+      - "Kleinerer Kontext als Claude"
+      - "Weniger gut bei sehr komplexem Reasoning"
+    
+    recommended_for:
+      - code
+      - test
+      - docs
+      - supervisor
+    
+    quality_scores:
+      coding: 82
+      reasoning: 70
+      speed: 90
+      cost_efficiency: 98
+
+  deepseek-r1:
+    display_name: "DeepSeek R1"
+    provider: openrouter
+    model_id: "deepseek/deepseek-reasoner"
+    
+    pricing:
+      input_per_1m_tokens: 0.55
+      output_per_1m_tokens: 2.19
+      currency: "USD"
+    
+    capabilities:
+      context_window: 128000
+      max_output: 8192
+      supports_streaming: true
+      supports_functions: true
+      supports_vision: false
+    
+    strengths:
+      - "Top Reasoning (73% LiveCodeBench)"
+      - "Perfekt für komplexe Planung"
+      - "Baut autonome Agenten fehlerfrei"
+      - "Gute Preis-Leistung"
+    
+    weaknesses:
+      - "Langsamer als V3.2"
+      - "Teurer als V3.2"
+    
+    recommended_for:
+      - architect
+      - coach
+      - refactor
+      - merge
+    
+    quality_scores:
+      coding: 78
+      reasoning: 90
+      speed: 75
+      cost_efficiency: 85
+
+# ═══════════════════════════════════════════════════════════════
+# ANTHROPIC MODELLE
+# ═══════════════════════════════════════════════════════════════
+
+  claude-haiku-4:
+    display_name: "Claude Haiku 4"
+    provider: anthropic
+    model_id: "claude-haiku-4-20250514"
+    
+    pricing:
+      input_per_1m_tokens: 0.25
+      output_per_1m_tokens: 1.25
+      currency: "USD"
+    
+    capabilities:
+      context_window: 200000
+      max_output: 8192
+      supports_streaming: true
+      supports_functions: true
+      supports_vision: true
+    
+    strengths:
+      - "Sehr schnell"
+      - "Günstig"
+      - "Großer Kontext (200k)"
+      - "Zuverlässig"
+    
+    weaknesses:
+      - "Nicht für komplexe Aufgaben"
+      - "Weniger tiefe Analyse"
+    
+    recommended_for:
+      - supervisor
+      - docs
+    
+    quality_scores:
+      coding: 70
+      reasoning: 65
+      speed: 95
+      cost_efficiency: 90
+
+  claude-sonnet-4.5:
+    display_name: "Claude Sonnet 4.5"
+    provider: anthropic
+    model_id: "claude-sonnet-4-5-20250929"
+    
+    pricing:
+      input_per_1m_tokens: 3.00
+      output_per_1m_tokens: 15.00
+      currency: "USD"
+    
+    capabilities:
+      context_window: 200000
+      max_output: 8192
+      supports_streaming: true
+      supports_functions: true
+      supports_vision: true
+    
+    strengths:
+      - "Ausgewogener Allrounder"
+      - "Developer-Favorit"
+      - "Gute Code-Qualität"
+      - "Großer Kontext (200k)"
+    
+    weaknesses:
+      - "Teurer als DeepSeek"
+    
+    recommended_for:
+      - code
+      - review
+      - supervisor
+    
+    quality_scores:
+      coding: 88
+      reasoning: 82
+      speed: 80
+      cost_efficiency: 70
+
+  claude-opus-4:
+    display_name: "Claude Opus 4"
+    provider: anthropic
+    model_id: "claude-opus-4-20251101"
+    
+    pricing:
+      input_per_1m_tokens: 15.00
+      output_per_1m_tokens: 75.00
+      currency: "USD"
+    
+    capabilities:
+      context_window: 200000
+      max_output: 8192
+      supports_streaming: true
+      supports_functions: true
+      supports_vision: true
+    
+    strengths:
+      - "Beste Qualität insgesamt"
+      - "Tiefste Analyse"
+      - "Versteht komplexe Zusammenhänge"
+      - "Größter Kontext (200k)"
+      - "Beste für Architektur"
+    
+    weaknesses:
+      - "Sehr teuer"
+      - "Langsamer"
+    
+    recommended_for:
+      - architect
+      - review
+      - refactor
+      - merge
+      - multi_repo
+      - tool_builder
+    
+    quality_scores:
+      coding: 92
+      reasoning: 95
+      speed: 65
+      cost_efficiency: 40
+
+# ═══════════════════════════════════════════════════════════════
+# NICHT VERWENDETE MODELLE (Dokumentation)
+# ═══════════════════════════════════════════════════════════════
+
+deprecated_models:
+
+  qwen3-480b:
+    reason: "Schwer verfügbar, 10x teurer als DeepSeek, Overkill"
+    alternative: "deepseek-v3.2"
+
+  gpt-4o:
+    reason: "Teurer, nicht besser als DeepSeek für Coding"
+    alternative: "deepseek-v3.2 oder claude-sonnet-4.5"
+
+  codex:
+    reason: "Veraltet (2021)"
+    alternative: "deepseek-v3.2"
+
+# ═══════════════════════════════════════════════════════════════
+# PROVIDER KONFIGURATION
+# ═══════════════════════════════════════════════════════════════
+
+providers:
+
+  openrouter:
+    base_url: "https://openrouter.ai/api/v1"
+    auth_header: "Authorization"
+    auth_prefix: "Bearer"
+    env_var: "OPENROUTER_API_KEY"
+    rate_limit:
+      requests_per_minute: 60
+      tokens_per_minute: 100000
+
+  anthropic:
+    base_url: "https://api.anthropic.com/v1"
+    auth_header: "x-api-key"
+    auth_prefix: ""
+    env_var: "ANTHROPIC_API_KEY"
+    rate_limit:
+      requests_per_minute: 50
+      tokens_per_minute: 100000
+
+# ═══════════════════════════════════════════════════════════════
+# MODELL-EMPFEHLUNGEN PRO AGENT-ROLLE
+# ═══════════════════════════════════════════════════════════════
+
+agent_model_recommendations:
+
+  supervisor:
+    budget: deepseek-v3.2
+    standard: claude-haiku-4
+    premium: claude-sonnet-4.5
+    reason: "Muss schnell sein, einfache Routing-Aufgaben"
+
+  architect:
+    budget: deepseek-r1
+    standard: deepseek-r1
+    premium: claude-opus-4
+    reason: "Braucht Reasoning für Architektur und Planung"
+
+  coach:
+    budget: deepseek-v3.2
+    standard: deepseek-r1
+    premium: deepseek-r1
+    reason: "Muss Tasks strukturieren, R1 gut genug"
+
+  code:
+    budget: deepseek-v3.2
+    standard: deepseek-v3.2
+    premium: claude-sonnet-4.5
+    reason: "Beste Coding-Benchmarks bei DeepSeek"
+
+  review:
+    budget: deepseek-v3.2
+    standard: claude-sonnet-4.5
+    premium: claude-opus-4
+    reason: "Review braucht tiefe Analyse"
+
+  test:
+    budget: deepseek-v3.2
+    standard: deepseek-v3.2
+    premium: deepseek-r1
+    reason: "Tests folgen Patterns, DeepSeek reicht"
+
+  docs:
+    budget: deepseek-v3.2
+    standard: claude-haiku-4
+    premium: claude-sonnet-4.5
+    reason: "Haiku schreibt klare Sprache"
+
+  refactor:
+    budget: deepseek-r1
+    standard: claude-sonnet-4.5
+    premium: claude-opus-4
+    reason: "Refactor braucht Kontext-Verständnis"
+
+  merge:
+    budget: deepseek-r1
+    standard: claude-sonnet-4.5
+    premium: claude-opus-4
+    reason: "Merge braucht großen Kontext"
+
+  multi_repo:
+    budget: deepseek-r1
+    standard: claude-sonnet-4.5
+    premium: claude-opus-4
+    reason: "Multi-Repo braucht sehr großen Kontext"
+
+  tool_builder:
+    budget: deepseek-v3.2
+    standard: deepseek-r1
+    premium: claude-opus-4
+    reason: "Tool Builder braucht Architektur-Verständnis"
+
+# ═══════════════════════════════════════════════════════════════
+# FALLBACK KONFIGURATION
+# ═══════════════════════════════════════════════════════════════
+
+fallback_config:
+  
+  # Wenn primäres Modell fehlschlägt
+  fallback_chain:
+    claude-opus-4:
+      - claude-sonnet-4.5
+      - deepseek-r1
+    claude-sonnet-4.5:
+      - deepseek-r1
+      - deepseek-v3.2
+    claude-haiku-4:
+      - deepseek-v3.2
+    deepseek-r1:
+      - deepseek-v3.2
+      - claude-sonnet-4.5
+    deepseek-v3.2:
+      - deepseek-r1
+      - claude-haiku-4
+  
+  # Retry-Konfiguration
+  retry:
+    max_attempts: 3
+    backoff_ms: 1000
+    backoff_multiplier: 2
