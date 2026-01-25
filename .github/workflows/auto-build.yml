@@ -18,8 +18,8 @@ on:
           - gpt-4
 
   schedule:
-    # Täglich um 02:00 UTC (optional, für automatische Builds)
-    - cron: '0 2 * * *'
+    # Alle 5 Minuten - schnelles Queue-Processing
+    - cron: '*/5 * * * *'
 
 jobs:
   build:
@@ -58,7 +58,24 @@ jobs:
         run: |
           # Task festlegen
           if [ -n "${{ github.event.inputs.task }}" ]; then
+            # Manuel getriggert
             TASK="${{ github.event.inputs.task }}"
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
+            # Scheduled: Hole Task aus Queue
+            if [ ! -f "task-queue.txt" ]; then
+              echo "ℹ️  Keine task-queue.txt gefunden"
+              exit 0
+            fi
+
+            # Erste nicht-kommentierte Task holen
+            TASK=$(grep -v '^#' task-queue.txt | grep -v '^$' | head -n 1)
+
+            if [ -z "$TASK" ]; then
+              echo "ℹ️  Queue ist leer, nichts zu tun"
+              exit 0
+            fi
+
+            echo "📥 Task aus Queue geholt: $TASK"
           else
             TASK="Review code and suggest improvements"
           fi
@@ -84,6 +101,20 @@ jobs:
             }
 
           echo "✅ Build abgeschlossen"
+
+          # Bei scheduled build: Task aus Queue entfernen
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "🗑️  Entferne Task aus Queue"
+            # Erste nicht-kommentierte Zeile entfernen
+            grep -v '^#' task-queue.txt | grep -v '^$' | tail -n +2 > task-queue.tmp
+            grep '^#' task-queue.txt > task-queue.new
+            cat task-queue.tmp >> task-queue.new
+            mv task-queue.new task-queue.txt
+            rm -f task-queue.tmp
+
+            git add task-queue.txt
+            git commit -m "chore: processed task from queue" || true
+          fi
 
       - name: Push Changes
         run: |

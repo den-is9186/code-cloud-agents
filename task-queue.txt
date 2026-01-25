@@ -1,0 +1,9 @@
+# Task Queue
+# Eine Task pro Zeile
+# GitHub Actions arbeitet alle 4h die nächste Task ab
+Add tests for /health endpoint
+Add Redis memory module (save, get, delete, list)
+Add Coach Agent with Claude API
+Add Code Agent with file operations
+Add Supervisor Agent orchestrator
+Add integration tests
