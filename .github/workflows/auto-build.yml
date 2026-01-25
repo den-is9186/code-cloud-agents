@@ -17,15 +17,8 @@ on:
           - claude-opus-4-5
           - gpt-4
 
-  push:
-    # Startet wenn task-queue.txt geändert wird
-    branches:
-      - main
-    paths:
-      - 'task-queue.txt'
-
   schedule:
-    # Alle 15 Minuten (Fallback)
+    # Alle 15 Minuten (Fallback wenn Queue-Processor ausfällt)
     - cron: '*/15 * * * *'
 
 jobs:
@@ -86,7 +79,7 @@ jobs:
           if [ -n "${{ github.event.inputs.task }}" ]; then
             # Manuel getriggert
             TASK="${{ github.event.inputs.task }}"
-          elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "push" ]; then
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
             # Auto-triggered: Hole Task aus Queue
             if [ ! -f "task-queue.txt" ]; then
               echo "ℹ️  Keine task-queue.txt gefunden"
@@ -129,7 +122,7 @@ jobs:
           echo "✅ Build abgeschlossen"
 
           # Bei auto-triggered build: Task aus Queue entfernen
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ]; then
             echo "🗑️  Entferne Task aus Queue"
             # Erste nicht-kommentierte Zeile entfernen
             grep -v '^#' task-queue.txt | grep -v '^$' | tail -n +2 > task-queue.tmp
