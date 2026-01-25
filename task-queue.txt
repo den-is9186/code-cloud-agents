@@ -2,7 +2,6 @@
 # Eine Task pro Zeile
 # GitHub Actions arbeitet alle 4h die nächste Task ab
 # Queue processing started - Sun Jan 25 21:06:34 CET 2026
-Add Redis memory module (save, get, delete, list)
 Add Coach Agent with Claude API
 Add Code Agent with file operations
 Add Supervisor Agent orchestrator
