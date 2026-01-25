@@ -2,6 +2,4 @@
 # Eine Task pro Zeile
 # GitHub Actions arbeitet alle 4h die nächste Task ab
 # Queue processing started - Mon Jan 26 00:30:00 CET 2026
-
 # CODE REVIEW TASK - Nur Analyse, KEINE Code-Änderungen!
-Führe ein vollständiges Code Review des gesamten TypeScript Multi-Agent Systems durch (src/agents/, src/tools/, src/llm/, src/chat/, src/index.ts). Erstelle eine detaillierte CODE_REVIEW_REPORT.md Datei mit folgenden Abschnitten: 1) BUGS - Liste alle gefundenen Bugs mit Severity (critical/high/medium/low), Datei, Zeile und Beschreibung. 2) OPTIMIERUNGEN - Empfehlungen für Performance, Memory, Code Quality. 3) VERBESSERUNGEN - Best Practices, TypeScript Types, Error Handling, Security. 4) ERWEITERUNGEN - Vorschläge für neue Features, fehlende Funktionalität, Architecture Improvements. WICHTIG: Erstelle NUR die Report-Datei CODE_REVIEW_REPORT.md, ändere KEINEN bestehenden Code!
