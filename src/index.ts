@@ -75,3 +75,6 @@ if (require.main === module) {
 }
 
 export { SupervisorAgent, ArchitectAgent, CoachAgent, CodeAgent, ReviewAgent, TestAgent, DocsAgent, VisionAgent };
+export type { RunConfig };
+export { llmClient } from './llm/client';
+export * from './agents/types';

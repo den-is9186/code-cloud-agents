@@ -128,3 +128,29 @@ export interface BuildResult {
   duration: number;
   errors?: string[];
 }
+
+// Chat Types
+export interface TaskAnalysis {
+  taskType: "refactor" | "feature" | "fix" | "docs" | "test" | "question" | "unknown";
+  complexity: "low" | "medium" | "high";
+  repos: string[];
+  estimatedTokens: number;
+  estimatedCost: number;
+  estimatedTimeSeconds: number;
+  description: string;
+}
+
+export interface TeamSuggestion {
+  preset: string;
+  agents: AgentAssignment[];
+  totalCost: number;
+  estimatedTime: string;
+  canOptimize: boolean;
+  optimizationTip?: string;
+}
+
+export interface AgentAssignment {
+  role: AgentRole;
+  model: string;
+  reason: string;
+}
