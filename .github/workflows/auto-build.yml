@@ -11,10 +11,10 @@ on:
         description: 'AI Model'
         required: false
         type: choice
-        default: 'claude-sonnet-4'
+        default: 'claude-sonnet-4-5-20250929'
         options:
-          - claude-sonnet-4
-          - claude-opus-4
+          - claude-sonnet-4-5-20250929
+          - claude-opus-4-5
           - gpt-4
 
   schedule:
@@ -63,7 +63,7 @@ jobs:
             TASK="Review code and suggest improvements"
           fi
 
-          MODEL="${{ github.event.inputs.model || 'claude-sonnet-4' }}"
+          MODEL="${{ github.event.inputs.model || 'claude-sonnet-4-5-20250929' }}"
 
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "🚀 Auto-Build gestartet"
@@ -103,7 +103,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "**Task:** ${{ github.event.inputs.task || 'Scheduled build' }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Model:** ${{ github.event.inputs.model || 'claude-sonnet-4' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Model:** ${{ github.event.inputs.model || 'claude-sonnet-4-5-20250929' }}" >> $GITHUB_STEP_SUMMARY
           echo "**Time:** $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
