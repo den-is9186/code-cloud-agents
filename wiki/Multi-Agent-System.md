@@ -15,6 +15,7 @@
 5. [Agent Communication & Coordination](#agent-communication--coordination)
 6. [Model Selection](#model-selection)
 7. [Agent Presets](#agent-presets)
+   - [📊 Quality Comparison (QII)](#-quality-comparison-qii)
 8. [Self-Correction & Error Handling](#self-correction--error-handling)
 9. [Workflow State Machine](#workflow-state-machine)
 10. [Practical Examples](#practical-examples)
@@ -520,9 +521,9 @@ We offer **6 preset configurations** optimized for different use cases and budge
 | F2: Standard | Merge Standard + Review Standard | ~$6 | 2-3 medium repos |
 | F3: Premium | Merge Premium + Multi-Repo Premium + Review | ~$45 | Many/large repos |
 
-### Quality Comparison
+### 📊 Quality Comparison (QII)
 
-**Quality by Category:**
+**Quality Index Information - Quality by Category:**
 
 | Category | Preset A | Preset B | Preset C | Preset D |
 |----------|----------|----------|----------|----------|

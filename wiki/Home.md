@@ -89,6 +89,8 @@ Das System nutzt verschiedene spezialisierte Agents:
 - **Test Agent** - Testing
 - **Docs Agent** - Dokumentation
 
+📊 **[Quality Index (QII)](Multi-Agent-System.md#quality-comparison)** - Vergleich der Qualitätskennzahlen verschiedener Agent-Presets
+
 ### Agentic AI vs Tool Calling
 - **Tool Calling**: Agents rufen externe Funktionen auf
 - **Agentic**: Agents planen selbstständig, delegieren und korrigieren
