@@ -27,6 +27,13 @@ redis.on('connect', () => {
 
 app.use(express.json());
 
+// Add request timeout middleware
+app.use((req, res, next) => {
+  req.setTimeout(30000); // 30 seconds
+  res.setTimeout(30000);
+  next();
+});
+
 app.get('/', (req, res) => {
   res.json({ message: 'Hello World' });
 });
@@ -46,6 +53,9 @@ app.get('/health', async (req, res) => {
     });
   }
 });
+
+// Declare server at module level for graceful shutdown
+let server = null;
 
 // Graceful shutdown handler
 const gracefulShutdown = async (signal) => {
@@ -74,11 +84,15 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 module.exports = app;
 
 // Only start server if this file is run directly
-let server;
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+  });
+  
+  server.on('error', (error) => {
+    console.error('Server error:', error);
+    process.exit(1);
   });
 }
 

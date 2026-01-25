@@ -22,10 +22,25 @@ describe('GET /health', () => {
     // Get the mocked Redis constructor
     const RedisMock = Redis;
     mockRedis = RedisMock.mock.instances[0];
+    
+    // Ensure event handlers are mocked
+    if (!mockRedis.on) {
+      mockRedis.on = jest.fn();
+    }
+    if (!mockRedis.once) {
+      mockRedis.once = jest.fn();
+    }
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  afterAll(() => {
+    // Clean up to prevent Jest warnings
+    if (mockRedis && mockRedis.quit) {
+      mockRedis.quit.mockResolvedValue('OK');
+    }
   });
 
   test('should return 200 and healthy status when Redis is connected', async () => {
