@@ -90,6 +90,7 @@ app.get('/health', async (req, res) => {
 const AGENT_STATE_PREFIX = 'agent:state:';
 const AGENT_STATE_INDEX = 'agent:states:index';
 const DEFAULT_TTL = 86400; // 24 hours in seconds
+const MAX_RETRIES = 3; // Maximum number of retries for failed tasks
 
 // Helper function to validate agent ID
 function validateAgentId(agentId) {
@@ -108,7 +109,7 @@ function validateAgentId(agentId) {
 // Create or update agent execution state
 app.post('/api/v1/agent/state', async (req, res) => {
   try {
-    const { agentId, status, progress, metadata, ttl } = req.body;
+    const { agentId, status, progress, metadata, ttl, error } = req.body;
 
     if (!agentId) {
       return res.status(400).json({
@@ -149,6 +150,21 @@ app.post('/api/v1/agent/state', async (req, res) => {
     if (existingState) {
       // Update existing state
       state = JSON.parse(existingState);
+      
+      // Handle retry logic when status changes to failed
+      if (status === 'failed' && state.status !== 'failed') {
+        // First time failing
+        state.retryCount = state.retryCount || 0;
+        state.lastError = error || 'Unknown error';
+        state.failedAt = now;
+      } else if (status === 'failed' && state.status === 'failed') {
+        // Already failed, update error info
+        state.lastError = error || state.lastError;
+      } else if (status && status !== 'failed') {
+        // Status changed to non-failed state
+        if (status) state.status = status;
+      }
+      
       if (status) state.status = status;
       if (progress !== undefined) state.progress = progress;
       if (metadata) state.metadata = { ...state.metadata, ...metadata };
@@ -160,9 +176,16 @@ app.post('/api/v1/agent/state', async (req, res) => {
         status: status || 'pending',
         progress: progress !== undefined ? progress : 0,
         metadata: metadata || {},
+        retryCount: 0,
+        maxRetries: MAX_RETRIES,
         createdAt: now,
         updatedAt: now
       };
+      
+      if (status === 'failed') {
+        state.lastError = error || 'Unknown error';
+        state.failedAt = now;
+      }
       
       // Add to index
       await redis.sadd(AGENT_STATE_INDEX, agentId);
@@ -212,6 +235,89 @@ app.get('/api/v1/agent/state/:agentId', async (req, res) => {
       agentId,
       state,
       ttl: ttl > 0 ? ttl : null
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: {
+        code: 'INVALID_INPUT',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Retry a failed agent task
+app.post('/api/v1/agent/state/:agentId/retry', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    validateAgentId(agentId);
+
+    const key = `${AGENT_STATE_PREFIX}${agentId}`;
+    const stateData = await redis.get(key);
+
+    if (!stateData) {
+      return res.status(404).json({
+        error: {
+          code: 'STATE_NOT_FOUND',
+          message: `Agent state not found for agentId: ${agentId}`
+        }
+      });
+    }
+
+    const state = JSON.parse(stateData);
+
+    // Check if task is in a failed state
+    if (state.status !== 'failed') {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_STATE',
+          message: `Cannot retry task with status: ${state.status}. Only failed tasks can be retried.`
+        }
+      });
+    }
+
+    // Check if retry limit has been reached
+    const retryCount = state.retryCount || 0;
+    const maxRetries = state.maxRetries || MAX_RETRIES;
+
+    if (retryCount >= maxRetries) {
+      return res.status(400).json({
+        error: {
+          code: 'MAX_RETRIES_EXCEEDED',
+          message: `Maximum retry limit (${maxRetries}) has been reached for this task.`
+        }
+      });
+    }
+
+    // Update state for retry
+    const now = new Date().toISOString();
+    state.status = 'pending';
+    state.retryCount = retryCount + 1;
+    state.progress = 0;
+    state.retriedAt = now;
+    state.updatedAt = now;
+
+    // Preserve error history
+    if (!state.errorHistory) {
+      state.errorHistory = [];
+    }
+    state.errorHistory.push({
+      error: state.lastError,
+      failedAt: state.failedAt,
+      retryNumber: retryCount
+    });
+
+    // Save updated state
+    const ttl = await redis.ttl(key);
+    const stateTTL = ttl > 0 ? ttl : DEFAULT_TTL;
+    await redis.setex(key, stateTTL, JSON.stringify(state));
+
+    res.json({
+      agentId,
+      state,
+      retryCount: state.retryCount,
+      maxRetries: state.maxRetries,
+      retriesRemaining: maxRetries - state.retryCount
     });
   } catch (error) {
     res.status(400).json({
