@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       task:
-        description: 'Build Task (natural language)'
-        required: true
+        description: 'Build Task (leave empty to use queue)'
+        required: false
         type: string
       model:
         description: 'AI Model'
