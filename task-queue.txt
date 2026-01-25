@@ -2,7 +2,6 @@
 # Eine Task pro Zeile
 # GitHub Actions arbeitet alle 4h die nächste Task ab
 # Queue processing started - Sun Jan 25 21:06:34 CET 2026
-Add agent execution state logging to Redis
 Add error recovery: retry failed agent tasks 3 times
 Integrate Supervisor with task-queue.txt auto-processing
 Add end-to-end agent orchestration tests
