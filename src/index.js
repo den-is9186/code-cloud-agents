@@ -430,6 +430,361 @@ app.delete('/api/v1/agent/state/:agentId', async (req, res) => {
   }
 });
 
+// Task Queue Management API
+
+const TASK_QUEUE_FILE = path.join(PROJECT_ROOT, 'task-queue.txt');
+const TASK_QUEUE_PREFIX = 'task:queue:';
+
+// Helper function to read task queue
+async function readTaskQueue() {
+  try {
+    const content = await fs.readFile(TASK_QUEUE_FILE, 'utf8');
+    const lines = content.split('\n');
+    const tasks = [];
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      // Skip empty lines and comments
+      if (trimmed && !trimmed.startsWith('#')) {
+        tasks.push(trimmed);
+      }
+    }
+    
+    return tasks;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+}
+
+// Helper function to write task queue
+async function writeTaskQueue(tasks) {
+  const header = [
+    '# Task Queue',
+    '# Eine Task pro Zeile',
+    '# GitHub Actions arbeitet alle 4h die nächste Task ab',
+    `# Queue processing started - ${new Date().toUTCString()}`,
+    ''
+  ];
+  
+  const content = header.join('\n') + tasks.join('\n') + '\n';
+  await fs.writeFile(TASK_QUEUE_FILE, content, 'utf8');
+}
+
+// Get all tasks in the queue
+app.get('/api/v1/supervisor/queue', async (req, res) => {
+  try {
+    const tasks = await readTaskQueue();
+    
+    // Get status for each task from Redis
+    const tasksWithStatus = await Promise.all(
+      tasks.map(async (task, index) => {
+        const taskId = `queue:${index}:${Buffer.from(task).toString('base64').substring(0, 16)}`;
+        const stateKey = `${AGENT_STATE_PREFIX}${taskId}`;
+        const stateData = await redis.get(stateKey);
+        
+        return {
+          index,
+          task,
+          taskId,
+          state: stateData ? JSON.parse(stateData) : null
+        };
+      })
+    );
+    
+    res.json({
+      tasks: tasksWithStatus,
+      total: tasks.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Add a task to the queue
+app.post('/api/v1/supervisor/queue', async (req, res) => {
+  try {
+    const { task, position } = req.body;
+    
+    if (!task || typeof task !== 'string') {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Task must be a non-empty string'
+        }
+      });
+    }
+    
+    const trimmedTask = task.trim();
+    if (!trimmedTask) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Task cannot be empty or whitespace only'
+        }
+      });
+    }
+    
+    const tasks = await readTaskQueue();
+    
+    // Add task at specified position or at the end
+    if (position !== undefined) {
+      const pos = parseInt(position);
+      if (isNaN(pos) || pos < 0 || pos > tasks.length) {
+        return res.status(400).json({
+          error: {
+            code: 'INVALID_INPUT',
+            message: `Position must be between 0 and ${tasks.length}`
+          }
+        });
+      }
+      tasks.splice(pos, 0, trimmedTask);
+    } else {
+      tasks.push(trimmedTask);
+    }
+    
+    await writeTaskQueue(tasks);
+    
+    res.json({
+      task: trimmedTask,
+      position: position !== undefined ? parseInt(position) : tasks.length - 1,
+      total: tasks.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Remove a task from the queue
+app.delete('/api/v1/supervisor/queue/:index', async (req, res) => {
+  try {
+    const index = parseInt(req.params.index);
+    
+    if (isNaN(index) || index < 0) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Index must be a non-negative number'
+        }
+      });
+    }
+    
+    const tasks = await readTaskQueue();
+    
+    if (index >= tasks.length) {
+      return res.status(404).json({
+        error: {
+          code: 'TASK_NOT_FOUND',
+          message: `No task at index ${index}`
+        }
+      });
+    }
+    
+    const removedTask = tasks[index];
+    tasks.splice(index, 1);
+    
+    await writeTaskQueue(tasks);
+    
+    // Clean up any associated state
+    const taskId = `queue:${index}:${Buffer.from(removedTask).toString('base64').substring(0, 16)}`;
+    const stateKey = `${AGENT_STATE_PREFIX}${taskId}`;
+    await redis.del(stateKey);
+    await redis.srem(AGENT_STATE_INDEX, taskId);
+    
+    res.json({
+      task: removedTask,
+      index,
+      total: tasks.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Process next task in the queue
+app.post('/api/v1/supervisor/queue/process', async (req, res) => {
+  try {
+    const tasks = await readTaskQueue();
+    
+    if (tasks.length === 0) {
+      return res.status(404).json({
+        error: {
+          code: 'QUEUE_EMPTY',
+          message: 'No tasks in queue'
+        }
+      });
+    }
+    
+    const task = tasks[0];
+    const taskId = `queue:0:${Buffer.from(task).toString('base64').substring(0, 16)}`;
+    
+    // Create agent state for this task
+    const now = new Date().toISOString();
+    const state = {
+      agentId: taskId,
+      status: 'running',
+      progress: 0,
+      metadata: {
+        task,
+        queueIndex: 0,
+        processedAt: now
+      },
+      retryCount: 0,
+      maxRetries: MAX_RETRIES,
+      createdAt: now,
+      updatedAt: now
+    };
+    
+    const stateKey = `${AGENT_STATE_PREFIX}${taskId}`;
+    await redis.setex(stateKey, DEFAULT_TTL, JSON.stringify(state));
+    await redis.sadd(AGENT_STATE_INDEX, taskId);
+    
+    res.json({
+      task,
+      taskId,
+      state,
+      message: 'Task marked as running. Call completion endpoint when done.'
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Complete a task and remove it from queue
+app.post('/api/v1/supervisor/queue/complete', async (req, res) => {
+  try {
+    const { taskId, status, error: taskError } = req.body;
+    
+    if (!taskId) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'taskId is required'
+        }
+      });
+    }
+    
+    if (!status || !['completed', 'failed'].includes(status)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'status must be either "completed" or "failed"'
+        }
+      });
+    }
+    
+    // Update task state
+    const stateKey = `${AGENT_STATE_PREFIX}${taskId}`;
+    const stateData = await redis.get(stateKey);
+    
+    if (!stateData) {
+      return res.status(404).json({
+        error: {
+          code: 'TASK_NOT_FOUND',
+          message: `Task not found: ${taskId}`
+        }
+      });
+    }
+    
+    const state = JSON.parse(stateData);
+    const now = new Date().toISOString();
+    
+    state.status = status;
+    state.progress = status === 'completed' ? 100 : state.progress;
+    state.updatedAt = now;
+    
+    if (status === 'completed') {
+      state.completedAt = now;
+    } else if (status === 'failed') {
+      state.failedAt = now;
+      state.lastError = taskError || 'Task failed';
+    }
+    
+    await redis.setex(stateKey, DEFAULT_TTL, JSON.stringify(state));
+    
+    // Remove from queue if completed
+    if (status === 'completed') {
+      const tasks = await readTaskQueue();
+      if (tasks.length > 0) {
+        tasks.shift(); // Remove first task
+        await writeTaskQueue(tasks);
+      }
+    }
+    
+    res.json({
+      taskId,
+      state,
+      queueLength: status === 'completed' ? (await readTaskQueue()).length : null
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Get supervisor status
+app.get('/api/v1/supervisor/status', async (req, res) => {
+  try {
+    const tasks = await readTaskQueue();
+    
+    // Get all running tasks
+    const agentIds = await redis.smembers(AGENT_STATE_INDEX);
+    const runningTasks = [];
+    
+    for (const agentId of agentIds) {
+      if (agentId.startsWith('queue:')) {
+        const stateKey = `${AGENT_STATE_PREFIX}${agentId}`;
+        const stateData = await redis.get(stateKey);
+        if (stateData) {
+          const state = JSON.parse(stateData);
+          if (state.status === 'running') {
+            runningTasks.push(state);
+          }
+        }
+      }
+    }
+    
+    res.json({
+      queueLength: tasks.length,
+      runningTasks: runningTasks.length,
+      tasks: runningTasks
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
+  }
+});
+
 // File Operations API
 
 // List files in a directory
