@@ -1,7 +1,7 @@
 # API Reference
 
 **Version:** 1.1.0  
-**Last Updated:** 2026-01-25
+**Last Updated:** 2025-01-25
 
 ## Overview
 
@@ -146,8 +146,8 @@ Create a new agent state or update an existing one. Includes automatic retry tra
     },
     "retryCount": 0,
     "maxRetries": 3,
-    "createdAt": "2026-01-25T12:00:00.000Z",
-    "updatedAt": "2026-01-25T12:05:30.000Z"
+    "createdAt": "2025-01-25T12:00:00.000Z",
+    "updatedAt": "2025-01-25T12:05:30.000Z"
   },
   "ttl": 86400
 }
@@ -224,9 +224,9 @@ Retrieve the current state of a specific agent.
     },
     "retryCount": 0,
     "maxRetries": 3,
-    "createdAt": "2026-01-25T12:00:00.000Z",
-    "updatedAt": "2026-01-25T12:15:00.000Z",
-    "completedAt": "2026-01-25T12:15:00.000Z"
+    "createdAt": "2025-01-25T12:00:00.000Z",
+    "updatedAt": "2025-01-25T12:15:00.000Z",
+    "completedAt": "2025-01-25T12:15:00.000Z"
   },
   "ttl": 85200
 }
@@ -285,9 +285,9 @@ List all agent states with optional filtering and pagination.
       "metadata": { "task": "Build React app" },
       "retryCount": 0,
       "maxRetries": 3,
-      "createdAt": "2026-01-25T12:00:00.000Z",
-      "updatedAt": "2026-01-25T12:15:00.000Z",
-      "completedAt": "2026-01-25T12:15:00.000Z"
+      "createdAt": "2025-01-25T12:00:00.000Z",
+      "updatedAt": "2025-01-25T12:15:00.000Z",
+      "completedAt": "2025-01-25T12:15:00.000Z"
     },
     {
       "agentId": "test:def456",
@@ -296,8 +296,8 @@ List all agent states with optional filtering and pagination.
       "metadata": { "task": "Run unit tests" },
       "retryCount": 0,
       "maxRetries": 3,
-      "createdAt": "2026-01-25T12:10:00.000Z",
-      "updatedAt": "2026-01-25T12:18:00.000Z"
+      "createdAt": "2025-01-25T12:10:00.000Z",
+      "updatedAt": "2025-01-25T12:18:00.000Z"
     }
   ],
   "total": 2,
@@ -351,16 +351,16 @@ Retry a failed agent task. Maximum retry limit is configurable (default: 3).
     "metadata": { "task": "Build React app" },
     "retryCount": 1,
     "maxRetries": 3,
-    "retriedAt": "2026-01-25T12:30:00.000Z",
+    "retriedAt": "2025-01-25T12:30:00.000Z",
     "errorHistory": [
       {
         "error": "Build timeout",
-        "failedAt": "2026-01-25T12:20:00.000Z",
+        "failedAt": "2025-01-25T12:20:00.000Z",
         "retryNumber": 0
       }
     ],
-    "createdAt": "2026-01-25T12:00:00.000Z",
-    "updatedAt": "2026-01-25T12:30:00.000Z"
+    "createdAt": "2025-01-25T12:00:00.000Z",
+    "updatedAt": "2025-01-25T12:30:00.000Z"
   },
   "retryCount": 1,
   "maxRetries": 3,
@@ -484,12 +484,12 @@ Retrieve all tasks in the queue with their current states.
         "metadata": {
           "task": "Create login page with React",
           "queueIndex": 0,
-          "processedAt": "2026-01-25T12:00:00.000Z"
+          "processedAt": "2025-01-25T12:00:00.000Z"
         },
         "retryCount": 0,
         "maxRetries": 3,
-        "createdAt": "2026-01-25T12:00:00.000Z",
-        "updatedAt": "2026-01-25T12:10:00.000Z"
+        "createdAt": "2025-01-25T12:00:00.000Z",
+        "updatedAt": "2025-01-25T12:10:00.000Z"
       }
     },
     {
@@ -661,12 +661,12 @@ Mark the first task in the queue as running. This endpoint is typically called b
     "metadata": {
       "task": "Create login page with React",
       "queueIndex": 0,
-      "processedAt": "2026-01-25T12:00:00.000Z"
+      "processedAt": "2025-01-25T12:00:00.000Z"
     },
     "retryCount": 0,
     "maxRetries": 3,
-    "createdAt": "2026-01-25T12:00:00.000Z",
-    "updatedAt": "2026-01-25T12:00:00.000Z"
+    "createdAt": "2025-01-25T12:00:00.000Z",
+    "updatedAt": "2025-01-25T12:00:00.000Z"
   },
   "message": "Task marked as running. Call completion endpoint when done."
 }
@@ -726,13 +726,13 @@ Mark a task as completed or failed. Completed tasks are removed from the queue.
     "metadata": {
       "task": "Create login page with React",
       "queueIndex": 0,
-      "processedAt": "2026-01-25T12:00:00.000Z"
+      "processedAt": "2025-01-25T12:00:00.000Z"
     },
     "retryCount": 0,
     "maxRetries": 3,
-    "createdAt": "2026-01-25T12:00:00.000Z",
-    "updatedAt": "2026-01-25T12:15:00.000Z",
-    "completedAt": "2026-01-25T12:15:00.000Z"
+    "createdAt": "2025-01-25T12:00:00.000Z",
+    "updatedAt": "2025-01-25T12:15:00.000Z",
+    "completedAt": "2025-01-25T12:15:00.000Z"
   },
   "queueLength": 1
 }
@@ -817,12 +817,12 @@ Get overall supervisor status including queue length and running tasks.
       "metadata": {
         "task": "Create login page with React",
         "queueIndex": 0,
-        "processedAt": "2026-01-25T12:00:00.000Z"
+        "processedAt": "2025-01-25T12:00:00.000Z"
       },
       "retryCount": 0,
       "maxRetries": 3,
-      "createdAt": "2026-01-25T12:00:00.000Z",
-      "updatedAt": "2026-01-25T12:10:00.000Z"
+      "createdAt": "2025-01-25T12:00:00.000Z",
+      "updatedAt": "2025-01-25T12:10:00.000Z"
     }
   ]
 }
@@ -873,12 +873,12 @@ List files and directories within a specified path.
       "name": "index.js",
       "type": "file",
       "size": 25648,
-      "modified": "2026-01-25T12:00:00.000Z"
+      "modified": "2025-01-25T12:00:00.000Z"
     },
     {
       "name": "utils",
       "type": "directory",
-      "modified": "2026-01-25T11:30:00.000Z"
+      "modified": "2025-01-25T11:30:00.000Z"
     }
   ]
 }
@@ -949,7 +949,7 @@ Read the contents of a file. Maximum file size: 10MB.
   "content": "const express = require('express');\n...",
   "encoding": "utf8",
   "size": 25648,
-  "modified": "2026-01-25T12:00:00.000Z"
+  "modified": "2025-01-25T12:00:00.000Z"
 }
 ```
 
@@ -1024,7 +1024,7 @@ Create a new file or update an existing file's content.
   "path": "src/newfile.js",
   "size": 156,
   "created": true,
-  "modified": "2026-01-25T12:30:00.000Z"
+  "modified": "2025-01-25T12:30:00.000Z"
 }
 ```
 
@@ -1260,5 +1260,5 @@ For questions, issues, or feature requests:
 
 ---
 
-**Last Updated:** 2026-01-25  
+**Last Updated:** 2025-01-25  
 **API Version:** 1.1.0

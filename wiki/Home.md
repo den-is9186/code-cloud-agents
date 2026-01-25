@@ -155,4 +155,4 @@ Siehe **[PROJECT_STATE.md](../PROJECT_STATE.md)** für detaillierte Status-Updat
 
 ---
 
-**Zuletzt aktualisiert**: 2026-01-25
+**Zuletzt aktualisiert**: 2025-01-25

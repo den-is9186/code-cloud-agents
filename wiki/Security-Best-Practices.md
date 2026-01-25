@@ -3,7 +3,7 @@
 > **Critical**: This document outlines mandatory security practices for the Code Cloud Agents project.  
 > All team members must follow these guidelines before deploying code to production.
 
-**Last Updated:** 2026-01-25  
+**Last Updated:** 2025-01-25  
 **Status:** Active Policy
 
 ---
@@ -1567,8 +1567,8 @@ If a security incident occurs:
 
 ---
 
-**Last Updated:** 2026-01-25  
-**Next Review:** 2026-04-25
+**Last Updated:** 2025-01-25  
+**Next Review:** 2025-04-25
 
 ---
 

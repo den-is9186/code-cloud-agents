@@ -2,7 +2,7 @@
 
 > Quick answers to common questions about Code Cloud Agents
 
-**Last Updated:** 2026-01-25  
+**Last Updated:** 2025-01-25  
 **Version:** 1.0.0
 
 ---
@@ -779,5 +779,5 @@ inputs:
 
 ---
 
-**Last Updated:** 2026-01-25  
+**Last Updated:** 2025-01-25  
 **Maintained by:** [den-is9186](https://github.com/den-is9186)
