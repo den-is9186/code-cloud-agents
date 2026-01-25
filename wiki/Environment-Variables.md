@@ -2,7 +2,7 @@
 
 > Comprehensive documentation of all environment variables used in Code Cloud Agents
 
-**Last Updated:** 2026-01-25  
+**Last Updated:** 2025-01-25  
 **Version:** 1.0.0
 
 ---
