@@ -1,0 +1,113 @@
+name: Auto Build with Aider
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Build Task (natural language)'
+        required: true
+        type: string
+      model:
+        description: 'AI Model'
+        required: false
+        type: choice
+        default: 'claude-sonnet-4'
+        options:
+          - claude-sonnet-4
+          - claude-opus-4
+          - gpt-4
+
+  schedule:
+    # Täglich um 02:00 UTC (optional, für automatische Builds)
+    - cron: '0 2 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "den-is9186"
+          git config user.email "den-is9186@users.noreply.github.com"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Aider
+        run: |
+          pip install aider-chat
+          aider --version
+
+      - name: Run Auto-Build
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Task festlegen
+          if [ -n "${{ github.event.inputs.task }}" ]; then
+            TASK="${{ github.event.inputs.task }}"
+          else
+            TASK="Review code and suggest improvements"
+          fi
+
+          MODEL="${{ github.event.inputs.model || 'claude-sonnet-4' }}"
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🚀 Auto-Build gestartet"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📋 Task: $TASK"
+          echo "🤖 Model: $MODEL"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # Aider ausführen
+          aider \
+            --yes \
+            --auto-commits \
+            --model "$MODEL" \
+            --message "$TASK" \
+            || {
+              echo "❌ Aider Build fehlgeschlagen"
+              exit 1
+            }
+
+          echo "✅ Build abgeschlossen"
+
+      - name: Push Changes
+        run: |
+          git pull --rebase origin main || true
+
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "ℹ️  Keine Änderungen zu pushen"
+          else
+            git push origin main
+            echo "✅ Änderungen gepusht"
+          fi
+
+      - name: Build Summary
+        if: always()
+        run: |
+          echo "### 🏗️ Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Task:** ${{ github.event.inputs.task || 'Scheduled build' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Model:** ${{ github.event.inputs.model || 'claude-sonnet-4' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Time:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Commits seit letztem Build
+          echo "**Recent Commits:**" >> $GITHUB_STEP_SUMMARY
+          git log --oneline -5 >> $GITHUB_STEP_SUMMARY || echo "No commits" >> $GITHUB_STEP_SUMMARY

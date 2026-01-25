@@ -1,0 +1,55 @@
+# Capabilities Registry
+# Jede Feature-Funktion wird hier registriert mit Test-Anforderungen
+
+version: "1.0"
+project: "code-cloud-agents"
+
+capabilities:
+  - id: "auto-build-workflow"
+    name: "Auto Build Workflow"
+    description: "GitHub Actions Workflow für autonome Code-Generation"
+    status: "planned"
+    tests_required:
+      - type: "integration"
+        description: "Workflow triggered erfolgreich"
+      - type: "integration"
+        description: "Aider führt Task aus"
+      - type: "integration"
+        description: "Code wird committed und gepusht"
+
+  - id: "task-input"
+    name: "Task Input via Workflow Dispatch"
+    description: "User kann Tasks via GitHub UI eingeben"
+    status: "planned"
+    tests_required:
+      - type: "integration"
+        description: "Task wird korrekt an Aider übergeben"
+      - type: "validation"
+        description: "Leere Tasks werden abgelehnt"
+
+  - id: "aider-integration"
+    name: "Aider AI Integration"
+    description: "Aider mit Claude Sonnet 4 konfiguriert"
+    status: "planned"
+    tests_required:
+      - type: "unit"
+        description: "API Key wird korrekt geladen"
+      - type: "integration"
+        description: "Aider kann mit API kommunizieren"
+
+  - id: "error-handling"
+    name: "Build Error Handling"
+    description: "Fehler werden geloggt und gemeldet"
+    status: "planned"
+    tests_required:
+      - type: "unit"
+        description: "API-Fehler werden caught"
+      - type: "integration"
+        description: "Workflow schlägt graceful fehl bei Fehlern"
+
+# Testing Coverage Requirements
+coverage:
+  minimum: 80
+  targets:
+    unit: 90
+    integration: 70
