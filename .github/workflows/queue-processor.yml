@@ -1,6 +1,7 @@
 name: Queue Processor
 
 on:
+  workflow_dispatch:
   schedule:
     # Alle 2 Minuten - checkt Queue und startet Build wenn Tasks vorhanden
     - cron: '*/2 * * * *'
