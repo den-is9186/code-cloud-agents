@@ -17,9 +17,15 @@ on:
           - claude-opus-4-5
           - gpt-4
 
+  workflow_run:
+    # Startet automatisch nach jedem erfolgreichen Build
+    workflows: ["Auto Build with Aider"]
+    types:
+      - completed
+
   schedule:
-    # Alle 5 Minuten - schnelles Queue-Processing
-    - cron: '*/5 * * * *'
+    # Alle 15 Minuten (Fallback falls workflow_run nicht triggert)
+    - cron: '*/15 * * * *'
 
 jobs:
   build:
@@ -42,6 +48,33 @@ jobs:
           git config user.name "den-is9186"
           git config user.email "den-is9186@users.noreply.github.com"
 
+      - name: Check Queue & Previous Build
+        id: queue_check
+        run: |
+          # Bei workflow_run: Prüfe ob vorheriger Build erfolgreich war
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+              echo "⚠️  Vorheriger Build fehlgeschlagen, stoppe Chain"
+              exit 0
+            fi
+          fi
+
+          # Prüfe ob Queue Tasks hat (außer bei manual trigger)
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            if [ ! -f "task-queue.txt" ]; then
+              echo "ℹ️  Keine task-queue.txt gefunden"
+              exit 0
+            fi
+
+            TASKS=$(grep -v '^#' task-queue.txt | grep -v '^$' | wc -l)
+            if [ "$TASKS" -eq 0 ]; then
+              echo "ℹ️  Queue ist leer, nichts zu tun"
+              exit 0
+            fi
+
+            echo "📋 $TASKS Tasks in Queue"
+          fi
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -60,8 +93,8 @@ jobs:
           if [ -n "${{ github.event.inputs.task }}" ]; then
             # Manuel getriggert
             TASK="${{ github.event.inputs.task }}"
-          elif [ "${{ github.event_name }}" = "schedule" ]; then
-            # Scheduled: Hole Task aus Queue
+          elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # Auto-triggered: Hole Task aus Queue
             if [ ! -f "task-queue.txt" ]; then
               echo "ℹ️  Keine task-queue.txt gefunden"
               exit 0
@@ -102,8 +135,8 @@ jobs:
 
           echo "✅ Build abgeschlossen"
 
-          # Bei scheduled build: Task aus Queue entfernen
-          if [ "${{ github.event_name }}" = "schedule" ]; then
+          # Bei auto-triggered build: Task aus Queue entfernen
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_run" ]; then
             echo "🗑️  Entferne Task aus Queue"
             # Erste nicht-kommentierte Zeile entfernen
             grep -v '^#' task-queue.txt | grep -v '^$' | tail -n +2 > task-queue.tmp
