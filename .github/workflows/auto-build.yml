@@ -77,10 +77,11 @@ jobs:
         run: |
           # Task festlegen
           if [ -n "${{ github.event.inputs.task }}" ]; then
-            # Manuel getriggert
+            # Manuel getriggert mit spezifischer Task
             TASK="${{ github.event.inputs.task }}"
-          elif [ "${{ github.event_name }}" = "schedule" ]; then
-            # Auto-triggered: Hole Task aus Queue
+            echo "📝 Manual task: $TASK"
+          else
+            # Queue nutzen (schedule ODER workflow_dispatch ohne task)
             if [ ! -f "task-queue.txt" ]; then
               echo "ℹ️  Keine task-queue.txt gefunden"
               exit 0
@@ -95,8 +96,6 @@ jobs:
             fi
 
             echo "📥 Task aus Queue geholt: $TASK"
-          else
-            TASK="Review code and suggest improvements"
           fi
 
           MODEL="${{ github.event.inputs.model || 'claude-sonnet-4-5-20250929' }}"
@@ -121,8 +120,8 @@ jobs:
 
           echo "✅ Build abgeschlossen"
 
-          # Bei auto-triggered build: Task aus Queue entfernen
-          if [ "${{ github.event_name }}" = "schedule" ]; then
+          # Bei Queue-Processing: Task aus Queue entfernen
+          if [ -z "${{ github.event.inputs.task }}" ]; then
             echo "🗑️  Entferne Task aus Queue"
             # Erste nicht-kommentierte Zeile entfernen
             grep -v '^#' task-queue.txt | grep -v '^$' | tail -n +2 > task-queue.tmp
