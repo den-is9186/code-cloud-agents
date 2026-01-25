@@ -85,6 +85,245 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// Agent State Management API
+
+const AGENT_STATE_PREFIX = 'agent:state:';
+const AGENT_STATE_INDEX = 'agent:states:index';
+const DEFAULT_TTL = 86400; // 24 hours in seconds
+
+// Helper function to validate agent ID
+function validateAgentId(agentId) {
+  if (!agentId || typeof agentId !== 'string') {
+    throw new Error('Agent ID must be a non-empty string');
+  }
+  if (agentId.length > 256) {
+    throw new Error('Agent ID must be 256 characters or less');
+  }
+  if (!/^[a-zA-Z0-9_\-:.]+$/.test(agentId)) {
+    throw new Error('Agent ID contains invalid characters. Only alphanumeric, underscore, hyphen, colon, and period are allowed');
+  }
+  return agentId;
+}
+
+// Create or update agent execution state
+app.post('/api/v1/agent/state', async (req, res) => {
+  try {
+    const { agentId, status, progress, metadata, ttl } = req.body;
+
+    if (!agentId) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'agentId is required'
+        }
+      });
+    }
+
+    validateAgentId(agentId);
+
+    if (status && !['pending', 'running', 'completed', 'failed', 'cancelled'].includes(status)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'status must be one of: pending, running, completed, failed, cancelled'
+        }
+      });
+    }
+
+    if (progress !== undefined && (typeof progress !== 'number' || progress < 0 || progress > 100)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'progress must be a number between 0 and 100'
+        }
+      });
+    }
+
+    const key = `${AGENT_STATE_PREFIX}${agentId}`;
+    const now = new Date().toISOString();
+
+    // Check if state already exists
+    const existingState = await redis.get(key);
+    let state;
+
+    if (existingState) {
+      // Update existing state
+      state = JSON.parse(existingState);
+      if (status) state.status = status;
+      if (progress !== undefined) state.progress = progress;
+      if (metadata) state.metadata = { ...state.metadata, ...metadata };
+      state.updatedAt = now;
+    } else {
+      // Create new state
+      state = {
+        agentId,
+        status: status || 'pending',
+        progress: progress !== undefined ? progress : 0,
+        metadata: metadata || {},
+        createdAt: now,
+        updatedAt: now
+      };
+      
+      // Add to index
+      await redis.sadd(AGENT_STATE_INDEX, agentId);
+    }
+
+    // Save state to Redis
+    const stateTTL = ttl || DEFAULT_TTL;
+    await redis.setex(key, stateTTL, JSON.stringify(state));
+
+    res.json({
+      agentId,
+      state,
+      ttl: stateTTL
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: {
+        code: 'INVALID_INPUT',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Get agent execution state
+app.get('/api/v1/agent/state/:agentId', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    validateAgentId(agentId);
+
+    const key = `${AGENT_STATE_PREFIX}${agentId}`;
+    const stateData = await redis.get(key);
+
+    if (!stateData) {
+      return res.status(404).json({
+        error: {
+          code: 'STATE_NOT_FOUND',
+          message: `Agent state not found for agentId: ${agentId}`
+        }
+      });
+    }
+
+    const state = JSON.parse(stateData);
+    const ttl = await redis.ttl(key);
+
+    res.json({
+      agentId,
+      state,
+      ttl: ttl > 0 ? ttl : null
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: {
+        code: 'INVALID_INPUT',
+        message: error.message
+      }
+    });
+  }
+});
+
+// List all agent states
+app.get('/api/v1/agent/states', async (req, res) => {
+  try {
+    const { status, limit = 100, offset = 0 } = req.query;
+
+    // Get all agent IDs from index
+    const agentIds = await redis.smembers(AGENT_STATE_INDEX);
+
+    if (agentIds.length === 0) {
+      return res.json({
+        states: [],
+        total: 0,
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      });
+    }
+
+    // Fetch all states
+    const pipeline = redis.pipeline();
+    agentIds.forEach(agentId => {
+      pipeline.get(`${AGENT_STATE_PREFIX}${agentId}`);
+    });
+    const results = await pipeline.exec();
+
+    // Parse and filter states
+    let states = [];
+    for (let i = 0; i < results.length; i++) {
+      const [err, stateData] = results[i];
+      if (!err && stateData) {
+        const state = JSON.parse(stateData);
+        
+        // Filter by status if provided
+        if (!status || state.status === status) {
+          states.push(state);
+        }
+      } else if (!stateData) {
+        // Remove from index if state no longer exists
+        await redis.srem(AGENT_STATE_INDEX, agentIds[i]);
+      }
+    }
+
+    // Sort by updatedAt descending
+    states.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+    // Apply pagination
+    const total = states.length;
+    const paginatedStates = states.slice(parseInt(offset), parseInt(offset) + parseInt(limit));
+
+    res.json({
+      states: paginatedStates,
+      total,
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Delete agent execution state
+app.delete('/api/v1/agent/state/:agentId', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    validateAgentId(agentId);
+
+    const key = `${AGENT_STATE_PREFIX}${agentId}`;
+    
+    // Check if state exists
+    const exists = await redis.exists(key);
+    if (!exists) {
+      return res.status(404).json({
+        error: {
+          code: 'STATE_NOT_FOUND',
+          message: `Agent state not found for agentId: ${agentId}`
+        }
+      });
+    }
+
+    // Delete state and remove from index
+    await redis.del(key);
+    await redis.srem(AGENT_STATE_INDEX, agentId);
+
+    res.json({
+      agentId,
+      deleted: true
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: {
+        code: 'INVALID_INPUT',
+        message: error.message
+      }
+    });
+  }
+});
+
 // File Operations API
 
 // List files in a directory
