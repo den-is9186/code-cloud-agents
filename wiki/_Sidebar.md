@@ -9,7 +9,7 @@
 ## 📚 Core Concepts
 - [Architecture Overview](Architecture-Overview.md)
 - [Multi-Agent System](Multi-Agent-System.md)
-  - [Quality Index (QII)](Multi-Agent-System.md#-quality-comparison-qii)
+  - [Quality Index (QII)](Multi-Agent-System.md#quality-comparison-qii)
 - [Agent State Management](Agent-State-Management.md)
 - [Tool Calling & Agentic](Tool-Calling-And-Agentic.md)
 - [Capabilities Registry](Capabilities-Registry.md)
