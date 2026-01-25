@@ -1,308 +1,404 @@
-# PRESETS CONFIGURATION
-# Multi-Agent System - Team Presets
-
-schema_version: "1.0"
-
-# ═══════════════════════════════════════════════════════════════
-# PRESET DEFINITIONEN
-# ═══════════════════════════════════════════════════════════════
+# Team Presets Configuration
+# Version: 2.1.0
+# Updated: 2025-01-25
 
 presets:
+  # ═══════════════════════════════════════════════════════════════
+  # STANDARD PRESETS (A, B, C, D)
+  # ═══════════════════════════════════════════════════════════════
 
-  # ───────────────────────────────────────────────────────────────
-  # VARIANTE A: BUDGET
-  # ───────────────────────────────────────────────────────────────
   A:
     name: "Budget"
-    description: "Für Prototypen und Tests - günstigste Option"
-    cost_estimate_per_build: 8
+    description: "Günstigste Option für Prototypen und Tests"
+    estimated_cost_per_build: 8
     quality_score: 71
     error_rate: 0.12
-    recommended_for:
-      - "Erste Ideen testen"
-      - "Prototypen bauen"
-      - "Lernen und Experimentieren"
     
     agents:
       supervisor:
-        model: deepseek-v3.2
-        role: "Koordination und Routing"
+        model: deepseek-r1-0528
+        role: "Orchestriert alle Agents"
       architect:
-        model: deepseek-r1
-        role: "Runbook und Planung erstellen"
+        model: deepseek-r1-0528
+        role: "Erstellt Runbook"
       coach:
-        model: deepseek-v3.2
-        role: "Tasks aufteilen und detaillieren"
+        model: deepseek-r1-0528
+        role: "Definiert Sub-Tasks"
       code:
         model: deepseek-v3.2
-        role: "Code implementieren"
+        role: "Schreibt Code"
       review:
-        model: deepseek-v3.2
-        role: "Code prüfen und Bugs finden"
+        model: deepseek-r1-0528
+        role: "Prüft Code"
       test:
         model: deepseek-v3.2
-        role: "Tests schreiben"
+        role: "Schreibt Tests"
       docs:
         model: deepseek-v3.2
-        role: "Dokumentation erstellen"
+        role: "Schreibt Dokumentation"
+    
+    use_cases:
+      - "Prototypen"
+      - "Proof of Concept"
+      - "Interne Tools"
+      - "Learning/Experimente"
 
-  # ───────────────────────────────────────────────────────────────
-  # VARIANTE B: OPTIMAL (Empfohlen)
-  # ───────────────────────────────────────────────────────────────
   B:
     name: "Optimal"
-    description: "Beste Balance zwischen Preis und Leistung"
-    cost_estimate_per_build: 25
+    description: "Beste Balance zwischen Kosten und Qualität"
+    estimated_cost_per_build: 25
     quality_score: 79
     error_rate: 0.08
-    recommended_for:
-      - "Tägliche Projekte"
-      - "Standard-Features"
-      - "Bekannte Patterns"
-    is_default: true
+    recommended: true
     
     agents:
       supervisor:
-        model: claude-haiku-4
-        role: "Koordination und Routing"
+        model: claude-sonnet-4
+        role: "Orchestriert alle Agents"
       architect:
-        model: deepseek-r1
-        role: "Runbook und Planung erstellen"
+        model: claude-sonnet-4
+        role: "Erstellt Runbook"
       coach:
-        model: deepseek-r1
-        role: "Tasks aufteilen und detaillieren"
+        model: claude-sonnet-4
+        role: "Definiert Sub-Tasks"
+      code:
+        model: claude-sonnet-4
+        role: "Schreibt Code"
+      review:
+        model: claude-sonnet-4
+        role: "Prüft Code"
+      test:
+        model: claude-sonnet-4
+        role: "Schreibt Tests"
+      docs:
+        model: claude-sonnet-4
+        role: "Schreibt Dokumentation"
+    
+    use_cases:
+      - "Standard Projekte"
+      - "Client-Arbeit"
+      - "Production Features"
+
+  "B+":
+    name: "Speed"
+    description: "Optimiert für schnelles Feedback und Live-Debugging"
+    estimated_cost_per_build: 12
+    quality_score: 75
+    error_rate: 0.10
+    
+    agents:
+      supervisor:
+        model: deepseek-r1-turbo
+        role: "Orchestriert alle Agents (SCHNELL)"
+      architect:
+        model: deepseek-r1-turbo
+        role: "Erstellt Runbook (SCHNELL)"
+      coach:
+        model: deepseek-r1-turbo
+        role: "Definiert Sub-Tasks (SCHNELL)"
       code:
         model: deepseek-v3.2
-        role: "Code implementieren"
+        role: "Schreibt Code"
       review:
-        model: claude-sonnet-4.5
-        role: "Code prüfen und Bugs finden"
+        model: deepseek-r1-turbo
+        role: "Prüft Code (SCHNELL)"
       test:
         model: deepseek-v3.2
-        role: "Tests schreiben"
+        role: "Schreibt Tests"
       docs:
-        model: claude-haiku-4
-        role: "Dokumentation erstellen"
+        model: deepseek-v3.2
+        role: "Schreibt Dokumentation"
+    
+    use_cases:
+      - "Live-Debugging"
+      - "Schnelle Iteration"
+      - "Echtzeit-Feedback"
+      - "Pair Programming mit AI"
 
-  # ───────────────────────────────────────────────────────────────
-  # VARIANTE C: PREMIUM
-  # ───────────────────────────────────────────────────────────────
   C:
     name: "Premium"
-    description: "Maximale Qualität für kritische Projekte"
-    cost_estimate_per_build: 130
+    description: "Höchste Qualität für Production-Ready Code"
+    estimated_cost_per_build: 130
     quality_score: 90
     error_rate: 0.02
-    recommended_for:
-      - "Produktions-Code"
-      - "Mission-Critical"
-      - "Keine Fehler erlaubt"
     
     agents:
       supervisor:
-        model: claude-sonnet-4.5
-        role: "Koordination und Routing"
+        model: claude-opus-4
+        role: "Orchestriert alle Agents"
       architect:
         model: claude-opus-4
-        role: "Runbook und Planung erstellen"
+        role: "Erstellt Runbook"
       coach:
-        model: deepseek-r1
-        role: "Tasks aufteilen und detaillieren"
+        model: claude-opus-4
+        role: "Definiert Sub-Tasks"
       code:
-        model: claude-sonnet-4.5
-        role: "Code implementieren"
+        model: claude-opus-4
+        role: "Schreibt Code"
       review:
         model: claude-opus-4
-        role: "Code prüfen und Bugs finden"
+        role: "Prüft Code"
       test:
-        model: deepseek-r1
-        role: "Tests schreiben"
+        model: claude-opus-4
+        role: "Schreibt Tests"
       docs:
-        model: claude-sonnet-4.5
-        role: "Dokumentation erstellen"
+        model: claude-opus-4
+        role: "Schreibt Dokumentation"
+    
+    use_cases:
+      - "Production Releases"
+      - "Kritische Features"
+      - "Security-relevant Code"
+      - "Phase 2 nach Approval"
 
-  # ───────────────────────────────────────────────────────────────
-  # VARIANTE D: SMART
-  # ───────────────────────────────────────────────────────────────
   D:
     name: "Smart"
-    description: "Perfekte Planung + günstiger Code + starkes Review"
-    cost_estimate_per_build: 80
+    description: "Intelligenter Mix - Premium Reasoning, Budget Execution"
+    estimated_cost_per_build: 80
     quality_score: 86
     error_rate: 0.03
-    recommended_for:
-      - "Komplexe Projekte"
-      - "Budget-bewusst aber qualitativ"
-      - "Wenig Nacharbeit gewünscht"
     
     agents:
       supervisor:
-        model: claude-haiku-4
-        role: "Koordination und Routing"
+        model: claude-opus-4
+        role: "Orchestriert alle Agents (PREMIUM)"
       architect:
         model: claude-opus-4
-        role: "PERFEKTES Runbook erstellen"
+        role: "Erstellt Runbook (PREMIUM)"
       coach:
-        model: deepseek-r1
-        role: "Tasks aufteilen und detaillieren"
+        model: claude-sonnet-4
+        role: "Definiert Sub-Tasks"
       code:
-        model: deepseek-v3.2
-        role: "Code implementieren (folgt nur Plan)"
+        model: claude-sonnet-4
+        role: "Schreibt Code"
       review:
         model: claude-opus-4
-        role: "ALLES prüfen und Fehler finden"
+        role: "Prüft Code (PREMIUM)"
+      test:
+        model: claude-sonnet-4
+        role: "Schreibt Tests"
+      docs:
+        model: deepseek-v3.2
+        role: "Schreibt Dokumentation (BUDGET)"
+    
+    use_cases:
+      - "Wichtige Features"
+      - "Kostenoptimiert aber hochwertig"
+      - "Wenn C zu teuer, aber A zu riskant"
+
+  # ═══════════════════════════════════════════════════════════════
+  # SPEZIAL PRESETS (V, L)
+  # ═══════════════════════════════════════════════════════════════
+
+  V:
+    name: "Vision"
+    description: "Für Tasks mit Bildern/Screenshots"
+    estimated_cost_per_build: 15
+    quality_score: 72
+    error_rate: 0.12
+    
+    agents:
+      supervisor:
+        model: deepseek-r1-0528
+        role: "Orchestriert alle Agents"
+      architect:
+        model: deepseek-r1-0528
+        role: "Erstellt Runbook"
+      coach:
+        model: deepseek-r1-0528
+        role: "Definiert Sub-Tasks"
+      vision:
+        model: qwen3-omni-30b
+        role: "Analysiert Screenshots/Bilder"
+      code:
+        model: deepseek-v3.2
+        role: "Schreibt Code basierend auf Vision-Output"
+      review:
+        model: deepseek-r1-0528
+        role: "Prüft Code"
       test:
         model: deepseek-v3.2
-        role: "Tests schreiben"
+        role: "Schreibt Tests"
       docs:
-        model: claude-haiku-4
-        role: "Dokumentation erstellen"
+        model: deepseek-v3.2
+        role: "Schreibt Dokumentation"
+    
+    special_capabilities:
+      - vision
+    
+    use_cases:
+      - "Screenshot → Code"
+      - "Figma Design → Implementation"
+      - "UI-Bug Reports mit Bild"
+      - "Design-Review automatisieren"
 
-# ═══════════════════════════════════════════════════════════════
-# SPEZIAL-PRESETS
-# ═══════════════════════════════════════════════════════════════
+  L:
+    name: "Long-Context"
+    description: "Für riesige Codebasen und Multi-File Refactoring"
+    estimated_cost_per_build: 20
+    quality_score: 78
+    error_rate: 0.08
+    
+    agents:
+      supervisor:
+        model: deepseek-r1-0528
+        role: "Orchestriert alle Agents"
+      architect:
+        model: llama-4-maverick
+        role: "Analysiert komplettes Repo (1M KONTEXT)"
+      coach:
+        model: llama-4-maverick
+        role: "Plant Multi-File Changes (1M KONTEXT)"
+      code:
+        model: llama-4-maverick
+        role: "Refactored über viele Files (1M KONTEXT)"
+      review:
+        model: deepseek-r1-0528
+        role: "Prüft Code"
+      test:
+        model: deepseek-v3.2
+        role: "Schreibt Tests"
+      docs:
+        model: deepseek-v3.2
+        role: "Schreibt Dokumentation"
+    
+    special_capabilities:
+      - long_context
+      - multi_file
+    
+    use_cases:
+      - "Legacy-Code Analyse"
+      - "Multi-File Refactoring"
+      - "Projekt-weite Änderungen"
+      - "Naming Convention ändern"
+      - "Komplette Repo-Analyse"
 
-special_presets:
+  # ═══════════════════════════════════════════════════════════════
+  # TASK-SPECIFIC PRESETS (E, F)
+  # ═══════════════════════════════════════════════════════════════
 
-  # ───────────────────────────────────────────────────────────────
-  # VARIANTE E: REFACTOR
-  # ───────────────────────────────────────────────────────────────
   E:
     name: "Refactor"
-    description: "Bestehenden Code verbessern"
-    sub_variants:
-      
-      E1:
-        name: "Refactor Budget"
-        cost_estimate: 1
-        agents:
-          refactor:
-            model: deepseek-r1
-          review:
-            model: deepseek-v3.2
-      
-      E2:
-        name: "Refactor Standard"
-        cost_estimate: 6
-        agents:
-          refactor:
-            model: claude-sonnet-4.5
-          review:
-            model: claude-sonnet-4.5
-      
-      E3:
-        name: "Refactor Premium"
-        cost_estimate: 30
-        agents:
-          refactor:
-            model: claude-opus-4
-          review:
-            model: claude-opus-4
+    description: "Spezialisiert auf Code-Refactoring"
+    variants:
+      budget:
+        estimated_cost: 1
+        model: deepseek-r1-0528
+      standard:
+        estimated_cost: 6
+        model: claude-sonnet-4
+      premium:
+        estimated_cost: 30
+        model: claude-opus-4
+    
+    agents:
+      refactor:
+        role: "Refactored bestehenden Code"
+        capabilities:
+          - "Code-Smell Detection"
+          - "Pattern-Anwendung"
+          - "Performance-Optimierung"
+    
+    use_cases:
+      - "Code Cleanup"
+      - "Technical Debt"
+      - "Performance Optimierung"
 
-  # ───────────────────────────────────────────────────────────────
-  # VARIANTE F: MERGE
-  # ───────────────────────────────────────────────────────────────
   F:
     name: "Merge"
-    description: "Repos zusammenführen"
-    sub_variants:
-      
-      F1:
-        name: "Merge Budget"
-        cost_estimate: 1
-        agents:
-          merge:
-            model: deepseek-r1
-          review:
-            model: deepseek-v3.2
-      
-      F2:
-        name: "Merge Standard"
-        cost_estimate: 6
-        agents:
-          merge:
-            model: claude-sonnet-4.5
-          review:
-            model: claude-sonnet-4.5
-      
-      F3:
-        name: "Merge Premium"
-        cost_estimate: 45
-        agents:
-          merge:
-            model: claude-opus-4
-          multi_repo:
-            model: claude-opus-4
-          review:
-            model: claude-opus-4
+    description: "Spezialisiert auf Branch-Merging und Konfliktlösung"
+    variants:
+      budget:
+        estimated_cost: 1
+        model: deepseek-r1-0528
+      standard:
+        estimated_cost: 6
+        model: claude-sonnet-4
+      premium:
+        estimated_cost: 45
+        model: claude-opus-4
+    
+    agents:
+      merge:
+        role: "Löst Merge-Konflikte intelligent"
+        capabilities:
+          - "Konflikt-Analyse"
+          - "Semantisches Merging"
+          - "Test-Validierung nach Merge"
+    
+    use_cases:
+      - "Feature Branch Merges"
+      - "Komplexe Konflikte"
+      - "Multi-Branch Integration"
 
 # ═══════════════════════════════════════════════════════════════
-# DEFAULT WORKFLOW
+# PRESET SELECTION GUIDE
 # ═══════════════════════════════════════════════════════════════
 
-default_workflow:
-  name: "Prototype → Approval → Premium"
-  description: "Erst günstig testen, dann perfektionieren"
+selection_guide:
+  by_priority:
+    cost: ["A", "B+", "V", "L"]
+    quality: ["C", "D", "B"]
+    speed: ["B+", "A"]
+    vision: ["V"]
+    large_repos: ["L"]
   
-  phases:
-    prototype:
-      preset: "A"
-      auto_start: true
-      
-    approval:
-      required: true
-      timeout_hours: 72  # 3 Tage
-      options:
-        - action: approve
-          description: "Prototyp gut → Premium starten"
-          next_phase: premium
-        - action: reject
-          description: "Prototyp falsch → Neu beschreiben"
-          next_phase: prototype
-        - action: partial
-          description: "Prototyp anpassen → Nochmal A"
-          next_phase: prototype
-        - action: skip
-          description: "Prototyp reicht aus"
-          next_phase: completed
-    
-    premium:
-      preset: "C"
-      auto_start: false  # Nur nach Approval
+  by_use_case:
+    prototype: "A"
+    standard_dev: "B"
+    live_debugging: "B+"
+    production: "C"
+    cost_optimized_quality: "D"
+    screenshot_to_code: "V"
+    legacy_refactor: "L"
+    code_cleanup: "E"
+    merge_conflicts: "F"
 
 # ═══════════════════════════════════════════════════════════════
-# VERGLEICHS-MATRIX
+# TWO-PHASE WORKFLOW
 # ═══════════════════════════════════════════════════════════════
 
-comparison:
+two_phase_workflow:
+  description: "Erst Prototyp mit Budget, dann Premium nach Approval"
   
-  quality_scores:
-    planning:
-      A: 38
-      B: 63
-      C: 78
-      D: 94
-    
-    code_quality:
-      A: 71
-      B: 77
-      C: 91
-      D: 77
-    
-    review_qa:
-      A: 53
-      B: 72
-      C: 93
-      D: 93
-    
-    end_product:
-      A: 58
-      B: 76
-      C: 91
-      D: 84
+  phase_1:
+    preset: "A"
+    purpose: "Schneller Prototyp"
+    cost: 8
+    ends_with: "AWAITING_APPROVAL"
   
-  monthly_costs_50_builds:
-    A: 400
-    B: 1250
-    C: 6500
-    D: 4000
+  phase_2:
+    preset: "C"
+    purpose: "Production-Ready polieren"
+    cost: 130
+    requires: "User Approval"
+  
+  total_cost: 138
+  
+  comparison:
+    direct_premium_5_attempts: 650
+    two_phase_workflow: 138
+    savings_percent: 79
+
+# ═══════════════════════════════════════════════════════════════
+# COST COMPARISON TABLE
+# ═══════════════════════════════════════════════════════════════
+
+cost_comparison:
+  per_build:
+    A: 8
+    "B+": 12
+    V: 15
+    L: 20
+    B: 25
+    D: 80
+    C: 130
+  
+  per_100_builds:
+    A: 800
+    "B+": 1200
+    V: 1500
+    L: 2000
+    B: 2500
+    D: 8000
+    C: 13000

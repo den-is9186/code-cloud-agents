@@ -1,351 +1,322 @@
-# MODELS CONFIGURATION
-# Multi-Agent System - Verfügbare KI-Modelle
-
-schema_version: "1.0"
-
-# ═══════════════════════════════════════════════════════════════
-# DEEPSEEK MODELLE (via OpenRouter)
-# ═══════════════════════════════════════════════════════════════
+# Models Configuration
+# Version: 2.1.0
+# Updated: 2025-01-25
 
 models:
+  # ═══════════════════════════════════════════════════════════════
+  # BUDGET TIER - Günstig, aber leistungsstark
+  # ═══════════════════════════════════════════════════════════════
+  
+  deepseek-r1-0528:
+    provider: novita
+    model_id: deepseek/deepseek-r1-0528
+    display_name: "DeepSeek R1 0528"
+    tier: budget
+    
+    pricing:
+      input_per_million: 0.70
+      output_per_million: 2.50
+      currency: USD
+    
+    context_window: 163000
+    max_output: 16000
+    
+    capabilities:
+      reasoning: 10
+      coding: 8
+      tool_calling: 9.5
+      agentic: 10
+      speed: 7
+    
+    best_for:
+      - "Supervisor Agent"
+      - "Architekt Agent"
+      - "Komplexe Multi-Tool-Chains"
+      - "Fehlerkorrektur & Self-Correction"
+    
+    notes: "Bestes Reasoning-Modell für Budget. Top-Wahl für Supervisor."
+
+  deepseek-r1-turbo:
+    provider: novita
+    model_id: deepseek/deepseek-r1-turbo
+    display_name: "DeepSeek R1 Turbo"
+    tier: budget
+    
+    pricing:
+      input_per_million: 0.70
+      output_per_million: 2.50
+      currency: USD
+    
+    context_window: 64000
+    max_output: 16000
+    
+    capabilities:
+      reasoning: 9
+      coding: 8
+      tool_calling: 9
+      agentic: 9
+      speed: 10
+    
+    best_for:
+      - "Speed-kritische Tasks"
+      - "Live-Debugging"
+      - "Echtzeit-Feedback"
+      - "Schnelle Iteration"
+    
+    notes: "Turbo-Variante für Speed. Weniger Kontext, aber schneller."
 
   deepseek-v3.2:
+    provider: novita
+    model_id: deepseek/deepseek-v3-0324
     display_name: "DeepSeek V3.2"
-    provider: openrouter
-    model_id: "deepseek/deepseek-chat"
+    tier: budget
     
     pricing:
-      input_per_1m_tokens: 0.14
-      output_per_1m_tokens: 0.28
-      currency: "USD"
+      input_per_million: 0.27
+      output_per_million: 1.10
+      currency: USD
+    
+    context_window: 163000
+    max_output: 16000
     
     capabilities:
-      context_window: 128000
-      max_output: 8192
-      supports_streaming: true
-      supports_functions: true
-      supports_vision: false
+      reasoning: 8
+      coding: 10
+      tool_calling: 10
+      agentic: 9
+      speed: 8
     
-    strengths:
-      - "Beste Coding-Benchmarks (~75% LiveCodeBench)"
-      - "Extrem günstig"
-      - "Multi-Language Support"
-      - "Wenig Halluzinationen"
+    best_for:
+      - "Code Agent"
+      - "Tool Builder"
+      - "Sauberes Function-Calling"
+      - "24/7 Coding Tasks"
     
-    weaknesses:
-      - "Kleinerer Kontext als Claude"
-      - "Weniger gut bei sehr komplexem Reasoning"
-    
-    recommended_for:
-      - code
-      - test
-      - docs
-      - supervisor
-    
-    quality_scores:
-      coding: 82
-      reasoning: 70
-      speed: 90
-      cost_efficiency: 98
+    notes: "Bestes Coding-Modell für Budget. Sehr sauberes JSON."
 
-  deepseek-r1:
-    display_name: "DeepSeek R1"
-    provider: openrouter
-    model_id: "deepseek/deepseek-reasoner"
+  # ═══════════════════════════════════════════════════════════════
+  # SPEZIAL TIER - Für besondere Anwendungsfälle
+  # ═══════════════════════════════════════════════════════════════
+
+  qwen3-omni-30b:
+    provider: novita
+    model_id: qwen/qwen3-omni-30b-a3b-instruct
+    display_name: "Qwen3 Omni 30B"
+    tier: special
     
     pricing:
-      input_per_1m_tokens: 0.55
-      output_per_1m_tokens: 2.19
-      currency: "USD"
+      input_per_million: 0.25
+      output_per_million: 0.97
+      currency: USD
+    
+    context_window: 65000
+    max_output: 8000
     
     capabilities:
-      context_window: 128000
-      max_output: 8192
-      supports_streaming: true
-      supports_functions: true
-      supports_vision: false
+      reasoning: 7
+      coding: 7
+      tool_calling: 8
+      agentic: 7
+      speed: 8
+      vision: 9
     
-    strengths:
-      - "Top Reasoning (73% LiveCodeBench)"
-      - "Perfekt für komplexe Planung"
-      - "Baut autonome Agenten fehlerfrei"
-      - "Gute Preis-Leistung"
+    best_for:
+      - "Vision Agent"
+      - "Screenshot → Code"
+      - "UI-Bug Analyse"
+      - "Design-Review"
+      - "Bild + Tool kombinieren"
     
-    weaknesses:
-      - "Langsamer als V3.2"
-      - "Teurer als V3.2"
-    
-    recommended_for:
-      - architect
-      - coach
-      - refactor
-      - merge
-    
-    quality_scores:
-      coding: 78
-      reasoning: 90
-      speed: 75
-      cost_efficiency: 85
+    notes: "Omni-Modell für Vision + Tools. Einziges Modell das Bilder versteht."
 
-# ═══════════════════════════════════════════════════════════════
-# ANTHROPIC MODELLE
-# ═══════════════════════════════════════════════════════════════
+  llama-4-maverick:
+    provider: novita
+    model_id: meta-llama/llama-4-maverick-instruct
+    display_name: "Llama 4 Maverick"
+    tier: special
+    
+    pricing:
+      input_per_million: 0.27
+      output_per_million: 0.80
+      currency: USD
+    
+    context_window: 1000000
+    max_output: 32000
+    
+    capabilities:
+      reasoning: 8
+      coding: 8
+      tool_calling: 8
+      agentic: 8
+      speed: 6
+      long_context: 10
+    
+    best_for:
+      - "Multi-Repo Agent"
+      - "Komplette Repo-Analyse"
+      - "Multi-File Refactoring"
+      - "Projekt-Historie behalten"
+      - "Legacy-Code Analyse"
+    
+    notes: "1M Kontext! Für riesige Codebasen ohne RAG."
 
-  claude-haiku-4:
-    display_name: "Claude Haiku 4"
+  kimi-k2:
+    provider: novita
+    model_id: moonshotai/kimi-k2-instruct
+    display_name: "Kimi K2"
+    tier: special
+    
+    pricing:
+      input_per_million: 0.57
+      output_per_million: 2.30
+      currency: USD
+    
+    context_window: 131000
+    max_output: 16000
+    
+    capabilities:
+      reasoning: 8
+      coding: 7
+      tool_calling: 7.5
+      agentic: 7.5
+      speed: 7
+      personality: 9
+    
+    best_for:
+      - "Review Agent (Alternative)"
+      - "Code-Reviews mit Persönlichkeit"
+      - "Lange Gespräche"
+      - "Multi-Step-Workflows"
+    
+    notes: "Gutes Reasoning + Persönlichkeit. Alternative für Reviews."
+
+  # ═══════════════════════════════════════════════════════════════
+  # STANDARD TIER - Beste Balance
+  # ═══════════════════════════════════════════════════════════════
+  
+  claude-sonnet-4:
     provider: anthropic
-    model_id: "claude-haiku-4-20250514"
+    model_id: claude-sonnet-4-20250514
+    display_name: "Claude Sonnet 4"
+    tier: standard
     
     pricing:
-      input_per_1m_tokens: 0.25
-      output_per_1m_tokens: 1.25
-      currency: "USD"
+      input_per_million: 3.00
+      output_per_million: 15.00
+      currency: USD
+    
+    context_window: 200000
+    max_output: 64000
     
     capabilities:
-      context_window: 200000
-      max_output: 8192
-      supports_streaming: true
-      supports_functions: true
-      supports_vision: true
+      reasoning: 9
+      coding: 9
+      tool_calling: 10
+      agentic: 9
+      speed: 8
     
-    strengths:
-      - "Sehr schnell"
-      - "Günstig"
-      - "Großer Kontext (200k)"
-      - "Zuverlässig"
+    best_for:
+      - "Standard Builds"
+      - "Alle Agent-Typen"
+      - "Beste Balance Preis/Leistung"
     
-    weaknesses:
-      - "Nicht für komplexe Aufgaben"
-      - "Weniger tiefe Analyse"
-    
-    recommended_for:
-      - supervisor
-      - docs
-    
-    quality_scores:
-      coding: 70
-      reasoning: 65
-      speed: 95
-      cost_efficiency: 90
+    notes: "Allrounder. Perfekt für Preset B."
 
-  claude-sonnet-4.5:
-    display_name: "Claude Sonnet 4.5"
-    provider: anthropic
-    model_id: "claude-sonnet-4-5-20250929"
-    
-    pricing:
-      input_per_1m_tokens: 3.00
-      output_per_1m_tokens: 15.00
-      currency: "USD"
-    
-    capabilities:
-      context_window: 200000
-      max_output: 8192
-      supports_streaming: true
-      supports_functions: true
-      supports_vision: true
-    
-    strengths:
-      - "Ausgewogener Allrounder"
-      - "Developer-Favorit"
-      - "Gute Code-Qualität"
-      - "Großer Kontext (200k)"
-    
-    weaknesses:
-      - "Teurer als DeepSeek"
-    
-    recommended_for:
-      - code
-      - review
-      - supervisor
-    
-    quality_scores:
-      coding: 88
-      reasoning: 82
-      speed: 80
-      cost_efficiency: 70
-
+  # ═══════════════════════════════════════════════════════════════
+  # PREMIUM TIER - Höchste Qualität
+  # ═══════════════════════════════════════════════════════════════
+  
   claude-opus-4:
-    display_name: "Claude Opus 4"
     provider: anthropic
-    model_id: "claude-opus-4-20251101"
+    model_id: claude-opus-4-20250514
+    display_name: "Claude Opus 4"
+    tier: premium
     
     pricing:
-      input_per_1m_tokens: 15.00
-      output_per_1m_tokens: 75.00
-      currency: "USD"
+      input_per_million: 15.00
+      output_per_million: 75.00
+      currency: USD
+    
+    context_window: 200000
+    max_output: 32000
     
     capabilities:
-      context_window: 200000
-      max_output: 8192
-      supports_streaming: true
-      supports_functions: true
-      supports_vision: true
+      reasoning: 10
+      coding: 10
+      tool_calling: 10
+      agentic: 10
+      speed: 6
     
-    strengths:
-      - "Beste Qualität insgesamt"
-      - "Tiefste Analyse"
-      - "Versteht komplexe Zusammenhänge"
-      - "Größter Kontext (200k)"
-      - "Beste für Architektur"
+    best_for:
+      - "Premium Builds"
+      - "Production Code"
+      - "Kritische Features"
+      - "Phase 2 (nach Approval)"
     
-    weaknesses:
-      - "Sehr teuer"
-      - "Langsamer"
-    
-    recommended_for:
-      - architect
-      - review
-      - refactor
-      - merge
-      - multi_repo
-      - tool_builder
-    
-    quality_scores:
-      coding: 92
-      reasoning: 95
-      speed: 65
-      cost_efficiency: 40
+    notes: "Bestes Modell überhaupt. Für Production-Ready Code."
 
 # ═══════════════════════════════════════════════════════════════
-# NICHT VERWENDETE MODELLE (Dokumentation)
+# MODEL SELECTION GUIDE
 # ═══════════════════════════════════════════════════════════════
 
-deprecated_models:
-
-  qwen3-480b:
-    reason: "Schwer verfügbar, 10x teurer als DeepSeek, Overkill"
-    alternative: "deepseek-v3.2"
-
-  gpt-4o:
-    reason: "Teurer, nicht besser als DeepSeek für Coding"
-    alternative: "deepseek-v3.2 oder claude-sonnet-4.5"
-
-  codex:
-    reason: "Veraltet (2021)"
-    alternative: "deepseek-v3.2"
-
-# ═══════════════════════════════════════════════════════════════
-# PROVIDER KONFIGURATION
-# ═══════════════════════════════════════════════════════════════
-
-providers:
-
-  openrouter:
-    base_url: "https://openrouter.ai/api/v1"
-    auth_header: "Authorization"
-    auth_prefix: "Bearer"
-    env_var: "OPENROUTER_API_KEY"
-    rate_limit:
-      requests_per_minute: 60
-      tokens_per_minute: 100000
-
-  anthropic:
-    base_url: "https://api.anthropic.com/v1"
-    auth_header: "x-api-key"
-    auth_prefix: ""
-    env_var: "ANTHROPIC_API_KEY"
-    rate_limit:
-      requests_per_minute: 50
-      tokens_per_minute: 100000
-
-# ═══════════════════════════════════════════════════════════════
-# MODELL-EMPFEHLUNGEN PRO AGENT-ROLLE
-# ═══════════════════════════════════════════════════════════════
-
-agent_model_recommendations:
-
-  supervisor:
-    budget: deepseek-v3.2
-    standard: claude-haiku-4
-    premium: claude-sonnet-4.5
-    reason: "Muss schnell sein, einfache Routing-Aufgaben"
-
-  architect:
-    budget: deepseek-r1
-    standard: deepseek-r1
-    premium: claude-opus-4
-    reason: "Braucht Reasoning für Architektur und Planung"
-
-  coach:
-    budget: deepseek-v3.2
-    standard: deepseek-r1
-    premium: deepseek-r1
-    reason: "Muss Tasks strukturieren, R1 gut genug"
-
-  code:
-    budget: deepseek-v3.2
-    standard: deepseek-v3.2
-    premium: claude-sonnet-4.5
-    reason: "Beste Coding-Benchmarks bei DeepSeek"
-
-  review:
-    budget: deepseek-v3.2
-    standard: claude-sonnet-4.5
-    premium: claude-opus-4
-    reason: "Review braucht tiefe Analyse"
-
-  test:
-    budget: deepseek-v3.2
-    standard: deepseek-v3.2
-    premium: deepseek-r1
-    reason: "Tests folgen Patterns, DeepSeek reicht"
-
-  docs:
-    budget: deepseek-v3.2
-    standard: claude-haiku-4
-    premium: claude-sonnet-4.5
-    reason: "Haiku schreibt klare Sprache"
-
-  refactor:
-    budget: deepseek-r1
-    standard: claude-sonnet-4.5
-    premium: claude-opus-4
-    reason: "Refactor braucht Kontext-Verständnis"
-
-  merge:
-    budget: deepseek-r1
-    standard: claude-sonnet-4.5
-    premium: claude-opus-4
-    reason: "Merge braucht großen Kontext"
-
-  multi_repo:
-    budget: deepseek-r1
-    standard: claude-sonnet-4.5
-    premium: claude-opus-4
-    reason: "Multi-Repo braucht sehr großen Kontext"
-
-  tool_builder:
-    budget: deepseek-v3.2
-    standard: deepseek-r1
-    premium: claude-opus-4
-    reason: "Tool Builder braucht Architektur-Verständnis"
-
-# ═══════════════════════════════════════════════════════════════
-# FALLBACK KONFIGURATION
-# ═══════════════════════════════════════════════════════════════
-
-fallback_config:
+selection_guide:
+  by_task:
+    coding: "deepseek-v3.2"
+    reasoning: "deepseek-r1-0528"
+    speed: "deepseek-r1-turbo"
+    vision: "qwen3-omni-30b"
+    long_context: "llama-4-maverick"
+    reviews: "kimi-k2 oder deepseek-r1-0528"
+    standard: "claude-sonnet-4"
+    premium: "claude-opus-4"
   
-  # Wenn primäres Modell fehlschlägt
-  fallback_chain:
-    claude-opus-4:
-      - claude-sonnet-4.5
-      - deepseek-r1
-    claude-sonnet-4.5:
-      - deepseek-r1
-      - deepseek-v3.2
-    claude-haiku-4:
-      - deepseek-v3.2
-    deepseek-r1:
-      - deepseek-v3.2
-      - claude-sonnet-4.5
-    deepseek-v3.2:
-      - deepseek-r1
-      - claude-haiku-4
-  
-  # Retry-Konfiguration
-  retry:
-    max_attempts: 3
-    backoff_ms: 1000
-    backoff_multiplier: 2
+  by_budget:
+    ultra_low: ["deepseek-v3.2", "qwen3-omni-30b"]
+    low: ["deepseek-r1-0528", "deepseek-r1-turbo", "llama-4-maverick"]
+    medium: ["claude-sonnet-4", "kimi-k2"]
+    high: ["claude-opus-4"]
+
+# ═══════════════════════════════════════════════════════════════
+# PRICING COMPARISON (per 1M tokens)
+# ═══════════════════════════════════════════════════════════════
+
+pricing_comparison:
+  - model: deepseek-v3.2
+    input: 0.27
+    output: 1.10
+    total_avg: 0.69
+    
+  - model: qwen3-omni-30b
+    input: 0.25
+    output: 0.97
+    total_avg: 0.61
+    
+  - model: llama-4-maverick
+    input: 0.27
+    output: 0.80
+    total_avg: 0.54
+    
+  - model: kimi-k2
+    input: 0.57
+    output: 2.30
+    total_avg: 1.44
+    
+  - model: deepseek-r1-0528
+    input: 0.70
+    output: 2.50
+    total_avg: 1.60
+    
+  - model: deepseek-r1-turbo
+    input: 0.70
+    output: 2.50
+    total_avg: 1.60
+    
+  - model: claude-sonnet-4
+    input: 3.00
+    output: 15.00
+    total_avg: 9.00
+    
+  - model: claude-opus-4
+    input: 15.00
+    output: 75.00
+    total_avg: 45.00
