@@ -3,6 +3,7 @@ import { llmClient } from '../llm/client';
 import { executeTool } from '../tools';
 import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
+import { validatePath } from '../tools/index';
 
 export class TestAgent implements Agent {
   role: AgentRole = 'test';
@@ -60,10 +61,36 @@ Antworte NUR mit validem JSON:
         await executeTool('file_write', { path: test.path, content: test.content });
       }
 
-      // Run tests
-      const { stdout, exitCode } = await executeTool('shell_exec', {
-        command: 'npm test -- --reporter=json 2>/dev/null || true'
-      });
+      // Write test files - validate paths first
+      for (const test of parsed.testsWritten) {
+        // Validate the test file path before writing
+        const safePath = validatePath(test.path);
+        await executeTool('file_write', { path: safePath, content: test.content });
+      }
+
+      // Run tests using execFileAsync for better security (prevents shell injection)
+      let stdout = '';
+      let exitCode = 0;
+      
+      try {
+        // Use execFileAsync instead of shell_exec to avoid shell injection
+        // npm test with arguments passed as separate array elements
+        const { execFile } = await import('child_process');
+        const { promisify } = await import('util');
+        const execFileAsync = promisify(execFile);
+        
+        const result = await execFileAsync('npm', ['test', '--', '--reporter=json'], {
+          cwd: process.cwd(),
+          timeout: 30000, // 30 second timeout
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+        stdout = result.stdout;
+        exitCode = 0;
+      } catch (error: any) {
+        // execFileAsync throws on non-zero exit codes
+        stdout = error.stdout || '';
+        exitCode = error.code || 1;
+      }
 
       const testResults: TestResult = {
         passed: 0,
