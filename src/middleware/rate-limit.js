@@ -40,7 +40,7 @@ function createRateLimiter(redis, options = {}) {
   try {
     // Check if redis client has the required methods
     if (!redis || typeof redis.call !== 'function') {
-      logger.warn('Redis client not available or invalid, rate limiting will fallback to in-memory');
+      logger.warn('Redis client not available or invalid, rate limiting DISABLED - no fallback implemented');
       return (req, res, next) => next();
     }
 
