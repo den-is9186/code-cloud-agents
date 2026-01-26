@@ -39,13 +39,13 @@ export class SupervisorAgent implements Agent {
     try {
       // Step 1: Architect creates runbook
       console.log('📐 Architect analyzing task...');
-      const architect = this.agents.get('architect');
-      const { runbook } = await architect!.execute(input);
+      const architect = this.getAgent('architect');
+      const { runbook } = await architect.execute(input);
 
       // Step 2: Coach creates subtasks
       console.log('🎯 Coach planning tasks...');
-      const coach = this.agents.get('coach');
-      const { tasks, executionOrder } = await coach!.execute({ runbook, context: input });
+      const coach = this.getAgent('coach');
+      const { tasks, executionOrder } = await coach.execute({ runbook, context: input });
 
       // Step 3: Execute tasks
       for (const taskBatch of executionOrder) {
@@ -80,51 +80,62 @@ export class SupervisorAgent implements Agent {
     return result;
   }
 
+  private getAgent(name: string): Agent {
+    const agent = this.agents.get(name);
+    if (!agent) {
+      throw new Error(`Agent '${name}' not registered. Available: ${[...this.agents.keys()].join(', ')}`);
+    }
+    return agent;
+  }
+
   private async executeTask(task: SubTask, result: BuildResult) {
-    const agent = this.agents.get(task.assignedAgent);
-    if (!agent) return;
+    try {
+      const agent = this.getAgent(task.assignedAgent);
+      console.log(`⚡ ${task.assignedAgent}: ${task.description}`);
 
-    console.log(`⚡ ${task.assignedAgent}: ${task.description}`);
+      if (task.assignedAgent === 'code') {
+        let iteration = 0;
+        let approved = false;
 
-    if (task.assignedAgent === 'code') {
-      let iteration = 0;
-      let approved = false;
+        while (!approved && iteration < this.maxIterations) {
+          // Code writes
+          const codeResult = await agent.execute({ task, feedback: undefined });
+          result.filesChanged.push(...codeResult.filesChanged);
 
-      while (!approved && iteration < this.maxIterations) {
-        // Code writes
-        const codeResult = await agent.execute({ task, feedback: undefined });
-        result.filesChanged.push(...codeResult.filesChanged);
+          // Review checks
+          const review = this.agents.get('review');
+          if (review) {
+            const reviewResult = await review.execute({
+              filesChanged: codeResult.filesChanged,
+              originalTask: task
+            });
 
-        // Review checks
-        const review = this.agents.get('review');
-        if (review) {
-          const reviewResult = await review.execute({
-            filesChanged: codeResult.filesChanged,
-            originalTask: task
-          });
-
-          if (reviewResult.approved) {
-            approved = true;
+            if (reviewResult.approved) {
+              approved = true;
+            } else {
+              console.log(`🔄 Review found issues, iteration ${iteration + 1}`);
+              task.input.feedback = reviewResult;
+            }
           } else {
-            console.log(`🔄 Review found issues, iteration ${iteration + 1}`);
-            task.input.feedback = reviewResult;
+            approved = true;
           }
-        } else {
-          approved = true;
+          iteration++;
         }
-        iteration++;
-      }
 
-      // Test writes tests
-      const test = this.agents.get('test');
-      if (test) {
-        const testResult = await test.execute({
-          filesChanged: result.filesChanged,
-          task
-        });
-        result.testsWritten.push(...testResult.testsWritten);
-        result.testResults = testResult.testResults;
+        // Test writes tests
+        const test = this.agents.get('test');
+        if (test) {
+          const testResult = await test.execute({
+            filesChanged: result.filesChanged,
+            task
+          });
+          result.testsWritten.push(...testResult.testsWritten);
+          result.testResults = testResult.testResults;
+        }
       }
+    } catch (error) {
+      // Wenn der Agent nicht existiert, loggen wir einen Fehler und fahren mit der nächsten Task fort
+      console.error(`❌ Agent '${task.assignedAgent}' not found for task ${task.id}:`, error.message);
     }
   }
 }
