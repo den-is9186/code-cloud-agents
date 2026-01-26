@@ -384,6 +384,27 @@ original_features:
       - type: "integration"
         description: "Workflow schlägt graceful fehl bei Fehlern"
 
+  - id: "global-error-handlers"
+    name: "Global Error Handlers"
+    description: "Process-level error handlers for unhandled rejections, uncaught exceptions, and graceful shutdown"
+    status: "implemented"
+    tests_required:
+      - type: "unit"
+        name: "unhandled_rejection_handler"
+        description: "Handles unhandled promise rejections with logging"
+      - type: "unit"
+        name: "uncaught_exception_handler"
+        description: "Handles uncaught exceptions with graceful shutdown"
+      - type: "unit"
+        name: "process_warning_handler"
+        description: "Handles process warnings with logging"
+      - type: "unit"
+        name: "graceful_shutdown"
+        description: "Graceful shutdown on SIGTERM/SIGINT"
+      - type: "unit"
+        name: "exception_monitor"
+        description: "Monitor exceptions before crash for metrics"
+
 # ═══════════════════════════════════════════════════════════════
 # TESTING COVERAGE REQUIREMENTS
 # ═══════════════════════════════════════════════════════════════
