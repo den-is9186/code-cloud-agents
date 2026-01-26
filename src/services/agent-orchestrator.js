@@ -170,7 +170,7 @@ async function orchestrateBuild(redis, options) {
       logger.error('Failed to check budget', { error: budgetError.message, buildId });
     }
 
-    logger.info('Build completed successfully', { buildId, duration: elapsedTime });
+    logger.info('Build completed successfully', { buildId, duration: completedBuild.build.duration });
 
     return {
       buildId: build.id,
@@ -310,7 +310,7 @@ async function executeAgentSequence(redis, options) {
         buildId,
       });
 
-      logger.info('Agent completed', { agent: agentName, duration });
+      logger.info('Agent completed', { agent: agentName, duration: agentResult.duration || 0 });
     } catch (error) {
       logger.error('Agent failed', { agent: agentName, error: error.message, stack: error.stack });
 
