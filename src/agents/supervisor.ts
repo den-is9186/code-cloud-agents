@@ -111,7 +111,7 @@ export class SupervisorAgent implements Agent {
       console.log('📝 Docs agent documenting...');
       const docs = this.agents.get('docs');
       if (docs) {
-        const { docsUpdated } = await docs.execute({
+        const { docsUpdated } = await (docs as Agent<{ filesChanged: FileChange[]; task: { description: string } }, { docsUpdated: FileChange[]; changelogEntry?: string }>).execute({
           filesChanged: result.filesChanged,
           task: { description: input.task }
         });
@@ -161,13 +161,13 @@ export class SupervisorAgent implements Agent {
 
         while (!approved && iteration < this.maxIterations) {
           // Code writes
-          const codeResult = await agent.execute({ task, feedback: undefined });
+          const codeResult = await (agent as Agent<{ task: SubTask; feedback?: ReviewResult }, { filesChanged: FileChange[]; explanation: string; needsReview: boolean }>).execute({ task, feedback: undefined });
           taskFilesChanged.push(...codeResult.filesChanged);
 
           // Review checks
           const review = this.agents.get('review');
           if (review) {
-            const reviewResult = await review.execute({
+            const reviewResult = await (review as Agent<{ filesChanged: FileChange[]; originalTask: SubTask }, { approved: boolean; issues: Issue[]; summary: string; mustFix: Issue[]; suggestions: Issue[] }>).execute({
               filesChanged: codeResult.filesChanged,
               originalTask: task
             });
@@ -192,7 +192,7 @@ export class SupervisorAgent implements Agent {
         // Test writes tests
         const test = this.agents.get('test');
         if (test) {
-          const testResult = await test.execute({
+          const testResult = await (test as Agent<{ filesChanged: FileChange[]; task: SubTask }, { testsWritten: TestFile[]; testResults: TestResult; failures?: TestFailure[] }>).execute({
             filesChanged: taskFilesChanged,
             task
           });

@@ -5,7 +5,16 @@ import { z } from 'zod';
 
 type VisionTask = 'design_to_code' | 'bug_analysis' | 'ui_compare';
 
-export class VisionAgent implements Agent {
+export class VisionAgent implements Agent<{
+  image: string;
+  task: VisionTask;
+  context?: string;
+}, {
+  analysis: string;
+  generatedCode?: string;
+  suggestedFix?: string;
+  confidence: number;
+}> {
   role: AgentRole = 'vision';
   model = 'llama-4-scout-local'; // Läuft lokal, $0 Kosten
   status = 'idle' as const;

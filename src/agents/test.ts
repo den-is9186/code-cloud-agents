@@ -120,14 +120,14 @@ Antworte NUR mit validem JSON:
         }
       } catch {
         // Fallback to counting tests if parsing fails
-        testResults.passed = exitCode === 0 ? parsed.testsWritten.reduce((a: number, t: any) => a + t.testCount, 0) : 0;
+        testResults.passed = exitCode === 0 ? parsed.testsWritten.reduce((a: number, t: { testCount: number }) => a + t.testCount, 0) : 0;
       }
 
       return {
         testsWritten: parsed.testsWritten,
         testResults
       };
-    } catch {
+    } catch (error: unknown) {
       return {
         testsWritten: [],
         testResults: { passed: 0, failed: 0, skipped: 0, duration: 0 }

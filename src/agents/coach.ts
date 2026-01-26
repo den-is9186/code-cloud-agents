@@ -12,7 +12,7 @@ export class CoachAgent implements Agent {
     this.model = model;
   }
 
-  async execute(input: { runbook: Step[]; context: any }): Promise<{
+  async execute(input: { runbook: Step[]; context: unknown }): Promise<{
     tasks: SubTask[];
     executionOrder: string[][];
     dependencies: Dependency[]

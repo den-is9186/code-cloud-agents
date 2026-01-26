@@ -83,10 +83,11 @@ Antworte NUR mit validem JSON:
         explanation: parsed.explanation,
         needsReview: true
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         filesChanged: [],
-        explanation: `Error: ${error.message}`,
+        explanation: `Error: ${errorMessage}`,
         needsReview: false
       };
     }
