@@ -233,85 +233,9 @@ function requireTeamOwnership(teamIdParam = 'id') {
   };
 }
 
-/**
- * Rate limiting by authentication
- * Different limits for different auth types
- */
-const rateLimitStore = new Map();
-
-function rateLimit(options = {}) {
-  const {
-    windowMs = 60000, // 1 minute
-    maxAnonymous = 10,
-    maxAuthenticated = 100,
-    maxApiKey = 1000,
-  } = options;
-
-  return (req, res, next) => {
-    const identifier = req.auth
-      ? req.auth.type === 'apikey'
-        ? `apikey:${req.auth.name}`
-        : `user:${req.auth.userId}`
-      : `ip:${req.ip}`;
-
-    const now = Date.now();
-    const windowStart = now - windowMs;
-
-    // Get or create rate limit record
-    let record = rateLimitStore.get(identifier);
-    if (!record) {
-      record = { requests: [], resetTime: now + windowMs };
-      rateLimitStore.set(identifier, record);
-    }
-
-    // Remove old requests outside the window
-    record.requests = record.requests.filter((timestamp) => timestamp > windowStart);
-
-    // Determine max requests based on auth type
-    let maxRequests = maxAnonymous;
-    if (req.auth) {
-      maxRequests = req.auth.type === 'apikey' ? maxApiKey : maxAuthenticated;
-    }
-
-    // Check if limit exceeded
-    if (record.requests.length >= maxRequests) {
-      const resetTime = new Date(record.resetTime).toISOString();
-      return res.status(429).json({
-        error: {
-          code: 'RATE_LIMIT_EXCEEDED',
-          message: 'Too many requests',
-          limit: maxRequests,
-          resetTime,
-        },
-      });
-    }
-
-    // Add current request
-    record.requests.push(now);
-
-    // Update reset time if needed
-    if (now >= record.resetTime) {
-      record.resetTime = now + windowMs;
-    }
-
-    // Clean up old entries periodically
-    if (Math.random() < 0.01) {
-      // 1% chance
-      for (const [key, value] of rateLimitStore.entries()) {
-        if (now >= value.resetTime && value.requests.length === 0) {
-          rateLimitStore.delete(key);
-        }
-      }
-    }
-
-    return next();
-  };
-}
-
 module.exports = {
   authenticate,
   requireRole,
   requireTeamOwnership,
-  rateLimit,
   Roles,
 };

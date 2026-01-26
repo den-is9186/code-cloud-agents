@@ -31,10 +31,15 @@ const {
   authenticate,
   requireRole,
   requireTeamOwnership,
-  rateLimit,
 } = require('./middleware/auth');
 const { cors } = require('./middleware/cors');
 const { csrfProtection, getCsrfTokenEndpoint } = require('./middleware/csrf');
+const {
+  createGlobalRateLimiter,
+  createTeamRateLimiter,
+  createStrictRateLimiter,
+  createBuildRateLimiter,
+} = require('./middleware/rate-limit');
 
 const app = express();
 
@@ -67,6 +72,15 @@ app.use(express.json({ limit: '10mb' }));
 
 // Make Redis available to middleware
 app.locals.redis = redis;
+
+// Global rate limiting (tiered: 10/100/1000 req/min based on auth)
+const globalRateLimiter = createGlobalRateLimiter(redis);
+app.use(globalRateLimiter);
+
+// Create other rate limiters (used per-route)
+const strictRateLimiter = createStrictRateLimiter(redis);
+const teamRateLimiter = createTeamRateLimiter(redis);
+const buildRateLimiter = createBuildRateLimiter(redis);
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));
@@ -115,7 +129,7 @@ function validatePath(requestedPath) {
  * Register a new user
  * POST /api/v1/auth/register
  */
-app.post('/api/v1/auth/register', async (req, res) => {
+app.post('/api/v1/auth/register', strictRateLimiter, async (req, res) => {
   try {
     const { userId, email, password, role } = req.body;
 
@@ -175,7 +189,7 @@ app.post('/api/v1/auth/register', async (req, res) => {
  * Login with email and password
  * POST /api/v1/auth/login
  */
-app.post('/api/v1/auth/login', async (req, res) => {
+app.post('/api/v1/auth/login', strictRateLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -208,7 +222,7 @@ app.post('/api/v1/auth/login', async (req, res) => {
  * Refresh access token
  * POST /api/v1/auth/refresh
  */
-app.post('/api/v1/auth/refresh', async (req, res) => {
+app.post('/api/v1/auth/refresh', strictRateLimiter, async (req, res) => {
   try {
     const { refreshToken } = req.body;
 
