@@ -1,0 +1,27 @@
+# Aider Task Queue
+# Format: Eine Task pro Zeile
+# Kommentare beginnen mit #
+# Tasks werden von oben nach unten abgearbeitet
+#
+# Status: Auto-Build läuft alle 3 Minuten (GitHub Actions)
+# Model: claude-sonnet-4-5-20250929 (default)
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CRITICAL Priority - Security Fixes (Issues #3-#5)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Implement API Authentication and Authorization as described in GitHub issue #3. Create JWT-based auth middleware, protect all endpoints except health check, implement team-based authorization, and add API key support for CI/CD. Create tests in tests/auth.test.js with 100% coverage.
+
+Add global error handlers for unhandledRejection and uncaughtException in src/api-server.js. Replace all empty catch blocks with proper error logging. Add structured error response format with requestId and timestamp. Create tests in tests/error-handling.test.js.
+
+Add CORS protection with whitelist configuration and CSRF protection for state-changing operations in src/api-server.js. Add security headers using helmet (CSP, X-Frame-Options). Install dependencies: cors, csurf, helmet. Create tests in tests/security.test.js.
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MEDIUM Priority - Code Quality (Issues #6-#8)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Migrate JavaScript files to TypeScript as described in GitHub issue #6. Priority 1: src/api-server.js, src/services/agent-orchestrator.js, src/services/build-tracker.js, src/services/notification-service.js, src/services/budget-alert-service.js. Replace require() with import/export, add proper type annotations, define interfaces for data structures, fix all 'any' types.
+
+Replace all console.log and console.error statements with Winston logger as described in GitHub issue #7. Use structured logging with JSON format and proper log levels (debug, info, warn, error). Include context in all logs (buildId, teamId, etc.). Files to fix: src/services/agent-orchestrator.js, src/services/build-tracker.js, src/services/budget-alert-service.js and others.
+
+Implement distributed rate limiting using Redis as described in GitHub issue #8. Install rate-limit-redis dependency. Update src/api-server.js to use RedisStore for rate limiting. Add per-team configurable limits. Add rate limit headers in responses. Create tests in tests/rate-limit.test.js.
