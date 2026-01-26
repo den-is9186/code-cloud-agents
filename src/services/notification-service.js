@@ -8,6 +8,7 @@
  */
 
 const axios = require('axios');
+const { URL } = require('url');
 
 /**
  * Notification types
@@ -24,6 +25,29 @@ const NotificationType = {
 };
 
 /**
+ * Sanitize channel type to prevent log injection
+ *
+ * @param {string} channelType - Channel type to sanitize
+ * @returns {string} Sanitized channel type
+ */
+function sanitizeChannelType(channelType) {
+  // Whitelist of allowed channel types
+  const allowedTypes = ['email', 'webhook', 'slack', 'discord'];
+
+  // If channel type is in the whitelist, return as-is
+  if (allowedTypes.includes(channelType)) {
+    return channelType;
+  }
+
+  // Otherwise, sanitize by removing special characters and limiting length
+  const sanitized = String(channelType)
+    .replace(/[^a-zA-Z0-9-_]/g, '')
+    .substring(0, 20);
+
+  return sanitized || 'unknown';
+}
+
+/**
  * Notification channels
  */
 const NotificationChannel = {
@@ -34,6 +58,73 @@ const NotificationChannel = {
 };
 
 /**
+ * Validate webhook URL to prevent SSRF attacks
+ *
+ * @param {string} webhookUrl - URL to validate
+ * @throws {Error} If URL is invalid or points to private network
+ */
+function validateWebhookUrl(webhookUrl) {
+  try {
+    const url = new URL(webhookUrl);
+
+    // Only allow http and https
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      throw new Error('Invalid protocol - only HTTP and HTTPS are allowed');
+    }
+
+    // Block localhost and loopback
+    const hostname = url.hostname.toLowerCase();
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname.startsWith('127.') ||
+      hostname.startsWith('[::1]')
+    ) {
+      throw new Error('Localhost URLs are not allowed');
+    }
+
+    // Block private IP ranges (RFC 1918)
+    const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+    const match = hostname.match(ipv4Regex);
+    if (match) {
+      const [, a, b, c, d] = match.map(Number);
+
+      // Check for private IP ranges
+      if (
+        a === 10 || // 10.0.0.0/8
+        (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12
+        (a === 192 && b === 168) || // 192.168.0.0/16
+        a === 169 && b === 254 || // 169.254.0.0/16 (link-local)
+        a === 0 || // 0.0.0.0/8
+        a >= 224 // Multicast and reserved
+      ) {
+        throw new Error('Private IP addresses are not allowed');
+      }
+    }
+
+    // Block IPv6 private ranges
+    if (hostname.includes(':')) {
+      if (
+        hostname.startsWith('fc') || // fc00::/7 (unique local)
+        hostname.startsWith('fd') ||
+        hostname.startsWith('fe80') || // fe80::/10 (link-local)
+        hostname === '::1' // loopback
+      ) {
+        throw new Error('Private IPv6 addresses are not allowed');
+      }
+    }
+
+    return true;
+  } catch (error) {
+    if (error.message.includes('Invalid URL')) {
+      throw new Error('Invalid webhook URL format');
+    }
+    throw error;
+  }
+}
+
+/**
  * Send notification via webhook
  *
  * @param {string} webhookUrl - Webhook URL
@@ -41,6 +132,9 @@ const NotificationChannel = {
  * @returns {Promise<Object>} Response
  */
 async function sendWebhook(webhookUrl, payload) {
+  // Validate URL to prevent SSRF
+  validateWebhookUrl(webhookUrl);
+
   try {
     const response = await axios.post(webhookUrl, payload, {
       headers: {
@@ -246,7 +340,9 @@ async function sendNotification(redis, notification, channels = []) {
       // Store notification in Redis
       await storeNotification(redis, notification, channel.type, result);
     } catch (error) {
-      console.error(`Failed to send notification via ${channel.type}:`, error);
+      // Sanitize channel type to prevent log injection
+      const sanitizedType = sanitizeChannelType(channel.type);
+      console.error(`Failed to send notification via ${sanitizedType}:`, error);
       results.push({
         channel: channel.type,
         success: false,

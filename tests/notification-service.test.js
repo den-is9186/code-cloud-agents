@@ -140,6 +140,59 @@ describe('Notification Service', () => {
       expect(result.success).toBe(false);
       expect(result.status).toBe(400);
     });
+
+    // SSRF Protection Tests
+    test('should reject localhost URLs', async () => {
+      await expect(
+        sendWebhook('http://localhost/webhook', { message: 'Test' })
+      ).rejects.toThrow('Localhost URLs are not allowed');
+    });
+
+    test('should reject 127.0.0.1 URLs', async () => {
+      await expect(
+        sendWebhook('http://127.0.0.1/webhook', { message: 'Test' })
+      ).rejects.toThrow('Localhost URLs are not allowed');
+    });
+
+    test('should reject private IP ranges (10.x.x.x)', async () => {
+      await expect(
+        sendWebhook('http://10.0.0.1/webhook', { message: 'Test' })
+      ).rejects.toThrow('Private IP addresses are not allowed');
+    });
+
+    test('should reject private IP ranges (192.168.x.x)', async () => {
+      await expect(
+        sendWebhook('http://192.168.1.1/webhook', { message: 'Test' })
+      ).rejects.toThrow('Private IP addresses are not allowed');
+    });
+
+    test('should reject private IP ranges (172.16-31.x.x)', async () => {
+      await expect(
+        sendWebhook('http://172.16.0.1/webhook', { message: 'Test' })
+      ).rejects.toThrow('Private IP addresses are not allowed');
+    });
+
+    test('should reject link-local addresses (169.254.x.x)', async () => {
+      await expect(
+        sendWebhook('http://169.254.169.254/webhook', { message: 'Test' })
+      ).rejects.toThrow('Private IP addresses are not allowed');
+    });
+
+    test('should reject invalid protocols', async () => {
+      await expect(
+        sendWebhook('file:///etc/passwd', { message: 'Test' })
+      ).rejects.toThrow('Invalid protocol');
+    });
+
+    test('should accept valid public URLs', async () => {
+      axios.post.mockResolvedValue({ status: 200, data: { success: true } });
+
+      const result = await sendWebhook('https://api.example.com/webhook', {
+        message: 'Test',
+      });
+
+      expect(result.success).toBe(true);
+    });
   });
 
   describe('sendSlackNotification', () => {
