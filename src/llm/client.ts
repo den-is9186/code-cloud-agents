@@ -17,6 +17,55 @@ interface AnthropicResponse {
   usage?: any;
 }
 
+interface RetryConfig {
+  maxRetries: number;
+  baseDelay: number;
+  maxDelay: number;
+  timeout: number;
+}
+
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 3,
+  baseDelay: 1000,
+  maxDelay: 10000,
+  timeout: 60000
+};
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  config: RetryConfig = DEFAULT_RETRY_CONFIG
+): Promise<T> {
+  let lastError: Error | undefined;
+  
+  for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout')), config.timeout);
+      });
+      
+      return await Promise.race([fn(), timeoutPromise]);
+    } catch (error) {
+      lastError = error as Error;
+      
+      // Don't retry on validation errors
+      if (error instanceof Error && error.message.includes('validation')) {
+        throw error;
+      }
+      
+      if (attempt < config.maxRetries) {
+        const delay = Math.min(
+          config.baseDelay * Math.pow(2, attempt),
+          config.maxDelay
+        );
+        console.log(`Retry ${attempt + 1}/${config.maxRetries} after ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError || new Error('Max retries exceeded');
+}
+
 const modelConfigs: Record<string, ModelConfig> = {
   'deepseek-r1': {
     provider: 'novita',
@@ -71,75 +120,99 @@ export class LLMClient {
   }
 
   private async callNovita(config: ModelConfig, model: string, messages: Message[], tools?: any[]): Promise<LLMResponse> {
-    const response = await fetch(config.endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`
-      },
-      body: JSON.stringify({
-        model: model,
-        messages,
-        tools,
-        max_tokens: 4096
-      })
-    });
+    const fetchCall = async (): Promise<LLMResponse> => {
+      const response = await fetch(config.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages,
+          tools,
+          max_tokens: 4096
+        })
+      });
 
-    const data = await response.json() as NovitaResponse;
-    const usage = this.calculateUsage(data.usage, config.pricing);
+      if (!response.ok) {
+        throw new Error(`Novita API error: ${response.status} ${response.statusText}`);
+      }
 
-    return {
-      content: data.choices[0]?.message?.content || '',
-      toolCalls: data.choices[0]?.message?.tool_calls,
-      usage
+      const data = await response.json() as NovitaResponse;
+      const usage = this.calculateUsage(data.usage, config.pricing);
+
+      return {
+        content: data.choices[0]?.message?.content || '',
+        toolCalls: data.choices[0]?.message?.tool_calls,
+        usage
+      };
     };
+
+    return withRetry(fetchCall);
   }
 
   private async callAnthropic(config: ModelConfig, model: string, messages: Message[], tools?: any[]): Promise<LLMResponse> {
-    const response = await fetch(config.endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': config.apiKey!,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        tools,
-        max_tokens: 4096
-      })
-    });
+    const fetchCall = async (): Promise<LLMResponse> => {
+      const response = await fetch(config.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': config.apiKey!,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          tools,
+          max_tokens: 4096
+        })
+      });
 
-    const data = await response.json() as AnthropicResponse;
-    const usage = this.calculateUsage(data.usage, config.pricing);
+      if (!response.ok) {
+        throw new Error(`Anthropic API error: ${response.status} ${response.statusText}`);
+      }
 
-    return {
-      content: data.content[0]?.text || '',
-      toolCalls: data.content.filter((c: any) => c.type === 'tool_use') as any,
-      usage
+      const data = await response.json() as AnthropicResponse;
+      const usage = this.calculateUsage(data.usage, config.pricing);
+
+      return {
+        content: data.content[0]?.text || '',
+        toolCalls: data.content.filter((c: any) => c.type === 'tool_use') as any,
+        usage
+      };
     };
+
+    return withRetry(fetchCall);
   }
 
   private async callLocal(config: ModelConfig, messages: Message[], tools?: any[]): Promise<LLMResponse> {
-    const response = await fetch(`${config.endpoint}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'llama-4-scout',
-        messages,
-        tools,
-        max_tokens: 4096
-      })
-    });
+    const fetchCall = async (): Promise<LLMResponse> => {
+      const response = await fetch(`${config.endpoint}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'llama-4-scout',
+          messages,
+          tools,
+          max_tokens: 4096
+        })
+      });
 
-    const data = await response.json() as NovitaResponse;
+      if (!response.ok) {
+        throw new Error(`Local LLM API error: ${response.status} ${response.statusText}`);
+      }
 
-    return {
-      content: data.choices[0]?.message?.content || '',
-      toolCalls: data.choices[0]?.message?.tool_calls,
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0 }
+      const data = await response.json() as NovitaResponse;
+
+      return {
+        content: data.choices[0]?.message?.content || '',
+        toolCalls: data.choices[0]?.message?.tool_calls,
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0 }
+      };
     };
+
+    return withRetry(fetchCall);
   }
 
   private calculateUsage(usage: any, pricing: { input: number; output: number }): TokenUsage {
