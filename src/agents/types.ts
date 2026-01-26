@@ -21,12 +21,18 @@ export interface Step {
   estimatedTokens: number;
 }
 
+export interface TaskInput {
+  files?: string[];
+  feedback?: ReviewFeedback;
+  [key: string]: any;
+}
+
 export interface SubTask {
   id: string;
   stepId: string;
   assignedAgent: AgentRole;
   description: string;
-  input: Record<string, any>;
+  input: TaskInput;
   expectedOutput: string;
   status: "pending" | "in_progress" | "completed" | "failed";
 }

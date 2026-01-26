@@ -1,4 +1,4 @@
-import { Agent, AgentRole, BuildResult, SubTask } from './types';
+import { Agent, AgentRole, BuildResult, SubTask, ReviewFeedback } from './types';
 import { llmClient } from '../llm/client';
 
 interface SupervisorConfig {
@@ -118,7 +118,7 @@ export class SupervisorAgent implements Agent {
             } else {
               console.log(`🔄 Review found issues, iteration ${iteration + 1}`);
               // Safe assignment with proper typing
-              task.input = { ...task.input, feedback: reviewResult };
+              task.input = { ...task.input, feedback: reviewResult as ReviewFeedback };
             }
           } else {
             approved = true;
