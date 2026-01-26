@@ -4,6 +4,7 @@ import { executeTool, validatePath } from '../tools';
 import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
 import { sanitizeLogMessage } from '../utils/security';
+import { logger } from '../utils/logger';
 
 export class RefactorAgent implements Agent {
   role: AgentRole = 'refactor';
@@ -35,11 +36,11 @@ export class RefactorAgent implements Agent {
         existingCode += `\n--- ${file} ---\n${content}\n`;
         fileContents[file] = content;
       } catch (error) {
-        console.warn(
-          sanitizeLogMessage(
-            `[Refactor] Failed to read ${file}: ${error instanceof Error ? error.message : String(error)}`
-          )
-        );
+        logger.warn('Failed to read file', {
+          agent: 'refactor',
+          file,
+          error: sanitizeLogMessage(error instanceof Error ? error.message : String(error)),
+        });
       }
     }
 
@@ -129,7 +130,12 @@ Antworte NUR mit validem JSON:
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(sanitizeLogMessage(`[${this.role}] Error: ${errorMessage}`));
+      const stack = error instanceof Error ? error.stack : undefined;
+      logger.error('Refactor operation failed', {
+        agent: this.role,
+        error: sanitizeLogMessage(errorMessage),
+        stack: stack ? sanitizeLogMessage(stack) : undefined,
+      });
       return {
         filesChanged: [],
         analysis: {

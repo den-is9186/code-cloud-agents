@@ -4,6 +4,7 @@ import { executeTool, validatePath } from '../tools';
 import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
 import { sanitizeLogMessage } from '../utils/security';
+import { logger } from '../utils/logger';
 
 export class CodeAgent implements Agent {
   role: AgentRole = 'code';
@@ -88,7 +89,12 @@ Antworte NUR mit validem JSON:
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(sanitizeLogMessage(`[${this.role}] Error: ${errorMessage}`));
+      const stack = error instanceof Error ? error.stack : undefined;
+      logger.error('Code generation failed', {
+        agent: this.role,
+        error: sanitizeLogMessage(errorMessage),
+        stack: stack ? sanitizeLogMessage(stack) : undefined,
+      });
       return {
         filesChanged: [],
         explanation: `Error: ${errorMessage}`,

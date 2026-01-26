@@ -18,6 +18,7 @@ import { SUPERVISOR_CONFIG } from '../config/constants';
 import { sanitizeLogMessage } from '../utils/security';
 import { streamEmitter } from '../utils/events';
 import { checkpointManager, Checkpoint } from '../utils/checkpoint';
+import { logger } from '../utils/logger';
 
 interface SupervisorConfig {
   model: string;
@@ -75,7 +76,10 @@ export class SupervisorAgent implements Agent {
     if (input.resumeCheckpointId) {
       const checkpoint = await checkpointManager.load(input.resumeCheckpointId);
       if (checkpoint) {
-        console.log(`🔄 Resuming from checkpoint: ${checkpoint.id}`);
+        logger.info('Resuming from checkpoint', {
+          agent: 'supervisor',
+          checkpointId: checkpoint.id,
+        });
         // Restore state from checkpoint
         runbook = (checkpoint.runbook as Step[]) || null;
         tasks = checkpoint.pendingTasks || [];
@@ -97,14 +101,18 @@ export class SupervisorAgent implements Agent {
           result.errors = checkpoint.result.errors as string[];
         }
 
-        console.log(`📊 Resumed: phase=${currentPhase}, completed tasks=${completedTaskIds.size}`);
+        logger.info('Checkpoint restored', {
+          agent: 'supervisor',
+          phase: currentPhase,
+          completedTasks: completedTaskIds.size,
+        });
       }
     }
 
     try {
       // Step 1: Architect creates runbook (if not already done)
       if (!runbook) {
-        console.log('📐 Architect analyzing task...');
+        logger.info('Architect analyzing task', { agent: 'supervisor', phase: 'architect' });
         const architectStart = Date.now();
         const architect = this.getAgent('architect');
         const architectResult = await (
@@ -136,7 +144,7 @@ export class SupervisorAgent implements Agent {
 
       // Step 2: Coach creates subtasks (if not already done)
       if (tasks.length === 0) {
-        console.log('🎯 Coach planning tasks...');
+        logger.info('Coach planning tasks', { agent: 'supervisor', phase: 'coach' });
         const coachStart = Date.now();
         const coach = this.getAgent('coach');
         const coachResult = await (
@@ -172,7 +180,7 @@ export class SupervisorAgent implements Agent {
         const pendingTaskBatch = taskBatch.filter((taskId) => !completedTaskIds.has(taskId));
 
         if (pendingTaskBatch.length === 0) {
-          console.log(`⏭️ Skipping batch, all tasks already completed`);
+          logger.info('Skipping batch, all tasks already completed', { agent: 'supervisor' });
           continue;
         }
 
@@ -181,7 +189,7 @@ export class SupervisorAgent implements Agent {
           pendingTaskBatch.map(async (taskId: string) => {
             const task = taskMap!.get(taskId);
             if (!task) {
-              console.warn(`Task ${taskId} not found in task list`);
+              logger.warn('Task not found in task list', { agent: 'supervisor', taskId });
               return null;
             }
 
@@ -232,7 +240,13 @@ export class SupervisorAgent implements Agent {
               return taskChanges;
             } catch (error: unknown) {
               const errorMessage = error instanceof Error ? error.message : String(error);
-              console.error(sanitizeLogMessage(`❌ Task ${taskId} failed: ${errorMessage}`));
+              const stack = error instanceof Error ? error.stack : undefined;
+              logger.error('Task execution failed', {
+                agent: 'supervisor',
+                taskId,
+                error: sanitizeLogMessage(errorMessage),
+                stack: stack ? sanitizeLogMessage(stack) : undefined,
+              });
               taskChanges.errors = [errorMessage];
               // Save checkpoint on error
               currentPhase = 'execution';
@@ -279,7 +293,7 @@ export class SupervisorAgent implements Agent {
 
       // Step 4: Documentation (if not already done)
       if (currentPhase !== 'complete') {
-        console.log('📝 Docs agent documenting...');
+        logger.info('Docs agent documenting', { agent: 'supervisor', phase: 'documentation' });
         const docs = this.agents.get('docs');
         if (docs) {
           const { docsUpdated } = await (
@@ -313,7 +327,12 @@ export class SupervisorAgent implements Agent {
       streamEmitter.emitBuildComplete({ success: true, errors: result.errors });
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(sanitizeLogMessage(`[${this.role}] Error: ${errorMessage}`));
+      const stack = error instanceof Error ? error.stack : undefined;
+      logger.error('Supervisor execution failed', {
+        agent: this.role,
+        error: sanitizeLogMessage(errorMessage),
+        stack: stack ? sanitizeLogMessage(stack) : undefined,
+      });
       result.errors = [errorMessage];
       this.status = 'failed';
       // Save checkpoint on error
@@ -369,7 +388,11 @@ export class SupervisorAgent implements Agent {
       executionOrder: executionOrder,
     };
     await checkpointManager.save(checkpoint);
-    console.log(`💾 Checkpoint saved: ${checkpoint.id} (phase: ${currentPhase})`);
+    logger.info('Checkpoint saved', {
+      agent: 'supervisor',
+      checkpointId: checkpoint.id,
+      phase: currentPhase,
+    });
   }
 
   private async executeTaskWithResult(
@@ -383,7 +406,11 @@ export class SupervisorAgent implements Agent {
   ) {
     try {
       const agent = this.getAgent(task.assignedAgent);
-      console.log(`⚡ ${task.assignedAgent}: ${task.description}`);
+      logger.info('Executing task', {
+        agent: 'supervisor',
+        assignedAgent: task.assignedAgent,
+        taskDescription: task.description,
+      });
 
       // Emit agent start event
       streamEmitter.emitAgentStart({ agent: task.assignedAgent, task: task.description });
@@ -435,7 +462,11 @@ export class SupervisorAgent implements Agent {
             if (reviewResult.approved) {
               approved = true;
             } else {
-              console.log(`🔄 Review found issues, iteration ${iteration + 1}`);
+              logger.info('Review found issues, retrying', {
+                agent: 'supervisor',
+                iteration: iteration + 1,
+                taskId: task.id,
+              });
               // Safe assignment with proper typing
               task.input = { ...task.input, feedback: reviewResult as ReviewResult };
             }
@@ -480,11 +511,14 @@ export class SupervisorAgent implements Agent {
     } catch (error: unknown) {
       // Wenn der Agent nicht existiert, loggen wir einen Fehler und fahren mit der nächsten Task fort
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(
-        sanitizeLogMessage(
-          `❌ Agent '${task.assignedAgent}' not found for task ${task.id}: ${errorMessage}`
-        )
-      );
+      const stack = error instanceof Error ? error.stack : undefined;
+      logger.error('Agent execution failed', {
+        agent: 'supervisor',
+        assignedAgent: task.assignedAgent,
+        taskId: task.id,
+        error: sanitizeLogMessage(errorMessage),
+        stack: stack ? sanitizeLogMessage(stack) : undefined,
+      });
       // Store error in taskChanges
       if (!taskChanges.errors) taskChanges.errors = [];
       taskChanges.errors.push(`Task ${task.id} failed: ${errorMessage}`);
