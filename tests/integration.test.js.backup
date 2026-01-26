@@ -18,17 +18,10 @@ function getTestToken(role = Roles.DEVELOPER) {
   }, '1h');
 }
 
-// Extend request with authentication helper
-const authRequest = {
-  get: (url, role = Roles.DEVELOPER) =>
-    request(app).get(url).set('Authorization', `Bearer ${getTestToken(role)}`),
-  post: (url, role = Roles.MANAGER) =>
-    request(app).post(url).set('Authorization', `Bearer ${getTestToken(role)}`),
-  put: (url, role = Roles.DEVELOPER) =>
-    request(app).put(url).set('Authorization', `Bearer ${getTestToken(role)}`),
-  delete: (url, role = Roles.DEVELOPER) =>
-    request(app).delete(url).set('Authorization', `Bearer ${getTestToken(role)}`),
-};
+// Helper to make authenticated requests
+function authRequest(method, url, role = Roles.DEVELOPER) {
+  return request(app)[method](url).set('Authorization', `Bearer ${getTestToken(role)}`);
+}
 
 describe('Integration Tests - File Operations API', () => {
   const testDir = path.join(process.cwd(), 'tests', 'test-files');
@@ -73,8 +66,9 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should list files in tests directory', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files')
+        .set('Authorization', `Bearer ${getTestToken()}`)
         .query({ path: 'tests/test-files' });
 
       expect(response.status).toBe(200);
@@ -90,7 +84,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return file metadata', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files')
         .query({ path: 'tests/test-files' });
 
@@ -104,7 +98,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should distinguish between files and directories', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files')
         .query({ path: 'tests/test-files' });
 
@@ -119,7 +113,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 404 for non-existent directory', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files')
         .query({ path: 'tests/non-existent-dir' });
 
@@ -128,7 +122,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should reject path traversal attempts', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files')
         .query({ path: '../../../etc' });
 
@@ -137,7 +131,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should reject access to disallowed directories', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files')
         .query({ path: 'node_modules' });
 
@@ -147,7 +141,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when path is a file not a directory', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files')
         .query({ path: 'tests/test-files/file1.txt' });
 
@@ -173,7 +167,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should read file content', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files/content')
         .query({ path: 'tests/test-files/test.txt' });
 
@@ -186,7 +180,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 404 for non-existent file', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files/content')
         .query({ path: 'tests/test-files/non-existent.txt' });
 
@@ -195,7 +189,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when path parameter is missing', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files/content');
 
       expect(response.status).toBe(400);
@@ -204,7 +198,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when path is a directory', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files/content')
         .query({ path: 'tests/test-files' });
 
@@ -214,7 +208,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should reject path traversal attempts', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/files/content')
         .query({ path: '../../../etc/passwd' });
 
@@ -236,7 +230,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should create a new file', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/files/content')
         .send({
           path: newFilePath,
@@ -259,7 +253,7 @@ describe('Integration Tests - File Operations API', () => {
       await fs.writeFile(path.join(process.cwd(), newFilePath), 'Initial content', 'utf8');
 
       const updatedContent = 'Updated content';
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/files/content')
         .send({
           path: newFilePath,
@@ -277,7 +271,7 @@ describe('Integration Tests - File Operations API', () => {
     test('should create directories when createDirs is true', async () => {
       const deepPath = 'tests/test-files/deep/nested/dir/file.txt';
       
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/files/content')
         .send({
           path: deepPath,
@@ -297,7 +291,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when parent directory does not exist and createDirs is false', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/files/content')
         .send({
           path: 'tests/test-files/non-existent-dir/file.txt',
@@ -310,7 +304,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when path is missing', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/files/content')
         .send({
           content: 'Content'
@@ -322,7 +316,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when content is missing', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/files/content')
         .send({
           path: newFilePath
@@ -334,7 +328,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should accept empty string as content', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/files/content')
         .send({
           path: newFilePath,
@@ -348,7 +342,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should reject path traversal attempts', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/files/content')
         .send({
           path: '../../../tmp/malicious.txt',
@@ -376,7 +370,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should delete a file', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .delete('/api/v1/files/content')
         .query({ path: deleteFilePath });
 
@@ -389,7 +383,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 404 for non-existent file', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .delete('/api/v1/files/content')
         .query({ path: 'tests/test-files/non-existent.txt' });
 
@@ -398,7 +392,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when path parameter is missing', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .delete('/api/v1/files/content');
 
       expect(response.status).toBe(400);
@@ -407,7 +401,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when trying to delete a directory', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .delete('/api/v1/files/content')
         .query({ path: 'tests/test-files' });
 
@@ -417,7 +411,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should reject path traversal attempts', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .delete('/api/v1/files/content')
         .query({ path: '../../../tmp/important.txt' });
 
@@ -439,7 +433,7 @@ describe('Integration Tests - File Operations API', () => {
 
     test('should complete full CRUD workflow', async () => {
       // 1. Create file
-      const createResponse = await authRequest
+      const createResponse = await request(app)
         .post('/api/v1/files/content')
         .send({
           path: workflowFile,
@@ -449,14 +443,14 @@ describe('Integration Tests - File Operations API', () => {
       expect(createResponse.body.created).toBe(true);
 
       // 2. Read file
-      const readResponse = await authRequest
+      const readResponse = await request(app)
         .get('/api/v1/files/content')
         .query({ path: workflowFile });
       expect(readResponse.status).toBe(200);
       expect(readResponse.body.content).toBe('Initial content');
 
       // 3. Update file
-      const updateResponse = await authRequest
+      const updateResponse = await request(app)
         .post('/api/v1/files/content')
         .send({
           path: workflowFile,
@@ -466,14 +460,14 @@ describe('Integration Tests - File Operations API', () => {
       expect(updateResponse.body.created).toBe(false);
 
       // 4. Read updated file
-      const readUpdatedResponse = await authRequest
+      const readUpdatedResponse = await request(app)
         .get('/api/v1/files/content')
         .query({ path: workflowFile });
       expect(readUpdatedResponse.status).toBe(200);
       expect(readUpdatedResponse.body.content).toBe('Updated content');
 
       // 5. List directory to verify file exists
-      const listResponse = await authRequest
+      const listResponse = await request(app)
         .get('/api/v1/files')
         .query({ path: 'tests/test-files' });
       expect(listResponse.status).toBe(200);
@@ -481,14 +475,14 @@ describe('Integration Tests - File Operations API', () => {
       expect(fileNames).toContain('workflow.txt');
 
       // 6. Delete file
-      const deleteResponse = await authRequest
+      const deleteResponse = await request(app)
         .delete('/api/v1/files/content')
         .query({ path: workflowFile });
       expect(deleteResponse.status).toBe(200);
       expect(deleteResponse.body.deleted).toBe(true);
 
       // 7. Verify file is deleted
-      const readDeletedResponse = await authRequest
+      const readDeletedResponse = await request(app)
         .get('/api/v1/files/content')
         .query({ path: workflowFile });
       expect(readDeletedResponse.status).toBe(404);
@@ -585,7 +579,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
 
   describe('POST /api/v1/agent/state - Create/Update agent state', () => {
     test('should create a new agent state', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'test-agent-1',
@@ -608,7 +602,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
 
     test('should update an existing agent state', async () => {
       // Create initial state
-      await authRequest
+      await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'test-agent-2',
@@ -617,7 +611,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
         });
 
       // Update state
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'test-agent-2',
@@ -631,7 +625,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should handle failed status with error message', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'test-agent-3',
@@ -646,7 +640,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should return 400 for invalid agentId', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state')
         .send({
           status: 'running'
@@ -658,7 +652,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should return 400 for invalid status', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'test-agent-4',
@@ -671,7 +665,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should return 400 for invalid progress value', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'test-agent-5',
@@ -684,7 +678,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should validate agentId format', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'invalid agent id with spaces',
@@ -697,7 +691,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should accept custom TTL', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'test-agent-6',
@@ -712,7 +706,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
 
   describe('GET /api/v1/agent/state/:agentId - Get agent state', () => {
     beforeEach(async () => {
-      await authRequest
+      await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'test-agent-get',
@@ -723,7 +717,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should retrieve agent state', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/agent/state/test-agent-get');
 
       expect(response.status).toBe(200);
@@ -734,7 +728,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should return 404 for non-existent agent', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/agent/state/non-existent-agent');
 
       expect(response.status).toBe(404);
@@ -742,7 +736,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should return 400 for invalid agentId format', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/agent/state/invalid agent');
 
       expect(response.status).toBe(400);
@@ -752,7 +746,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
 
   describe('POST /api/v1/agent/state/:agentId/retry - Retry failed agent', () => {
     beforeEach(async () => {
-      await authRequest
+      await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'test-agent-retry',
@@ -762,7 +756,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should retry a failed task', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state/test-agent-retry/retry');
 
       expect(response.status).toBe(200);
@@ -775,7 +769,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should return 404 for non-existent agent', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state/non-existent/retry');
 
       expect(response.status).toBe(404);
@@ -783,14 +777,14 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should return 400 when retrying non-failed task', async () => {
-      await authRequest
+      await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'test-agent-running',
           status: 'running'
         });
 
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state/test-agent-running/retry');
 
       expect(response.status).toBe(400);
@@ -800,23 +794,23 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
 
     test('should return 400 when max retries exceeded', async () => {
       // Retry 3 times to reach the limit
-      await authRequest.post('/api/v1/agent/state/test-agent-retry/retry');
-      await authRequest.post('/api/v1/agent/state').send({
+      await request(app).post('/api/v1/agent/state/test-agent-retry/retry');
+      await request(app).post('/api/v1/agent/state').send({
         agentId: 'test-agent-retry',
         status: 'failed'
       });
-      await authRequest.post('/api/v1/agent/state/test-agent-retry/retry');
-      await authRequest.post('/api/v1/agent/state').send({
+      await request(app).post('/api/v1/agent/state/test-agent-retry/retry');
+      await request(app).post('/api/v1/agent/state').send({
         agentId: 'test-agent-retry',
         status: 'failed'
       });
-      await authRequest.post('/api/v1/agent/state/test-agent-retry/retry');
-      await authRequest.post('/api/v1/agent/state').send({
+      await request(app).post('/api/v1/agent/state/test-agent-retry/retry');
+      await request(app).post('/api/v1/agent/state').send({
         agentId: 'test-agent-retry',
         status: 'failed'
       });
 
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/agent/state/test-agent-retry/retry');
 
       expect(response.status).toBe(400);
@@ -826,24 +820,24 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
 
   describe('GET /api/v1/agent/states - List all agent states', () => {
     beforeEach(async () => {
-      await authRequest.post('/api/v1/agent/state').send({
+      await request(app).post('/api/v1/agent/state').send({
         agentId: 'agent-1',
         status: 'running',
         progress: 50
       });
-      await authRequest.post('/api/v1/agent/state').send({
+      await request(app).post('/api/v1/agent/state').send({
         agentId: 'agent-2',
         status: 'completed',
         progress: 100
       });
-      await authRequest.post('/api/v1/agent/state').send({
+      await request(app).post('/api/v1/agent/state').send({
         agentId: 'agent-3',
         status: 'failed'
       });
     });
 
     test('should list all agent states', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/agent/states');
 
       expect(response.status).toBe(200);
@@ -855,7 +849,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should filter by status', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/agent/states')
         .query({ status: 'completed' });
 
@@ -865,7 +859,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should support pagination', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/agent/states')
         .query({ limit: 2, offset: 1 });
 
@@ -879,7 +873,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     test('should return empty array when no states exist', async () => {
       Redis.mockStore.clear();
       
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/agent/states');
 
       expect(response.status).toBe(200);
@@ -890,7 +884,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
 
   describe('DELETE /api/v1/agent/state/:agentId - Delete agent state', () => {
     beforeEach(async () => {
-      await authRequest
+      await request(app)
         .post('/api/v1/agent/state')
         .send({
           agentId: 'test-agent-delete',
@@ -899,7 +893,7 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
     });
 
     test('should delete agent state', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .delete('/api/v1/agent/state/test-agent-delete');
 
       expect(response.status).toBe(200);
@@ -907,13 +901,13 @@ describe.skip('Integration Tests - Agent State Management API (Legacy - Skipped)
       expect(response.body).toHaveProperty('deleted', true);
 
       // Verify state is deleted
-      const getResponse = await authRequest
+      const getResponse = await request(app)
         .get('/api/v1/agent/state/test-agent-delete');
       expect(getResponse.status).toBe(404);
     });
 
     test('should return 404 for non-existent agent', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .delete('/api/v1/agent/state/non-existent');
 
       expect(response.status).toBe(404);
@@ -1006,7 +1000,7 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
 
   describe('GET /api/v1/supervisor/queue - Get task queue', () => {
     test('should return empty queue', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/supervisor/queue');
 
       expect(response.status).toBe(200);
@@ -1016,10 +1010,10 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
     });
 
     test('should return tasks in queue', async () => {
-      await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 1' });
-      await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 2' });
+      await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 1' });
+      await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 2' });
 
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/supervisor/queue');
 
       expect(response.status).toBe(200);
@@ -1034,7 +1028,7 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
 
   describe('POST /api/v1/supervisor/queue - Add task to queue', () => {
     test('should add task to end of queue', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/supervisor/queue')
         .send({ task: 'New task' });
 
@@ -1045,10 +1039,10 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
     });
 
     test('should add task at specific position', async () => {
-      await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 1' });
-      await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 2' });
+      await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 1' });
+      await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 2' });
 
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/supervisor/queue')
         .send({ task: 'Inserted task', position: 1 });
 
@@ -1056,12 +1050,12 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
       expect(response.body).toHaveProperty('position', 1);
       expect(response.body).toHaveProperty('total', 3);
 
-      const queueResponse = await authRequest.get('/api/v1/supervisor/queue');
+      const queueResponse = await request(app).get('/api/v1/supervisor/queue');
       expect(queueResponse.body.tasks[1].task).toBe('Inserted task');
     });
 
     test('should return 400 for empty task', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/supervisor/queue')
         .send({ task: '   ' });
 
@@ -1071,7 +1065,7 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
     });
 
     test('should return 400 for invalid position', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/supervisor/queue')
         .send({ task: 'Task', position: 10 });
 
@@ -1083,13 +1077,13 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
 
   describe('DELETE /api/v1/supervisor/queue/:index - Remove task from queue', () => {
     beforeEach(async () => {
-      await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 1' });
-      await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 2' });
-      await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 3' });
+      await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 1' });
+      await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 2' });
+      await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 3' });
     });
 
     test('should remove task at index', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .delete('/api/v1/supervisor/queue/1');
 
       expect(response.status).toBe(200);
@@ -1097,14 +1091,14 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
       expect(response.body).toHaveProperty('index', 1);
       expect(response.body).toHaveProperty('total', 2);
 
-      const queueResponse = await authRequest.get('/api/v1/supervisor/queue');
+      const queueResponse = await request(app).get('/api/v1/supervisor/queue');
       expect(queueResponse.body.total).toBe(2);
       expect(queueResponse.body.tasks[0].task).toBe('Task 1');
       expect(queueResponse.body.tasks[1].task).toBe('Task 3');
     });
 
     test('should return 404 for invalid index', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .delete('/api/v1/supervisor/queue/10');
 
       expect(response.status).toBe(404);
@@ -1112,7 +1106,7 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
     });
 
     test('should return 400 for negative index', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .delete('/api/v1/supervisor/queue/-1');
 
       expect(response.status).toBe(400);
@@ -1122,11 +1116,11 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
 
   describe('POST /api/v1/supervisor/queue/process - Process next task', () => {
     beforeEach(async () => {
-      await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Process this task' });
+      await request(app).post('/api/v1/supervisor/queue').send({ task: 'Process this task' });
     });
 
     test('should mark first task as running', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/supervisor/queue/process');
 
       expect(response.status).toBe(200);
@@ -1138,9 +1132,9 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
     });
 
     test('should return 404 for empty queue', async () => {
-      await authRequest.delete('/api/v1/supervisor/queue/0');
+      await request(app).delete('/api/v1/supervisor/queue/0');
 
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/supervisor/queue/process');
 
       expect(response.status).toBe(404);
@@ -1152,13 +1146,13 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
     let taskId;
 
     beforeEach(async () => {
-      await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Complete this task' });
-      const processResponse = await authRequest.post('/api/v1/supervisor/queue/process');
+      await request(app).post('/api/v1/supervisor/queue').send({ task: 'Complete this task' });
+      const processResponse = await request(app).post('/api/v1/supervisor/queue/process');
       taskId = processResponse.body.taskId;
     });
 
     test('should complete task and remove from queue', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/supervisor/queue/complete')
         .send({ taskId, status: 'completed' });
 
@@ -1168,12 +1162,12 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
       expect(response.body.state).toHaveProperty('completedAt');
       expect(response.body).toHaveProperty('queueLength', 0);
 
-      const queueResponse = await authRequest.get('/api/v1/supervisor/queue');
+      const queueResponse = await request(app).get('/api/v1/supervisor/queue');
       expect(queueResponse.body.total).toBe(0);
     });
 
     test('should mark task as failed without removing from queue', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/supervisor/queue/complete')
         .send({ taskId, status: 'failed', error: 'Task failed' });
 
@@ -1183,12 +1177,12 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
       expect(response.body.state).toHaveProperty('failedAt');
       expect(response.body).toHaveProperty('queueLength', null);
 
-      const queueResponse = await authRequest.get('/api/v1/supervisor/queue');
+      const queueResponse = await request(app).get('/api/v1/supervisor/queue');
       expect(queueResponse.body.total).toBe(1);
     });
 
     test('should return 404 for non-existent taskId', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/supervisor/queue/complete')
         .send({ taskId: 'non-existent', status: 'completed' });
 
@@ -1197,7 +1191,7 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
     });
 
     test('should return 400 for invalid status', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .post('/api/v1/supervisor/queue/complete')
         .send({ taskId, status: 'invalid' });
 
@@ -1208,11 +1202,11 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
 
   describe('GET /api/v1/supervisor/status - Get supervisor status', () => {
     test('should return supervisor status', async () => {
-      await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 1' });
-      await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 2' });
-      await authRequest.post('/api/v1/supervisor/queue/process');
+      await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 1' });
+      await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 2' });
+      await request(app).post('/api/v1/supervisor/queue/process');
 
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/supervisor/status');
 
       expect(response.status).toBe(200);
@@ -1224,7 +1218,7 @@ describe.skip('Integration Tests - Task Queue Management API (Legacy - Skipped)'
     });
 
     test('should return zero counts for empty system', async () => {
-      const response = await authRequest
+      const response = await request(app)
         .get('/api/v1/supervisor/status');
 
       expect(response.status).toBe(200);
@@ -1320,109 +1314,109 @@ describe.skip('End-to-end Agent Orchestration Workflows (Legacy - Skipped)', () 
 
   test('Complete task queue workflow: add, process, complete', async () => {
     // 1. Add tasks to queue
-    await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 1: Setup environment' });
-    await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 2: Run tests' });
-    await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Task 3: Deploy' });
+    await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 1: Setup environment' });
+    await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 2: Run tests' });
+    await request(app).post('/api/v1/supervisor/queue').send({ task: 'Task 3: Deploy' });
 
     // 2. Check initial queue status
-    let statusResponse = await authRequest.get('/api/v1/supervisor/status');
+    let statusResponse = await request(app).get('/api/v1/supervisor/status');
     expect(statusResponse.body.queueLength).toBe(3);
     expect(statusResponse.body.runningTasks).toBe(0);
 
     // 3. Process first task
-    const processResponse = await authRequest.post('/api/v1/supervisor/queue/process');
+    const processResponse = await request(app).post('/api/v1/supervisor/queue/process');
     expect(processResponse.body.task).toBe('Task 1: Setup environment');
     const taskId = processResponse.body.taskId;
 
     // 4. Check status shows running task
-    statusResponse = await authRequest.get('/api/v1/supervisor/status');
+    statusResponse = await request(app).get('/api/v1/supervisor/status');
     expect(statusResponse.body.queueLength).toBe(3);
     expect(statusResponse.body.runningTasks).toBe(1);
 
     // 5. Update task progress
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId: taskId,
       progress: 50,
       metadata: { step: 'Installing dependencies' }
     });
 
     // 6. Get task state
-    const stateResponse = await authRequest.get(`/api/v1/agent/state/${taskId}`);
+    const stateResponse = await request(app).get(`/api/v1/agent/state/${taskId}`);
     expect(stateResponse.body.state.progress).toBe(50);
     expect(stateResponse.body.state.metadata.step).toBe('Installing dependencies');
 
     // 7. Complete task
-    const completeResponse = await authRequest
+    const completeResponse = await request(app)
       .post('/api/v1/supervisor/queue/complete')
       .send({ taskId, status: 'completed' });
     expect(completeResponse.body.state.status).toBe('completed');
     expect(completeResponse.body.queueLength).toBe(2);
 
     // 8. Verify task removed from queue
-    const queueResponse = await authRequest.get('/api/v1/supervisor/queue');
+    const queueResponse = await request(app).get('/api/v1/supervisor/queue');
     expect(queueResponse.body.total).toBe(2);
     expect(queueResponse.body.tasks[0].task).toBe('Task 2: Run tests');
   });
 
   test('Task failure and retry workflow', async () => {
     // 1. Add task
-    await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Flaky task' });
+    await request(app).post('/api/v1/supervisor/queue').send({ task: 'Flaky task' });
 
     // 2. Process task
-    const processResponse = await authRequest.post('/api/v1/supervisor/queue/process');
+    const processResponse = await request(app).post('/api/v1/supervisor/queue/process');
     const taskId = processResponse.body.taskId;
 
     // 3. Mark as failed
-    await authRequest
+    await request(app)
       .post('/api/v1/supervisor/queue/complete')
       .send({ taskId, status: 'failed', error: 'Network timeout' });
 
     // 4. Verify task still in queue
-    let queueResponse = await authRequest.get('/api/v1/supervisor/queue');
+    let queueResponse = await request(app).get('/api/v1/supervisor/queue');
     expect(queueResponse.body.total).toBe(1);
 
     // 5. Check failed state
-    let stateResponse = await authRequest.get(`/api/v1/agent/state/${taskId}`);
+    let stateResponse = await request(app).get(`/api/v1/agent/state/${taskId}`);
     expect(stateResponse.body.state.status).toBe('failed');
     expect(stateResponse.body.state.lastError).toBe('Network timeout');
     expect(stateResponse.body.state.retryCount).toBe(0);
 
     // 6. Retry task
-    const retryResponse = await authRequest.post(`/api/v1/agent/state/${taskId}/retry`);
+    const retryResponse = await request(app).post(`/api/v1/agent/state/${taskId}/retry`);
     expect(retryResponse.body.state.status).toBe('pending');
     expect(retryResponse.body.state.retryCount).toBe(1);
     expect(retryResponse.body.retriesRemaining).toBe(2);
     expect(retryResponse.body.state.errorHistory).toHaveLength(1);
 
     // 7. Process again
-    const processAgainResponse = await authRequest.post('/api/v1/supervisor/queue/process');
+    const processAgainResponse = await request(app).post('/api/v1/supervisor/queue/process');
     expect(processAgainResponse.body.task).toBe('Flaky task');
 
     // 8. Complete successfully this time
-    await authRequest
+    await request(app)
       .post('/api/v1/supervisor/queue/complete')
       .send({ taskId: processAgainResponse.body.taskId, status: 'completed' });
 
     // 9. Verify queue is empty
-    queueResponse = await authRequest.get('/api/v1/supervisor/queue');
+    queueResponse = await request(app).get('/api/v1/supervisor/queue');
     expect(queueResponse.body.total).toBe(0);
   });
 
   test('Multiple agents working in parallel', async () => {
     // 1. Create multiple agent states
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId: 'agent-1',
       status: 'running',
       progress: 25,
       metadata: { task: 'Processing data batch 1' }
     });
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId: 'agent-2',
       status: 'running',
       progress: 50,
       metadata: { task: 'Processing data batch 2' }
     });
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId: 'agent-3',
       status: 'completed',
       progress: 100,
@@ -1430,34 +1424,34 @@ describe.skip('End-to-end Agent Orchestration Workflows (Legacy - Skipped)', () 
     });
 
     // 2. List all agents
-    const listResponse = await authRequest.get('/api/v1/agent/states');
+    const listResponse = await request(app).get('/api/v1/agent/states');
     expect(listResponse.body.total).toBe(3);
 
     // 3. Filter running agents
-    const runningResponse = await authRequest
+    const runningResponse = await request(app)
       .get('/api/v1/agent/states')
       .query({ status: 'running' });
     expect(runningResponse.body.states.length).toBe(2);
 
     // 4. Update agent progress
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId: 'agent-1',
       progress: 75
     });
 
     // 5. Verify update
-    const agent1Response = await authRequest.get('/api/v1/agent/state/agent-1');
+    const agent1Response = await request(app).get('/api/v1/agent/state/agent-1');
     expect(agent1Response.body.state.progress).toBe(75);
 
     // 6. Complete agent-2
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId: 'agent-2',
       status: 'completed',
       progress: 100
     });
 
     // 7. Check running agents again
-    const runningResponse2 = await authRequest
+    const runningResponse2 = await request(app)
       .get('/api/v1/agent/states')
       .query({ status: 'running' });
     expect(runningResponse2.body.states.length).toBe(1);
@@ -1466,33 +1460,33 @@ describe.skip('End-to-end Agent Orchestration Workflows (Legacy - Skipped)', () 
 
   test('Task queue with priority insertion', async () => {
     // 1. Add normal priority tasks
-    await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Normal task 1' });
-    await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Normal task 2' });
-    await authRequest.post('/api/v1/supervisor/queue').send({ task: 'Normal task 3' });
+    await request(app).post('/api/v1/supervisor/queue').send({ task: 'Normal task 1' });
+    await request(app).post('/api/v1/supervisor/queue').send({ task: 'Normal task 2' });
+    await request(app).post('/api/v1/supervisor/queue').send({ task: 'Normal task 3' });
 
     // 2. Insert high priority task at position 0
-    await authRequest.post('/api/v1/supervisor/queue').send({
+    await request(app).post('/api/v1/supervisor/queue').send({
       task: 'URGENT: Critical fix',
       position: 0
     });
 
     // 3. Verify order
-    const queueResponse = await authRequest.get('/api/v1/supervisor/queue');
+    const queueResponse = await request(app).get('/api/v1/supervisor/queue');
     expect(queueResponse.body.tasks[0].task).toBe('URGENT: Critical fix');
     expect(queueResponse.body.tasks[1].task).toBe('Normal task 1');
 
     // 4. Process urgent task first
-    const processResponse = await authRequest.post('/api/v1/supervisor/queue/process');
+    const processResponse = await request(app).post('/api/v1/supervisor/queue/process');
     expect(processResponse.body.task).toBe('URGENT: Critical fix');
 
     // 5. Complete it
-    await authRequest.post('/api/v1/supervisor/queue/complete').send({
+    await request(app).post('/api/v1/supervisor/queue/complete').send({
       taskId: processResponse.body.taskId,
       status: 'completed'
     });
 
     // 6. Verify normal tasks remain
-    const queueResponse2 = await authRequest.get('/api/v1/supervisor/queue');
+    const queueResponse2 = await request(app).get('/api/v1/supervisor/queue');
     expect(queueResponse2.body.total).toBe(3);
     expect(queueResponse2.body.tasks[0].task).toBe('Normal task 1');
   });
@@ -1501,14 +1495,14 @@ describe.skip('End-to-end Agent Orchestration Workflows (Legacy - Skipped)', () 
     const agentId = 'lifecycle-agent';
 
     // 1. Create pending agent
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId,
       status: 'pending',
       metadata: { phase: 'initialization' }
     });
 
     // 2. Start running
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId,
       status: 'running',
       progress: 10,
@@ -1516,26 +1510,26 @@ describe.skip('End-to-end Agent Orchestration Workflows (Legacy - Skipped)', () 
     });
 
     // 3. Update progress multiple times
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId,
       progress: 30,
       metadata: { phase: 'processing', recordsProcessed: 3000 }
     });
 
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId,
       progress: 60,
       metadata: { phase: 'validation', recordsValidated: 6000 }
     });
 
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId,
       progress: 90,
       metadata: { phase: 'saving', recordsSaved: 9000 }
     });
 
     // 4. Complete
-    await authRequest.post('/api/v1/agent/state').send({
+    await request(app).post('/api/v1/agent/state').send({
       agentId,
       status: 'completed',
       progress: 100,
@@ -1543,7 +1537,7 @@ describe.skip('End-to-end Agent Orchestration Workflows (Legacy - Skipped)', () 
     });
 
     // 5. Verify final state
-    const finalState = await authRequest.get(`/api/v1/agent/state/${agentId}`);
+    const finalState = await request(app).get(`/api/v1/agent/state/${agentId}`);
     expect(finalState.body.state.status).toBe('completed');
     expect(finalState.body.state.progress).toBe(100);
     expect(finalState.body.state.metadata.phase).toBe('done');
@@ -1551,10 +1545,10 @@ describe.skip('End-to-end Agent Orchestration Workflows (Legacy - Skipped)', () 
     expect(finalState.body.state).toHaveProperty('completedAt');
 
     // 6. Delete state
-    await authRequest.delete(`/api/v1/agent/state/${agentId}`);
+    await request(app).delete(`/api/v1/agent/state/${agentId}`);
 
     // 7. Verify deleted
-    const deletedResponse = await authRequest.get(`/api/v1/agent/state/${agentId}`);
+    const deletedResponse = await request(app).get(`/api/v1/agent/state/${agentId}`);
     expect(deletedResponse.status).toBe(404);
   });
 });
