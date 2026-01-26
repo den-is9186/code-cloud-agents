@@ -127,6 +127,14 @@ export const shellExec: Tool = {
   description: 'Execute shell command',
   parameters: { command: { type: 'string' }, cwd: { type: 'string' } },
   execute: async ({ command, cwd }) => {
+    // Input validation
+    if (!command || typeof command !== 'string') {
+      throw new Error('Invalid command: must be non-empty string');
+    }
+    if (command.includes(';') || command.includes('&&') || command.includes('|')) {
+      throw new Error('Invalid command: contains forbidden characters');
+    }
+    
     try {
       const { stdout, stderr } = await execAsync(command, { cwd });
       return { stdout, stderr, exitCode: 0 };
@@ -170,6 +178,28 @@ export const gitCommit: Tool = {
   description: 'Create git commit',
   parameters: { message: { type: 'string' }, files: { type: 'array' } },
   execute: async ({ message, files }) => {
+    // Input validation
+    if (!message || typeof message !== 'string') {
+      throw new Error('Invalid commit message: must be non-empty string');
+    }
+    if (message.includes('\n') || message.includes('\r')) {
+      throw new Error('Commit message cannot contain newlines');
+    }
+    
+    // Validate files if provided
+    if (files) {
+      if (!Array.isArray(files)) {
+        throw new Error('Files must be an array');
+      }
+      for (const file of files) {
+        if (typeof file !== 'string') {
+          throw new Error('All file paths must be strings');
+        }
+        // Validate each file path
+        validatePath(file);
+      }
+    }
+    
     if (files?.length) {
       // Verwende execFileAsync für git add mit einzelnen Dateien
       // Da files ein Array ist, müssen wir es als separate Argumente übergeben
