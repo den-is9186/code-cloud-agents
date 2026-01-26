@@ -52,14 +52,58 @@ export class SupervisorAgent implements Agent {
       const taskMap = new Map(tasks.map((t: SubTask) => [t.id, t]));
       
       for (const taskBatch of executionOrder) {
-        for (const taskId of taskBatch) {
-          const task = taskMap.get(taskId);
-          if (!task) {
-            console.warn(`Task ${taskId} not found in task list`);
-            continue;
+        // Execute tasks in the same batch in parallel
+        const batchResults = await Promise.all(
+          taskBatch.map(async (taskId) => {
+            const task = taskMap.get(taskId);
+            if (!task) {
+              console.warn(`Task ${taskId} not found in task list`);
+              return null;
+            }
+            
+            // Collect changes from this task
+            const taskChanges: {
+              filesChanged: FileChange[];
+              testsWritten: TestFile[];
+              testResults?: TestResult;
+              errors?: string[];
+            } = {
+              filesChanged: [],
+              testsWritten: [],
+              testResults: undefined,
+              errors: []
+            };
+            
+            try {
+              await this.executeTaskWithResult(task, taskChanges);
+              return taskChanges;
+            } catch (error: any) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              console.error(`❌ Task ${taskId} failed:`, errorMessage);
+              taskChanges.errors = [errorMessage];
+              return taskChanges;
+            }
+          })
+        );
+        
+        // Merge all batch results into the main result
+        for (const batchResult of batchResults) {
+          if (!batchResult) continue;
+          
+          result.filesChanged.push(...batchResult.filesChanged);
+          result.testsWritten.push(...batchResult.testsWritten);
+          
+          // For test results, we might want to combine them
+          // For simplicity, use the last non-undefined result
+          if (batchResult.testResults) {
+            result.testResults = batchResult.testResults;
           }
-
-          await this.executeTask(task, result);
+          
+          // Collect errors
+          if (batchResult.errors && batchResult.errors.length > 0) {
+            if (!result.errors) result.errors = [];
+            result.errors.push(...batchResult.errors);
+          }
         }
       }
 
