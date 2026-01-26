@@ -56,11 +56,6 @@ Antworte NUR mit validem JSON:
       });
       const parsed = safeJsonParse(response.content, TestAgentResponseSchema);
 
-      // Write test files
-      for (const test of parsed.testsWritten) {
-        await executeTool('file_write', { path: test.path, content: test.content });
-      }
-
       // Write test files - validate paths first
       for (const test of parsed.testsWritten) {
         // Validate the test file path before writing
@@ -81,8 +76,7 @@ Antworte NUR mit validem JSON:
         
         const result = await execFileAsync('npm', ['test', '--', '--reporter=json'], {
           cwd: process.cwd(),
-          timeout: 30000, // 30 second timeout
-          stdio: ['ignore', 'pipe', 'pipe']
+          timeout: 30000 // 30 second timeout
         });
         stdout = result.stdout;
         exitCode = 0;
