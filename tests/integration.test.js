@@ -6,7 +6,7 @@ const path = require('path');
 // Mock Redis before requiring the app
 jest.mock('ioredis');
 
-const app = require('../src/index');
+const app = require('../src/api-server');
 
 describe('Integration Tests - File Operations API', () => {
   let mockRedis;

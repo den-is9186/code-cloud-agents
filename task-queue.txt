@@ -1,5 +1,0 @@
-# Task Queue
-# Eine Task pro Zeile
-# GitHub Actions arbeitet alle 4h die nächste Task ab
-# Queue processing started - Mon Jan 26 00:30:00 CET 2026
-# CODE REVIEW TASK - Nur Analyse, KEINE Code-Änderungen!

@@ -4,7 +4,7 @@ const Redis = require('ioredis');
 // Mock Redis before requiring the app
 jest.mock('ioredis');
 
-const app = require('../src/index');
+const app = require('../src/api-server');
 
 describe('Example test', () => {
   test('should pass', () => {
