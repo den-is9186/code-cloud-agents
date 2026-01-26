@@ -20,20 +20,26 @@ export class ArchitectAgent implements Agent {
       recursive: true
     });
 
-    // Read key files for context
+    // Read key files for context in parallel
     const keyFiles = files.filter((f: string) =>
       f.endsWith('package.json') ||
       f.endsWith('tsconfig.json') ||
       f.includes('README')
-    ).slice(0, 5);
+    ).slice(0, 10); // Increased limit for better context
 
-    let context = '';
-    for (const file of keyFiles) {
+    // Read files in parallel using Promise.all
+    const fileReadPromises = keyFiles.map(async (file) => {
       try {
         const { content } = await executeTool('file_read', { path: file });
-        context += `\n--- ${file} ---\n${content.slice(0, 1000)}\n`;
-      } catch {}
-    }
+        return `\n--- ${file} ---\n${content.slice(0, 1000)}\n`;
+      } catch (error) {
+        console.warn(`[Architect] Failed to read ${file}:`, error instanceof Error ? error.message : String(error));
+        return ''; // Return empty string for failed reads
+      }
+    });
+
+    const fileContents = await Promise.all(fileReadPromises);
+    const context = fileContents.join('');
 
     const response = await llmClient.chat(this.model, [
       {
