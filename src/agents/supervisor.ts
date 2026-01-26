@@ -80,7 +80,7 @@ export class SupervisorAgent implements Agent {
     return result;
   }
 
-  private getAgent(name: string): Agent {
+  private getAgent(name: AgentRole): Agent {
     const agent = this.agents.get(name);
     if (!agent) {
       throw new Error(`Agent '${name}' not registered. Available: ${[...this.agents.keys()].join(', ')}`);
@@ -90,7 +90,7 @@ export class SupervisorAgent implements Agent {
 
   private async executeTask(task: SubTask, result: BuildResult) {
     try {
-      const agent = this.getAgent(task.assignedAgent as string);
+      const agent = this.getAgent(task.assignedAgent);
       console.log(`⚡ ${task.assignedAgent}: ${task.description}`);
 
       if (task.assignedAgent === 'code') {
