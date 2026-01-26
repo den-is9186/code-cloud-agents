@@ -16,6 +16,7 @@ import {
 import { llmClient } from '../llm/client';
 import { SUPERVISOR_CONFIG } from '../config/constants';
 import { sanitizeLogMessage } from '../utils/security';
+import { streamEmitter } from '../utils/events';
 
 interface SupervisorConfig {
   model: string;
@@ -53,9 +54,13 @@ export class SupervisorAgent implements Agent {
       duration: 0,
     };
 
+    // Emit build start event
+    streamEmitter.emitBuildStart();
+
     try {
       // Step 1: Architect creates runbook
       console.log('📐 Architect analyzing task...');
+      const architectStart = Date.now();
       const architect = this.getAgent('architect');
       const { runbook } = await (
         architect as Agent<
@@ -63,9 +68,12 @@ export class SupervisorAgent implements Agent {
           { runbook: Step[]; estimatedComplexity: string }
         >
       ).execute(input);
+      const architectDuration = Date.now() - architectStart;
+      streamEmitter.emitAgentComplete({ agent: 'architect', success: true, duration: architectDuration });
 
       // Step 2: Coach creates subtasks
       console.log('🎯 Coach planning tasks...');
+      const coachStart = Date.now();
       const coach = this.getAgent('coach');
       const { tasks, executionOrder } = await (
         coach as Agent<
@@ -73,6 +81,8 @@ export class SupervisorAgent implements Agent {
           { tasks: SubTask[]; executionOrder: string[][]; dependencies: Dependency[] }
         >
       ).execute({ runbook, context: input });
+      const coachDuration = Date.now() - coachStart;
+      streamEmitter.emitAgentComplete({ agent: 'coach', success: true, duration: coachDuration });
 
       // Step 3: Execute tasks
       // Create a Map for O(1) task lookups instead of O(n) find() in nested loops
@@ -88,6 +98,14 @@ export class SupervisorAgent implements Agent {
               return null;
             }
 
+            // Emit task start event
+            streamEmitter.emitTaskStart({
+              taskId: task.id,
+              description: task.description,
+              agent: task.assignedAgent,
+            });
+
+            const taskStartTime = Date.now();
             // Collect changes from this task
             const taskChanges: {
               filesChanged: FileChange[];
@@ -103,11 +121,23 @@ export class SupervisorAgent implements Agent {
 
             try {
               await this.executeTaskWithResult(task, taskChanges);
+              // Emit task complete event on success
+              streamEmitter.emitTaskComplete({
+                taskId: task.id,
+                success: true,
+                duration: Date.now() - taskStartTime,
+              });
               return taskChanges;
             } catch (error: unknown) {
               const errorMessage = error instanceof Error ? error.message : String(error);
               console.error(sanitizeLogMessage(`❌ Task ${taskId} failed: ${errorMessage}`));
               taskChanges.errors = [errorMessage];
+              // Emit task complete event on failure
+              streamEmitter.emitTaskComplete({
+                taskId: task.id,
+                success: false,
+                duration: Date.now() - taskStartTime,
+              });
               return taskChanges;
             }
           })
@@ -152,11 +182,15 @@ export class SupervisorAgent implements Agent {
 
       result.success = true;
       this.status = 'completed';
+      // Emit build complete event on success
+      streamEmitter.emitBuildComplete({ success: true, errors: result.errors });
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(sanitizeLogMessage(`[${this.role}] Error: ${errorMessage}`));
       result.errors = [errorMessage];
       this.status = 'failed';
+      // Emit build complete event on failure
+      streamEmitter.emitBuildComplete({ success: false, errors: result.errors });
     }
 
     result.duration = Date.now() - startTime;
@@ -188,6 +222,9 @@ export class SupervisorAgent implements Agent {
     try {
       const agent = this.getAgent(task.assignedAgent);
       console.log(`⚡ ${task.assignedAgent}: ${task.description}`);
+      
+      // Emit agent start event
+      streamEmitter.emitAgentStart({ agent: task.assignedAgent, task: task.description });
 
       if (task.assignedAgent === 'code') {
         let iteration = 0;
@@ -205,6 +242,14 @@ export class SupervisorAgent implements Agent {
             >
           ).execute({ task, feedback: undefined });
           taskFilesChanged.push(...codeResult.filesChanged);
+          
+          // Emit file change events
+          codeResult.filesChanged.forEach(fileChange => {
+            streamEmitter.emitFileChange({
+              path: fileChange.path,
+              action: fileChange.action,
+            });
+          });
 
           // Review checks
           const review = this.agents.get('review');
@@ -256,6 +301,15 @@ export class SupervisorAgent implements Agent {
           });
           taskChanges.testsWritten.push(...testResult.testsWritten);
           taskChanges.testResults = testResult.testResults;
+            
+          // Emit test run event
+          if (testResult.testResults) {
+            streamEmitter.emitTestRun({
+              passed: testResult.testResults.passed,
+              failed: testResult.testResults.failed,
+              total: testResult.testResults.passed + testResult.testResults.failed + (testResult.testResults.skipped || 0),
+            });
+          }
         }
       }
     } catch (error: unknown) {
