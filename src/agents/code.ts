@@ -30,7 +30,11 @@ export class CodeAgent implements Agent {
     }
 
     const feedbackContext = input.feedback
-      ? `\n\nReview Feedback (bitte beheben):\n${input.feedback.mustFix.map(i => `- ${i.message}`).join('\n')}`
+      ? `\n\nReview Feedback (bitte beheben):\n${input.feedback.mustFix.map(i => `- ${i.message}`).join('\n')}` +
+        (input.feedback.summary ? `\n\nSummary: ${input.feedback.summary}` : '') +
+        (input.feedback.suggestions && input.feedback.suggestions.length > 0 
+          ? `\n\nSuggestions:\n${input.feedback.suggestions.map(i => `- ${i.message}`).join('\n')}`
+          : '')
       : '';
 
     const response = await llmClient.chat(this.model, [
