@@ -12,8 +12,13 @@ const {
   exportAgentPerformanceReport,
   exportBudgetReport,
 } = require('../src/services/export-service');
+const { getTestToken, Roles } = require('./helpers/auth-helper');
 
 jest.mock('../src/services/export-service');
+
+// Helper to create authenticated request (MANAGER role for team ownership endpoints)
+const authGet = (url) =>
+  request(app).get(url).set('Authorization', `Bearer ${getTestToken(Roles.MANAGER)}`);
 
 describe('Export API', () => {
   beforeEach(() => {
@@ -33,8 +38,7 @@ describe('Export API', () => {
 
       exportBuildReport.mockResolvedValue(JSON.stringify(mockBuilds, null, 2));
 
-      const response = await request(app)
-        .get('/api/v1/export/builds')
+      const response = await authGet('/api/v1/export/builds')
         .query({ teamId: 'team-1', format: 'json' });
 
       expect(response.status).toBe(200);
@@ -53,8 +57,7 @@ describe('Export API', () => {
 
       exportBuildReport.mockResolvedValue(mockCSV);
 
-      const response = await request(app)
-        .get('/api/v1/export/builds')
+      const response = await authGet('/api/v1/export/builds')
         .query({ teamId: 'team-1', format: 'csv' });
 
       expect(response.status).toBe(200);
@@ -66,7 +69,7 @@ describe('Export API', () => {
     test('should filter by buildId', async () => {
       exportBuildReport.mockResolvedValue('[]');
 
-      await request(app).get('/api/v1/export/builds').query({ buildId: 'build-123' });
+      await authGet('/api/v1/export/builds').query({ buildId: 'build-123' });
 
       expect(exportBuildReport).toHaveBeenCalledWith(
         expect.anything(),
@@ -79,7 +82,7 @@ describe('Export API', () => {
     test('should filter by date range', async () => {
       exportBuildReport.mockResolvedValue('[]');
 
-      await request(app).get('/api/v1/export/builds').query({
+      await authGet('/api/v1/export/builds').query({
         startDate: '2026-01-01',
         endDate: '2026-01-31',
       });
@@ -94,8 +97,7 @@ describe('Export API', () => {
     });
 
     test('should reject invalid format', async () => {
-      const response = await request(app)
-        .get('/api/v1/export/builds')
+      const response = await authGet('/api/v1/export/builds')
         .query({ format: 'xml' });
 
       expect(response.status).toBe(400);
@@ -105,7 +107,7 @@ describe('Export API', () => {
     test('should handle export errors', async () => {
       exportBuildReport.mockRejectedValue(new Error('Export failed'));
 
-      const response = await request(app).get('/api/v1/export/builds');
+      const response = await authGet('/api/v1/export/builds');
 
       expect(response.status).toBe(500);
       expect(response.body.error.code).toBe('EXPORT_FAILED');
@@ -122,8 +124,7 @@ describe('Export API', () => {
 
       exportCostReport.mockResolvedValue(JSON.stringify(mockCosts, null, 2));
 
-      const response = await request(app)
-        .get('/api/v1/export/costs')
+      const response = await authGet('/api/v1/export/costs')
         .query({ teamId: 'team-1' });
 
       expect(response.status).toBe(200);
@@ -136,7 +137,7 @@ describe('Export API', () => {
     });
 
     test('should require teamId', async () => {
-      const response = await request(app).get('/api/v1/export/costs');
+      const response = await authGet('/api/v1/export/costs');
 
       expect(response.status).toBe(400);
       expect(response.body.error.code).toBe('MISSING_TEAM_ID');
@@ -145,7 +146,7 @@ describe('Export API', () => {
     test('should support different periods', async () => {
       exportCostReport.mockResolvedValue('{}');
 
-      await request(app).get('/api/v1/export/costs').query({
+      await authGet('/api/v1/export/costs').query({
         teamId: 'team-1',
         period: 'quarter',
       });
@@ -159,7 +160,7 @@ describe('Export API', () => {
     });
 
     test('should reject invalid period', async () => {
-      const response = await request(app).get('/api/v1/export/costs').query({
+      const response = await authGet('/api/v1/export/costs').query({
         teamId: 'team-1',
         period: 'decade',
       });
@@ -173,7 +174,7 @@ describe('Export API', () => {
 
       exportCostReport.mockResolvedValue(mockCSV);
 
-      const response = await request(app).get('/api/v1/export/costs').query({
+      const response = await authGet('/api/v1/export/costs').query({
         teamId: 'team-1',
         format: 'csv',
       });
@@ -186,7 +187,7 @@ describe('Export API', () => {
     test('should support custom date ranges', async () => {
       exportCostReport.mockResolvedValue('{}');
 
-      await request(app).get('/api/v1/export/costs').query({
+      await authGet('/api/v1/export/costs').query({
         teamId: 'team-1',
         startDate: '2026-01-01',
         endDate: '2026-01-31',
@@ -215,7 +216,7 @@ describe('Export API', () => {
 
       exportAgentPerformanceReport.mockResolvedValue(JSON.stringify(mockPerformance, null, 2));
 
-      const response = await request(app).get('/api/v1/export/agents');
+      const response = await authGet('/api/v1/export/agents');
 
       expect(response.status).toBe(200);
       expect(exportAgentPerformanceReport).toHaveBeenCalled();
@@ -224,7 +225,7 @@ describe('Export API', () => {
     test('should filter by teamId', async () => {
       exportAgentPerformanceReport.mockResolvedValue('{}');
 
-      await request(app).get('/api/v1/export/agents').query({ teamId: 'team-1' });
+      await authGet('/api/v1/export/agents').query({ teamId: 'team-1' });
 
       expect(exportAgentPerformanceReport).toHaveBeenCalledWith(
         expect.anything(),
@@ -237,7 +238,7 @@ describe('Export API', () => {
     test('should filter by agentName', async () => {
       exportAgentPerformanceReport.mockResolvedValue('{}');
 
-      await request(app).get('/api/v1/export/agents').query({ agentName: 'code' });
+      await authGet('/api/v1/export/agents').query({ agentName: 'code' });
 
       expect(exportAgentPerformanceReport).toHaveBeenCalledWith(
         expect.anything(),
@@ -252,7 +253,7 @@ describe('Export API', () => {
 
       exportAgentPerformanceReport.mockResolvedValue(mockCSV);
 
-      const response = await request(app).get('/api/v1/export/agents').query({
+      const response = await authGet('/api/v1/export/agents').query({
         format: 'csv',
       });
 
@@ -264,7 +265,7 @@ describe('Export API', () => {
     test('should handle date range filters', async () => {
       exportAgentPerformanceReport.mockResolvedValue('{}');
 
-      await request(app).get('/api/v1/export/agents').query({
+      await authGet('/api/v1/export/agents').query({
         startDate: '2026-01-01',
         endDate: '2026-01-31',
       });
@@ -290,7 +291,7 @@ describe('Export API', () => {
 
       exportBudgetReport.mockResolvedValue(JSON.stringify(mockBudget, null, 2));
 
-      const response = await request(app).get('/api/v1/export/budget/team-1');
+      const response = await authGet('/api/v1/export/budget/team-1');
 
       expect(response.status).toBe(200);
       expect(exportBudgetReport).toHaveBeenCalledWith(expect.anything(), 'team-1', 'json');
@@ -301,8 +302,7 @@ describe('Export API', () => {
 
       exportBudgetReport.mockResolvedValue(mockCSV);
 
-      const response = await request(app)
-        .get('/api/v1/export/budget/team-1')
+      const response = await authGet('/api/v1/export/budget/team-1')
         .query({ format: 'csv' });
 
       expect(response.status).toBe(200);
@@ -311,8 +311,7 @@ describe('Export API', () => {
     });
 
     test('should reject invalid format', async () => {
-      const response = await request(app)
-        .get('/api/v1/export/budget/team-1')
+      const response = await authGet('/api/v1/export/budget/team-1')
         .query({ format: 'pdf' });
 
       expect(response.status).toBe(400);
@@ -322,7 +321,7 @@ describe('Export API', () => {
     test('should handle export errors', async () => {
       exportBudgetReport.mockRejectedValue(new Error('Budget not found'));
 
-      const response = await request(app).get('/api/v1/export/budget/team-1');
+      const response = await authGet('/api/v1/export/budget/team-1');
 
       expect(response.status).toBe(500);
       expect(response.body.error.code).toBe('EXPORT_FAILED');
