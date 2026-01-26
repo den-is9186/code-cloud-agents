@@ -7,6 +7,28 @@ const path = require('path');
 jest.mock('ioredis');
 
 const app = require('../src/api-server');
+const { generateToken, Roles } = require('../src/services/auth-service');
+
+// Helper to generate test auth token
+function getTestToken(role = Roles.DEVELOPER) {
+  return generateToken({
+    userId: 'test-user',
+    email: 'test@example.com',
+    role,
+  }, '1h');
+}
+
+// Authenticated request helpers
+const authRequest = {
+  get: (url, role = Roles.DEVELOPER) =>
+    request(app).get(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+  post: (url, role = Roles.MANAGER) =>
+    request(app).post(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+  put: (url, role = Roles.DEVELOPER) =>
+    request(app).put(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+  delete: (url, role = Roles.DEVELOPER) =>
+    request(app).delete(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+};
 
 describe('Integration Tests - File Operations API', () => {
   const testDir = path.join(process.cwd(), 'tests', 'test-files');
@@ -51,7 +73,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should list files in tests directory', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files')
         .query({ path: 'tests/test-files' });
 
@@ -68,7 +90,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return file metadata', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files')
         .query({ path: 'tests/test-files' });
 
@@ -82,7 +104,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should distinguish between files and directories', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files')
         .query({ path: 'tests/test-files' });
 
@@ -97,7 +119,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 404 for non-existent directory', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files')
         .query({ path: 'tests/non-existent-dir' });
 
@@ -106,7 +128,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should reject path traversal attempts', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files')
         .query({ path: '../../../etc' });
 
@@ -115,7 +137,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should reject access to disallowed directories', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files')
         .query({ path: 'node_modules' });
 
@@ -125,7 +147,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when path is a file not a directory', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files')
         .query({ path: 'tests/test-files/file1.txt' });
 
@@ -151,7 +173,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should read file content', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files/content')
         .query({ path: 'tests/test-files/test.txt' });
 
@@ -164,7 +186,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 404 for non-existent file', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files/content')
         .query({ path: 'tests/test-files/non-existent.txt' });
 
@@ -173,7 +195,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when path parameter is missing', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files/content');
 
       expect(response.status).toBe(400);
@@ -182,7 +204,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when path is a directory', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files/content')
         .query({ path: 'tests/test-files' });
 
@@ -192,7 +214,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should reject path traversal attempts', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .get('/api/v1/files/content')
         .query({ path: '../../../etc/passwd' });
 
@@ -214,7 +236,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should create a new file', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .post('/api/v1/files/content')
         .send({
           path: newFilePath,
@@ -237,7 +259,7 @@ describe('Integration Tests - File Operations API', () => {
       await fs.writeFile(path.join(process.cwd(), newFilePath), 'Initial content', 'utf8');
 
       const updatedContent = 'Updated content';
-      const response = await request(app)
+      const response = await authRequest
         .post('/api/v1/files/content')
         .send({
           path: newFilePath,
@@ -255,7 +277,7 @@ describe('Integration Tests - File Operations API', () => {
     test('should create directories when createDirs is true', async () => {
       const deepPath = 'tests/test-files/deep/nested/dir/file.txt';
       
-      const response = await request(app)
+      const response = await authRequest
         .post('/api/v1/files/content')
         .send({
           path: deepPath,
@@ -275,7 +297,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when parent directory does not exist and createDirs is false', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .post('/api/v1/files/content')
         .send({
           path: 'tests/test-files/non-existent-dir/file.txt',
@@ -288,7 +310,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when path is missing', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .post('/api/v1/files/content')
         .send({
           content: 'Content'
@@ -300,7 +322,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when content is missing', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .post('/api/v1/files/content')
         .send({
           path: newFilePath
@@ -312,7 +334,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should accept empty string as content', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .post('/api/v1/files/content')
         .send({
           path: newFilePath,
@@ -326,7 +348,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should reject path traversal attempts', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .post('/api/v1/files/content')
         .send({
           path: '../../../tmp/malicious.txt',
@@ -354,7 +376,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should delete a file', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .delete('/api/v1/files/content')
         .query({ path: deleteFilePath });
 
@@ -367,7 +389,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 404 for non-existent file', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .delete('/api/v1/files/content')
         .query({ path: 'tests/test-files/non-existent.txt' });
 
@@ -376,7 +398,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when path parameter is missing', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .delete('/api/v1/files/content');
 
       expect(response.status).toBe(400);
@@ -385,7 +407,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should return 400 when trying to delete a directory', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .delete('/api/v1/files/content')
         .query({ path: 'tests/test-files' });
 
@@ -395,7 +417,7 @@ describe('Integration Tests - File Operations API', () => {
     });
 
     test('should reject path traversal attempts', async () => {
-      const response = await request(app)
+      const response = await authRequest
         .delete('/api/v1/files/content')
         .query({ path: '../../../tmp/important.txt' });
 
@@ -417,7 +439,7 @@ describe('Integration Tests - File Operations API', () => {
 
     test('should complete full CRUD workflow', async () => {
       // 1. Create file
-      const createResponse = await request(app)
+      const createResponse = await authRequest
         .post('/api/v1/files/content')
         .send({
           path: workflowFile,
@@ -427,14 +449,14 @@ describe('Integration Tests - File Operations API', () => {
       expect(createResponse.body.created).toBe(true);
 
       // 2. Read file
-      const readResponse = await request(app)
+      const readResponse = await authRequest
         .get('/api/v1/files/content')
         .query({ path: workflowFile });
       expect(readResponse.status).toBe(200);
       expect(readResponse.body.content).toBe('Initial content');
 
       // 3. Update file
-      const updateResponse = await request(app)
+      const updateResponse = await authRequest
         .post('/api/v1/files/content')
         .send({
           path: workflowFile,
@@ -444,14 +466,14 @@ describe('Integration Tests - File Operations API', () => {
       expect(updateResponse.body.created).toBe(false);
 
       // 4. Read updated file
-      const readUpdatedResponse = await request(app)
+      const readUpdatedResponse = await authRequest
         .get('/api/v1/files/content')
         .query({ path: workflowFile });
       expect(readUpdatedResponse.status).toBe(200);
       expect(readUpdatedResponse.body.content).toBe('Updated content');
 
       // 5. List directory to verify file exists
-      const listResponse = await request(app)
+      const listResponse = await authRequest
         .get('/api/v1/files')
         .query({ path: 'tests/test-files' });
       expect(listResponse.status).toBe(200);
@@ -459,14 +481,14 @@ describe('Integration Tests - File Operations API', () => {
       expect(fileNames).toContain('workflow.txt');
 
       // 6. Delete file
-      const deleteResponse = await request(app)
+      const deleteResponse = await authRequest
         .delete('/api/v1/files/content')
         .query({ path: workflowFile });
       expect(deleteResponse.status).toBe(200);
       expect(deleteResponse.body.deleted).toBe(true);
 
       // 7. Verify file is deleted
-      const readDeletedResponse = await request(app)
+      const readDeletedResponse = await authRequest
         .get('/api/v1/files/content')
         .query({ path: workflowFile });
       expect(readDeletedResponse.status).toBe(404);
