@@ -72,9 +72,9 @@ export class SupervisorAgent implements Agent {
       if (checkpoint) {
         console.log(`🔄 Resuming from checkpoint: ${checkpoint.id}`);
         // Restore state from checkpoint
-        runbook = checkpoint.result.runbook as Step[] || null;
+        runbook = (checkpoint.runbook as Step[]) || null;
         tasks = checkpoint.pendingTasks || [];
-        executionOrder = checkpoint.result.executionOrder as string[][] || [];
+        executionOrder = (checkpoint.executionOrder as string[][]) || [];
         completedTaskIds = new Set(checkpoint.completedTasks || []);
         currentPhase = checkpoint.currentPhase;
         
@@ -307,11 +307,9 @@ export class SupervisorAgent implements Agent {
       currentPhase,
       completedTasks: Array.from(completedTaskIds),
       pendingTasks: pendingTasks.filter(task => !completedTaskIds.has(task.id)),
-      result: {
-        ...result,
-        runbook: runbook || undefined,
-        executionOrder: executionOrder,
-      }
+      result: result,
+      runbook: runbook || undefined,
+      executionOrder: executionOrder,
     };
     await checkpointManager.save(checkpoint);
     console.log(`💾 Checkpoint saved: ${checkpoint.id} (phase: ${currentPhase})`);
