@@ -1,7 +1,7 @@
 import { Agent, AgentRole, Step } from './types';
 import { llmClient } from '../llm/client';
 import { executeTool } from '../tools';
-import { RunbookSchema, safeJsonParse } from '../utils/schemas';
+import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
 
 export class ArchitectAgent implements Agent {
