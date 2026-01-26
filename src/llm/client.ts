@@ -121,33 +121,41 @@ export class LLMClient {
 
   private async callNovita(config: ModelConfig, model: string, messages: Message[], tools?: any[]): Promise<LLMResponse> {
     const fetchCall = async (): Promise<LLMResponse> => {
-      const response = await fetch(config.endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`
-        },
-        body: JSON.stringify({
-          model: model,
-          messages,
-          tools,
-          max_tokens: 4096
-        })
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), DEFAULT_RETRY_CONFIG.timeout);
+      
+      try {
+        const response = await fetch(config.endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`
+          },
+          body: JSON.stringify({
+            model: model,
+            messages,
+            tools,
+            max_tokens: 4096
+          }),
+          signal: controller.signal
+        });
 
-      if (!response.ok) {
-        // Don't expose API keys or sensitive information in error messages
-        throw new Error(`Novita API error: ${response.status}`);
+        if (!response.ok) {
+          // Don't expose API keys or sensitive information in error messages
+          throw new Error(`Novita API error: ${response.status}`);
+        }
+
+        const data = await response.json() as NovitaResponse;
+        const usage = this.calculateUsage(data.usage, config.pricing);
+
+        return {
+          content: data.choices[0]?.message?.content || '',
+          toolCalls: data.choices[0]?.message?.tool_calls,
+          usage
+        };
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      const data = await response.json() as NovitaResponse;
-      const usage = this.calculateUsage(data.usage, config.pricing);
-
-      return {
-        content: data.choices[0]?.message?.content || '',
-        toolCalls: data.choices[0]?.message?.tool_calls,
-        usage
-      };
     };
 
     return withRetry(fetchCall);
@@ -155,34 +163,42 @@ export class LLMClient {
 
   private async callAnthropic(config: ModelConfig, model: string, messages: Message[], tools?: any[]): Promise<LLMResponse> {
     const fetchCall = async (): Promise<LLMResponse> => {
-      const response = await fetch(config.endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': config.apiKey!,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          tools,
-          max_tokens: 4096
-        })
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), DEFAULT_RETRY_CONFIG.timeout);
+      
+      try {
+        const response = await fetch(config.endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': config.apiKey!,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            tools,
+            max_tokens: 4096
+          }),
+          signal: controller.signal
+        });
 
-      if (!response.ok) {
-        // Don't expose API keys or sensitive information in error messages
-        throw new Error(`Anthropic API error: ${response.status}`);
+        if (!response.ok) {
+          // Don't expose API keys or sensitive information in error messages
+          throw new Error(`Anthropic API error: ${response.status}`);
+        }
+
+        const data = await response.json() as AnthropicResponse;
+        const usage = this.calculateUsage(data.usage, config.pricing);
+
+        return {
+          content: data.content[0]?.text || '',
+          toolCalls: data.content.filter((c: any) => c.type === 'tool_use') as any,
+          usage
+        };
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      const data = await response.json() as AnthropicResponse;
-      const usage = this.calculateUsage(data.usage, config.pricing);
-
-      return {
-        content: data.content[0]?.text || '',
-        toolCalls: data.content.filter((c: any) => c.type === 'tool_use') as any,
-        usage
-      };
     };
 
     return withRetry(fetchCall);
@@ -190,28 +206,36 @@ export class LLMClient {
 
   private async callLocal(config: ModelConfig, messages: Message[], tools?: any[]): Promise<LLMResponse> {
     const fetchCall = async (): Promise<LLMResponse> => {
-      const response = await fetch(`${config.endpoint}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'llama-4-scout',
-          messages,
-          tools,
-          max_tokens: 4096
-        })
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), DEFAULT_RETRY_CONFIG.timeout);
+      
+      try {
+        const response = await fetch(`${config.endpoint}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'llama-4-scout',
+            messages,
+            tools,
+            max_tokens: 4096
+          }),
+          signal: controller.signal
+        });
 
-      if (!response.ok) {
-        throw new Error(`Local LLM API error: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`Local LLM API error: ${response.status}`);
+        }
+
+        const data = await response.json() as NovitaResponse;
+
+        return {
+          content: data.choices[0]?.message?.content || '',
+          toolCalls: data.choices[0]?.message?.tool_calls,
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0 }
+        };
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      const data = await response.json() as NovitaResponse;
-
-      return {
-        content: data.choices[0]?.message?.content || '',
-        toolCalls: data.choices[0]?.message?.tool_calls,
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0 }
-      };
     };
 
     return withRetry(fetchCall);
