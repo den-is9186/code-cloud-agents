@@ -1,4 +1,4 @@
-import { Agent, AgentRole, BuildResult, SubTask, ReviewResult } from './types';
+import { Agent, AgentRole, BuildResult, SubTask, ReviewResult, FileChange, TestFile, TestResult } from './types';
 import { llmClient } from '../llm/client';
 
 interface SupervisorConfig {
@@ -95,6 +95,42 @@ export class SupervisorAgent implements Agent {
   }
 
   private async executeTask(task: SubTask, result: BuildResult) {
+    // For backward compatibility, call the new method and merge results
+    const taskChanges: {
+      filesChanged: FileChange[];
+      testsWritten: TestFile[];
+      testResults?: TestResult;
+      errors?: string[];
+    } = {
+      filesChanged: [],
+      testsWritten: [],
+      testResults: undefined,
+      errors: []
+    };
+    
+    await this.executeTaskWithResult(task, taskChanges);
+    
+    // Merge into result
+    result.filesChanged.push(...taskChanges.filesChanged);
+    result.testsWritten.push(...taskChanges.testsWritten);
+    if (taskChanges.testResults) {
+      result.testResults = taskChanges.testResults;
+    }
+    if (taskChanges.errors && taskChanges.errors.length > 0) {
+      if (!result.errors) result.errors = [];
+      result.errors.push(...taskChanges.errors);
+    }
+  }
+
+  private async executeTaskWithResult(
+    task: SubTask,
+    taskChanges: {
+      filesChanged: FileChange[];
+      testsWritten: TestFile[];
+      testResults?: TestResult;
+      errors?: string[];
+    }
+  ) {
     try {
       const agent = this.getAgent(task.assignedAgent);
       console.log(`⚡ ${task.assignedAgent}: ${task.description}`);
@@ -104,7 +140,7 @@ export class SupervisorAgent implements Agent {
         let approved = false;
         
         // Sammle alle Dateiänderungen in einem lokalen Array
-        const taskFilesChanged: any[] = [];
+        const taskFilesChanged: FileChange[] = [];
 
         while (!approved && iteration < this.maxIterations) {
           // Code writes
@@ -133,8 +169,8 @@ export class SupervisorAgent implements Agent {
           iteration++;
         }
 
-        // Füge alle gesammelten Dateiänderungen am Ende hinzu
-        result.filesChanged.push(...taskFilesChanged);
+        // Store file changes
+        taskChanges.filesChanged.push(...taskFilesChanged);
 
         // Test writes tests
         const test = this.agents.get('test');
@@ -143,17 +179,18 @@ export class SupervisorAgent implements Agent {
             filesChanged: taskFilesChanged,
             task
           });
-          result.testsWritten.push(...testResult.testsWritten);
-          result.testResults = testResult.testResults;
+          taskChanges.testsWritten.push(...testResult.testsWritten);
+          taskChanges.testResults = testResult.testResults;
         }
       }
     } catch (error: unknown) {
       // Wenn der Agent nicht existiert, loggen wir einen Fehler und fahren mit der nächsten Task fort
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`❌ Agent '${task.assignedAgent}' not found for task ${task.id}:`, errorMessage);
-      // Store error in result for better error handling
-      if (!result.errors) result.errors = [];
-      result.errors.push(`Task ${task.id} failed: ${errorMessage}`);
+      // Store error in taskChanges
+      if (!taskChanges.errors) taskChanges.errors = [];
+      taskChanges.errors.push(`Task ${task.id} failed: ${errorMessage}`);
+      throw error; // Re-throw to be handled by the caller
     }
   }
 }
