@@ -1,23 +1,24 @@
 import { Agent, AgentRole, BuildResult, SubTask, ReviewResult, FileChange, TestFile, TestResult, Step, Dependency, Issue, TestFailure } from './types';
 import { llmClient } from '../llm/client';
+import { SUPERVISOR_CONFIG } from '../config/constants';
 
 interface SupervisorConfig {
   model: string;
-  maxIterations: number;
+  maxIterations?: number;
   preset: string;
 }
 
 export class SupervisorAgent implements Agent {
   role: AgentRole = 'supervisor';
   model: string;
-  status = 'idle' as const;
+  status: AgentStatus = 'idle';
 
   private agents: Map<AgentRole, Agent> = new Map();
   private maxIterations: number;
 
   constructor(config: SupervisorConfig) {
     this.model = config.model;
-    this.maxIterations = config.maxIterations;
+    this.maxIterations = config.maxIterations || SUPERVISOR_CONFIG.MAX_ITERATIONS;
   }
 
   registerAgent(agent: Agent) {
@@ -25,6 +26,7 @@ export class SupervisorAgent implements Agent {
   }
 
   async execute(input: { task: string; projectPath: string }): Promise<BuildResult> {
+    this.status = 'working';
     const startTime = Date.now();
     const result: BuildResult = {
       success: false,
@@ -119,8 +121,12 @@ export class SupervisorAgent implements Agent {
       }
 
       result.success = true;
+      this.status = 'completed';
     } catch (error: any) {
-      result.errors = [error.message];
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[${this.role}] Error:`, errorMessage);
+      result.errors = [errorMessage];
+      this.status = 'failed';
     }
 
     result.duration = Date.now() - startTime;

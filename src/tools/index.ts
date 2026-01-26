@@ -10,6 +10,45 @@ const execFileAsync = promisify(execFile);
 const BASE_DIR = path.resolve(process.cwd());
 const MAX_FILE_SIZE_BYTES = FILE_CONFIG.MAX_FILE_SIZE_BYTES;
 
+// Tool Parameter Interfaces
+export interface FileReadParams { 
+  path: string; 
+}
+
+export interface FileWriteParams { 
+  path: string; 
+  content: string; 
+}
+
+export interface FilePatchParams { 
+  path: string; 
+  diff: string; 
+}
+
+export interface FileDeleteParams { 
+  path: string; 
+}
+
+export interface DirectoryListParams { 
+  path: string; 
+  recursive?: boolean; 
+}
+
+export interface ShellExecParams { 
+  command: string; 
+  args?: string[];
+  cwd?: string; 
+}
+
+export interface GitDiffParams { 
+  file?: string; 
+}
+
+export interface GitCommitParams { 
+  message: string; 
+  files?: string[]; 
+}
+
 export function validatePath(filePath: string): string {
   // Check for null bytes and other malicious patterns first
   if (filePath.includes('\0')) {
@@ -36,19 +75,19 @@ export function validatePath(filePath: string): string {
   return resolved;
 }
 
-export interface Tool {
+export interface Tool<P = any, R = any> {
   name: string;
   description: string;
   parameters: Record<string, any>;
-  execute: (params: any) => Promise<any>;
+  execute: (params: P) => Promise<R>;
 }
 
 // File Tools
-export const fileRead: Tool = {
+export const fileRead: Tool<FileReadParams, { content: string }> = {
   name: 'file_read',
   description: 'Read file contents',
   parameters: { path: { type: 'string', required: true } },
-  execute: async ({ path: filePath }) => {
+  execute: async ({ path: filePath }: FileReadParams) => {
     const safePath = validatePath(filePath);
     
     // Check file size before reading
@@ -62,11 +101,11 @@ export const fileRead: Tool = {
   }
 };
 
-export const fileWrite: Tool = {
+export const fileWrite: Tool<FileWriteParams, { success: boolean }> = {
   name: 'file_write',
   description: 'Write content to file',
   parameters: { path: { type: 'string' }, content: { type: 'string' } },
-  execute: async ({ path: filePath, content }) => {
+  execute: async ({ path: filePath, content }: FileWriteParams) => {
     const safePath = validatePath(filePath);
     await fs.mkdir(path.dirname(safePath), { recursive: true });
     await fs.writeFile(safePath, content, 'utf-8');
@@ -74,11 +113,11 @@ export const fileWrite: Tool = {
   }
 };
 
-export const filePatch: Tool = {
+export const filePatch: Tool<FilePatchParams, { success: boolean }> = {
   name: 'file_patch',
   description: 'Apply diff patch to file',
   parameters: { path: { type: 'string' }, diff: { type: 'string' } },
-  execute: async ({ path: filePath }) => {
+  execute: async ({ path: filePath }: FilePatchParams) => {
     const safePath = validatePath(filePath);
     // Simple line-based patch
     await fs.readFile(safePath, 'utf-8');
@@ -87,22 +126,22 @@ export const filePatch: Tool = {
   }
 };
 
-export const fileDelete: Tool = {
+export const fileDelete: Tool<FileDeleteParams, { success: boolean }> = {
   name: 'file_delete',
   description: 'Delete a file',
   parameters: { path: { type: 'string' } },
-  execute: async ({ path: filePath }) => {
+  execute: async ({ path: filePath }: FileDeleteParams) => {
     const safePath = validatePath(filePath);
     await fs.unlink(safePath);
     return { success: true };
   }
 };
 
-export const directoryList: Tool = {
+export const directoryList: Tool<DirectoryListParams, { files: string[] }> = {
   name: 'directory_list',
   description: 'List directory contents',
   parameters: { path: { type: 'string' }, recursive: { type: 'boolean' } },
-  execute: async ({ path: dirPath, recursive = false }) => {
+  execute: async ({ path: dirPath, recursive = false }: DirectoryListParams) => {
     const safePath = validatePath(dirPath);
     const files: string[] = [];
     const readDir = async (dir: string) => {
@@ -122,11 +161,11 @@ export const directoryList: Tool = {
 };
 
 // Shell Tools
-export const shellExec: Tool = {
+export const shellExec: Tool<ShellExecParams, { stdout: string; stderr: string; exitCode: number }> = {
   name: 'shell_exec',
   description: 'Execute shell command',
   parameters: { command: { type: 'string' }, cwd: { type: 'string' } },
-  execute: async ({ command, cwd }) => {
+  execute: async ({ command, cwd }: ShellExecParams) => {
     // Input validation
     if (!command || typeof command !== 'string') {
       throw new Error('Invalid command: must be non-empty string');
@@ -145,7 +184,7 @@ export const shellExec: Tool = {
 };
 
 // Git Tools
-export const gitStatus: Tool = {
+export const gitStatus: Tool<{}, { modified: string[]; staged: string[]; untracked: string[] }> = {
   name: 'git_status',
   description: 'Get git status',
   parameters: {},
@@ -159,11 +198,11 @@ export const gitStatus: Tool = {
   }
 };
 
-export const gitDiff: Tool = {
+export const gitDiff: Tool<GitDiffParams, { diff: string }> = {
   name: 'git_diff',
   description: 'Get git diff',
   parameters: { file: { type: 'string' } },
-  execute: async ({ file }) => {
+  execute: async ({ file }: GitDiffParams) => {
     const args = ['diff'];
     if (file) {
       args.push(file);
@@ -173,11 +212,11 @@ export const gitDiff: Tool = {
   }
 };
 
-export const gitCommit: Tool = {
+export const gitCommit: Tool<GitCommitParams, { hash: string }> = {
   name: 'git_commit',
   description: 'Create git commit',
   parameters: { message: { type: 'string' }, files: { type: 'array' } },
-  execute: async ({ message, files }) => {
+  execute: async ({ message, files }: GitCommitParams) => {
     // Input validation
     if (!message || typeof message !== 'string') {
       throw new Error('Invalid commit message: must be non-empty string');
@@ -224,8 +263,8 @@ export const getTools = () => tools;
 
 export const getTool = (name: string) => tools.find(t => t.name === name);
 
-export const executeTool = async (name: string, params: any) => {
+export const executeTool = async <P = any, R = any>(name: string, params: P): Promise<R> => {
   const tool = getTool(name);
   if (!tool) throw new Error(`Tool not found: ${name}`);
-  return tool.execute(params);
+  return tool.execute(params) as Promise<R>;
 };

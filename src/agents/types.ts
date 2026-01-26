@@ -129,6 +129,12 @@ export interface ProjectContext {
   dependencies: Record<string, string>;
 }
 
+// Error Response
+export interface ErrorResponse {
+  success: false;
+  error: { code: string; message: string; details?: unknown };
+}
+
 // Build Result
 export interface BuildResult {
   success: boolean;
