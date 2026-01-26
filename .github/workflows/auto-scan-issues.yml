@@ -1,0 +1,394 @@
+name: Auto-Scan & Create Issues
+
+on:
+  schedule:
+    # Täglich um 3:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      auto_fix:
+        description: 'Add auto-fix label to created issues'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  scan:
+    name: Scan for Problems
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    outputs:
+      test_failed: ${{ steps.tests.outputs.failed }}
+      lint_errors: ${{ steps.lint.outputs.errors }}
+      type_errors: ${{ steps.typecheck.outputs.errors }}
+      security_issues: ${{ steps.security.outputs.issues }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # ═══════════════════════════════════════════════════════════
+      # TEST SCAN
+      # ═══════════════════════════════════════════════════════════
+      - name: Run Tests
+        id: tests
+        continue-on-error: true
+        run: |
+          npm test -- --json --outputFile=test-results.json 2>/dev/null || true
+
+          if [ -f test-results.json ]; then
+            FAILED=$(cat test-results.json | jq '.numFailedTests // 0')
+            FAILED_TESTS=$(cat test-results.json | jq -r '.testResults[]?.assertionResults[]? | select(.status == "failed") | "- \(.ancestorTitles | join(" > ")) > \(.title)"' 2>/dev/null || echo "")
+          else
+            # Fallback: Run tests and capture output
+            npm test 2>&1 | tee test-output.log || true
+            if grep -q "FAIL" test-output.log; then
+              FAILED=1
+              FAILED_TESTS=$(grep -A2 "FAIL" test-output.log | head -20 || echo "Test failures detected")
+            else
+              FAILED=0
+              FAILED_TESTS=""
+            fi
+          fi
+
+          echo "failed=$FAILED" >> $GITHUB_OUTPUT
+          echo "FAILED_TESTS<<EOF" >> $GITHUB_ENV
+          echo "$FAILED_TESTS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          echo "📊 Failed tests: $FAILED"
+
+      # ═══════════════════════════════════════════════════════════
+      # LINT SCAN
+      # ═══════════════════════════════════════════════════════════
+      - name: Run Lint Check
+        id: lint
+        continue-on-error: true
+        run: |
+          npm run lint 2>&1 | tee lint-output.log || true
+
+          ERRORS=$(grep -c "error" lint-output.log || echo "0")
+          WARNINGS=$(grep -c "warning" lint-output.log || echo "0")
+
+          # Extract error details
+          LINT_DETAILS=$(grep -E "^\s+[0-9]+:[0-9]+\s+(error|warning)" lint-output.log | head -30 || echo "")
+
+          echo "errors=$ERRORS" >> $GITHUB_OUTPUT
+          echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
+          echo "LINT_DETAILS<<EOF" >> $GITHUB_ENV
+          echo "$LINT_DETAILS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          echo "📊 Lint errors: $ERRORS, warnings: $WARNINGS"
+
+      # ═══════════════════════════════════════════════════════════
+      # TYPE CHECK SCAN
+      # ═══════════════════════════════════════════════════════════
+      - name: Run Type Check
+        id: typecheck
+        continue-on-error: true
+        run: |
+          npm run type-check 2>&1 | tee typecheck-output.log || true
+
+          ERRORS=$(grep -c "error TS" typecheck-output.log || echo "0")
+
+          # Extract error details
+          TYPE_DETAILS=$(grep "error TS" typecheck-output.log | head -20 || echo "")
+
+          echo "errors=$ERRORS" >> $GITHUB_OUTPUT
+          echo "TYPE_DETAILS<<EOF" >> $GITHUB_ENV
+          echo "$TYPE_DETAILS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          echo "📊 Type errors: $ERRORS"
+
+      # ═══════════════════════════════════════════════════════════
+      # SECURITY SCAN (npm audit)
+      # ═══════════════════════════════════════════════════════════
+      - name: Run Security Audit
+        id: security
+        continue-on-error: true
+        run: |
+          npm audit --json 2>/dev/null | tee audit-output.json || true
+
+          if [ -f audit-output.json ]; then
+            CRITICAL=$(cat audit-output.json | jq '.metadata.vulnerabilities.critical // 0')
+            HIGH=$(cat audit-output.json | jq '.metadata.vulnerabilities.high // 0')
+            TOTAL=$((CRITICAL + HIGH))
+
+            # Extract vulnerability details
+            VULN_DETAILS=$(cat audit-output.json | jq -r '.vulnerabilities | to_entries[] | select(.value.severity == "critical" or .value.severity == "high") | "- \(.key): \(.value.severity) - \(.value.title // "No title")"' 2>/dev/null | head -20 || echo "")
+          else
+            TOTAL=0
+            VULN_DETAILS=""
+          fi
+
+          echo "issues=$TOTAL" >> $GITHUB_OUTPUT
+          echo "VULN_DETAILS<<EOF" >> $GITHUB_ENV
+          echo "$VULN_DETAILS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          echo "📊 Critical/High vulnerabilities: $TOTAL"
+
+      # ═══════════════════════════════════════════════════════════
+      # CREATE ISSUES
+      # ═══════════════════════════════════════════════════════════
+      - name: Create Test Failure Issue
+        if: steps.tests.outputs.failed != '0' && steps.tests.outputs.failed != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '🧪 Test Failures Detected';
+            const autoFix = '${{ github.event.inputs.auto_fix }}' !== 'false';
+
+            // Check if issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'test-failure'
+            });
+
+            const existingIssue = issues.data.find(i => i.title === title);
+            if (existingIssue) {
+              console.log('Issue already exists:', existingIssue.html_url);
+              return;
+            }
+
+            const body = `## 🧪 Automatisch erkannte Test-Failures
+
+            **Scan-Datum:** ${new Date().toISOString()}
+            **Fehlgeschlagene Tests:** ${{ steps.tests.outputs.failed }}
+
+            ### Details
+            \`\`\`
+            ${process.env.FAILED_TESTS || 'Keine Details verfügbar'}
+            \`\`\`
+
+            ### Nächste Schritte
+            1. Tests lokal ausführen: \`npm test\`
+            2. Fehler analysieren und fixen
+            3. PR erstellen
+
+            ---
+            _Automatisch erstellt von Auto-Scan Workflow_
+            `;
+
+            const labels = ['test-failure', 'automated'];
+            if (autoFix) labels.push('auto-fix');
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels
+            });
+
+            console.log('Created issue:', issue.data.html_url);
+
+      - name: Create Lint Error Issue
+        if: steps.lint.outputs.errors != '0' && steps.lint.outputs.errors != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const errors = parseInt('${{ steps.lint.outputs.errors }}') || 0;
+            const warnings = parseInt('${{ steps.lint.outputs.warnings }}') || 0;
+
+            if (errors === 0) return;
+
+            const title = '🔧 Lint Errors Detected';
+            const autoFix = '${{ github.event.inputs.auto_fix }}' !== 'false';
+
+            // Check if issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'lint-error'
+            });
+
+            const existingIssue = issues.data.find(i => i.title === title);
+            if (existingIssue) {
+              console.log('Issue already exists:', existingIssue.html_url);
+              return;
+            }
+
+            const body = `## 🔧 Automatisch erkannte Lint-Fehler
+
+            **Scan-Datum:** ${new Date().toISOString()}
+            **Errors:** ${errors}
+            **Warnings:** ${warnings}
+
+            ### Details
+            \`\`\`
+            ${process.env.LINT_DETAILS || 'Keine Details verfügbar'}
+            \`\`\`
+
+            ### Fix
+            \`\`\`bash
+            npm run lint:fix
+            \`\`\`
+
+            ---
+            _Automatisch erstellt von Auto-Scan Workflow_
+            `;
+
+            const labels = ['lint-error', 'automated'];
+            if (autoFix) labels.push('auto-fix');
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels
+            });
+
+            console.log('Created issue:', issue.data.html_url);
+
+      - name: Create Type Error Issue
+        if: steps.typecheck.outputs.errors != '0' && steps.typecheck.outputs.errors != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const errors = parseInt('${{ steps.typecheck.outputs.errors }}') || 0;
+
+            if (errors === 0) return;
+
+            const title = '📘 TypeScript Errors Detected';
+            const autoFix = '${{ github.event.inputs.auto_fix }}' !== 'false';
+
+            // Check if issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'type-error'
+            });
+
+            const existingIssue = issues.data.find(i => i.title === title);
+            if (existingIssue) {
+              console.log('Issue already exists:', existingIssue.html_url);
+              return;
+            }
+
+            const body = `## 📘 Automatisch erkannte TypeScript-Fehler
+
+            **Scan-Datum:** ${new Date().toISOString()}
+            **Type Errors:** ${errors}
+
+            ### Details
+            \`\`\`
+            ${process.env.TYPE_DETAILS || 'Keine Details verfügbar'}
+            \`\`\`
+
+            ### Fix
+            \`\`\`bash
+            npm run type-check
+            \`\`\`
+
+            ---
+            _Automatisch erstellt von Auto-Scan Workflow_
+            `;
+
+            const labels = ['type-error', 'automated'];
+            if (autoFix) labels.push('auto-fix');
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels
+            });
+
+            console.log('Created issue:', issue.data.html_url);
+
+      - name: Create Security Issue
+        if: steps.security.outputs.issues != '0' && steps.security.outputs.issues != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issues = parseInt('${{ steps.security.outputs.issues }}') || 0;
+
+            if (issues === 0) return;
+
+            const title = '🔒 Security Vulnerabilities Detected';
+
+            // Check if issue already exists
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'security'
+            });
+
+            const existingIssue = existingIssues.data.find(i => i.title === title);
+            if (existingIssue) {
+              console.log('Issue already exists:', existingIssue.html_url);
+              return;
+            }
+
+            const body = `## 🔒 Automatisch erkannte Security-Vulnerabilities
+
+            **Scan-Datum:** ${new Date().toISOString()}
+            **Critical/High Vulnerabilities:** ${issues}
+
+            ### Details
+            \`\`\`
+            ${process.env.VULN_DETAILS || 'Keine Details verfügbar'}
+            \`\`\`
+
+            ### Fix
+            \`\`\`bash
+            npm audit fix
+            \`\`\`
+
+            ⚠️ **Achtung:** Security-Issues sollten manuell geprüft werden!
+
+            ---
+            _Automatisch erstellt von Auto-Scan Workflow_
+            `;
+
+            // Security issues should NOT auto-fix
+            const labels = ['security', 'automated', 'critical'];
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels
+            });
+
+            console.log('Created issue:', issue.data.html_url);
+
+      # ═══════════════════════════════════════════════════════════
+      # SUMMARY
+      # ═══════════════════════════════════════════════════════════
+      - name: Summary
+        if: always()
+        run: |
+          echo "### 🔍 Auto-Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests Failed | ${{ steps.tests.outputs.failed || '0' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint Errors | ${{ steps.lint.outputs.errors || '0' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Type Errors | ${{ steps.typecheck.outputs.errors || '0' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Issues | ${{ steps.security.outputs.issues || '0' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Issues wurden automatisch erstellt für gefundene Probleme._" >> $GITHUB_STEP_SUMMARY
