@@ -97,3 +97,4 @@ For other projects migrating from Jest 29 to Jest 30:
 - [Jest 30.2.0 Release Notes](https://github.com/jestjs/jest/releases/tag/v30.2.0)
 - [Jest Configuration Documentation](https://jestjs.io/docs/configuration)
 - [TypeScript Jest Configuration](https://jestjs.io/docs/getting-started#via-ts-node)
+
