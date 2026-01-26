@@ -6,6 +6,16 @@ import * as path from 'path';
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
+const BASE_DIR = process.cwd();
+
+function validatePath(filePath: string): string {
+  const resolved = path.resolve(BASE_DIR, filePath);
+  if (!resolved.startsWith(BASE_DIR)) {
+    throw new Error(`Path traversal detected: ${filePath}`);
+  }
+  return resolved;
+}
+
 export interface Tool {
   name: string;
   description: string;
@@ -19,7 +29,8 @@ export const fileRead: Tool = {
   description: 'Read file contents',
   parameters: { path: { type: 'string', required: true } },
   execute: async ({ path: filePath }) => {
-    const content = await fs.readFile(filePath, 'utf-8');
+    const safePath = validatePath(filePath);
+    const content = await fs.readFile(safePath, 'utf-8');
     return { content };
   }
 };
@@ -29,8 +40,9 @@ export const fileWrite: Tool = {
   description: 'Write content to file',
   parameters: { path: { type: 'string' }, content: { type: 'string' } },
   execute: async ({ path: filePath, content }) => {
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, content, 'utf-8');
+    const safePath = validatePath(filePath);
+    await fs.mkdir(path.dirname(safePath), { recursive: true });
+    await fs.writeFile(safePath, content, 'utf-8');
     return { success: true };
   }
 };
@@ -40,8 +52,9 @@ export const filePatch: Tool = {
   description: 'Apply diff patch to file',
   parameters: { path: { type: 'string' }, diff: { type: 'string' } },
   execute: async ({ path: filePath }) => {
+    const safePath = validatePath(filePath);
     // Simple line-based patch
-    await fs.readFile(filePath, 'utf-8');
+    await fs.readFile(safePath, 'utf-8');
     // Apply diff logic here
     return { success: true };
   }
@@ -52,7 +65,8 @@ export const fileDelete: Tool = {
   description: 'Delete a file',
   parameters: { path: { type: 'string' } },
   execute: async ({ path: filePath }) => {
-    await fs.unlink(filePath);
+    const safePath = validatePath(filePath);
+    await fs.unlink(safePath);
     return { success: true };
   }
 };
@@ -62,6 +76,7 @@ export const directoryList: Tool = {
   description: 'List directory contents',
   parameters: { path: { type: 'string' }, recursive: { type: 'boolean' } },
   execute: async ({ path: dirPath, recursive = false }) => {
+    const safePath = validatePath(dirPath);
     const files: string[] = [];
     const readDir = async (dir: string) => {
       const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -74,7 +89,7 @@ export const directoryList: Tool = {
         }
       }
     };
-    await readDir(dirPath);
+    await readDir(safePath);
     return { files };
   }
 };
