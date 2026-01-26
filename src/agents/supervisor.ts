@@ -54,7 +54,7 @@ export class SupervisorAgent implements Agent {
       for (const taskBatch of executionOrder) {
         // Execute tasks in the same batch in parallel
         const batchResults = await Promise.all(
-          taskBatch.map(async (taskId) => {
+          taskBatch.map(async (taskId: string) => {
             const task = taskMap.get(taskId);
             if (!task) {
               console.warn(`Task ${taskId} not found in task list`);
@@ -138,33 +138,6 @@ export class SupervisorAgent implements Agent {
     return agent;
   }
 
-  private async executeTask(task: SubTask, result: BuildResult) {
-    // For backward compatibility, call the new method and merge results
-    const taskChanges: {
-      filesChanged: FileChange[];
-      testsWritten: TestFile[];
-      testResults?: TestResult;
-      errors?: string[];
-    } = {
-      filesChanged: [],
-      testsWritten: [],
-      testResults: undefined,
-      errors: []
-    };
-    
-    await this.executeTaskWithResult(task, taskChanges);
-    
-    // Merge into result
-    result.filesChanged.push(...taskChanges.filesChanged);
-    result.testsWritten.push(...taskChanges.testsWritten);
-    if (taskChanges.testResults) {
-      result.testResults = taskChanges.testResults;
-    }
-    if (taskChanges.errors && taskChanges.errors.length > 0) {
-      if (!result.errors) result.errors = [];
-      result.errors.push(...taskChanges.errors);
-    }
-  }
 
   private async executeTaskWithResult(
     task: SubTask,

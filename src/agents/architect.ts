@@ -28,7 +28,7 @@ export class ArchitectAgent implements Agent {
     ).slice(0, 10); // Increased limit for better context
 
     // Read files in parallel using Promise.all
-    const fileReadPromises = keyFiles.map(async (file) => {
+    const fileReadPromises = keyFiles.map(async (file: string) => {
       try {
         const { content } = await executeTool('file_read', { path: file });
         return `\n--- ${file} ---\n${content.slice(0, 1000)}\n`;

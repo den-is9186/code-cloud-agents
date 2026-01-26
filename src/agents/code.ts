@@ -1,4 +1,4 @@
-import { Agent, AgentRole, SubTask, FileChange, ReviewFeedback } from './types';
+import { Agent, AgentRole, SubTask, FileChange, ReviewResult } from './types';
 import { llmClient } from '../llm/client';
 import { executeTool, validatePath } from '../tools';
 import { safeJsonParse } from '../utils/schemas';
@@ -13,7 +13,7 @@ export class CodeAgent implements Agent {
     this.model = model;
   }
 
-  async execute(input: { task: SubTask; feedback?: ReviewFeedback }): Promise<{
+  async execute(input: { task: SubTask; feedback?: ReviewResult }): Promise<{
     filesChanged: FileChange[];
     explanation: string;
     needsReview: boolean;
@@ -30,10 +30,10 @@ export class CodeAgent implements Agent {
     }
 
     const feedbackContext = input.feedback
-      ? `\n\nReview Feedback (bitte beheben):\n${input.feedback.mustFix.map(i => `- ${i.message}`).join('\n')}` +
+      ? `\n\nReview Feedback (bitte beheben):\n${input.feedback.mustFix.map((i: any) => `- ${i.message}`).join('\n')}` +
         (input.feedback.summary ? `\n\nSummary: ${input.feedback.summary}` : '') +
         (input.feedback.suggestions && input.feedback.suggestions.length > 0 
-          ? `\n\nSuggestions:\n${input.feedback.suggestions.map(i => `- ${i.message}`).join('\n')}`
+          ? `\n\nSuggestions:\n${input.feedback.suggestions.map((i: any) => `- ${i.message}`).join('\n')}`
           : '')
       : '';
 
