@@ -164,7 +164,7 @@ async function orchestrateBuild(redis, options) {
       if (budgetCheck.alertSent) {
         logger.warn('Build cost exceeds budget limit', {
           teamId, alertLevel: budgetCheck.alertLevel, percentage: budgetCheck.percentage
-        );
+        });
       }
     } catch (budgetError) {
       logger.error('Failed to check budget', { error: budgetError.message, buildId });
