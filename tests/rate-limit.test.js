@@ -170,6 +170,16 @@ describe('Distributed Rate Limiting', () => {
   });
 
   describe('Key Generation', () => {
+    // Helper function matching the actual implementation in createGlobalRateLimiter
+    const keyGenerator = (req) => {
+      if (req.auth) {
+        return req.auth.type === 'apikey'
+          ? `apikey:${req.auth.name}`
+          : `user:${req.auth.userId}`;
+      }
+      return req.ip; // ipKeyGenerator returns req.ip
+    };
+
     it('should use IP address for anonymous users', () => {
       // The actual implementation uses ipKeyGenerator which returns req.ip directly
       const req = { ip: '192.168.1.1' };
@@ -178,31 +188,13 @@ describe('Distributed Rate Limiting', () => {
     });
 
     it('should use user ID for authenticated users', () => {
-      // Test the keyGenerator logic from createGlobalRateLimiter
       const req = { auth: { userId: 'user123', type: 'jwt' } };
-      const keyGenerator = (req) => {
-        if (req.auth) {
-          return req.auth.type === 'apikey'
-            ? `apikey:${req.auth.name}`
-            : `user:${req.auth.userId}`;
-        }
-        return req.ip; // ipKeyGenerator returns req.ip
-      };
       const key = keyGenerator(req);
       expect(key).toBe('user:user123');
     });
 
     it('should use API key name for API key auth', () => {
-      // Test the keyGenerator logic from createGlobalRateLimiter
       const req = { auth: { name: 'production-key', type: 'apikey' } };
-      const keyGenerator = (req) => {
-        if (req.auth) {
-          return req.auth.type === 'apikey'
-            ? `apikey:${req.auth.name}`
-            : `user:${req.auth.userId}`;
-        }
-        return req.ip; // ipKeyGenerator returns req.ip
-      };
       const key = keyGenerator(req);
       expect(key).toBe('apikey:production-key');
     });

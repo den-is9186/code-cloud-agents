@@ -245,7 +245,13 @@ function extractAuth() {
       const apiKey = extractApiKey(req);
       if (apiKey) {
         try {
-          const redis = req.app.locals.redis || require('../api-server').redis;
+          // Get redis from app.locals (already set in api-server.js)
+          const redis = req.app.locals.redis;
+          if (!redis) {
+            // If redis not available, continue without auth
+            return next();
+          }
+          
           const apiKeyData = await verifyApiKey(redis, apiKey);
 
           req.auth = {
