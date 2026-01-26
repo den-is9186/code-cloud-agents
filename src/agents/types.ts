@@ -23,7 +23,7 @@ export interface Step {
 
 export interface TaskInput {
   files?: string[];
-  feedback?: ReviewFeedback;
+  feedback?: ReviewResult;
   [key: string]: any;
 }
 
@@ -64,6 +64,14 @@ export interface ReviewFeedback {
   approved: boolean;
   issues: Issue[];
   mustFix: Issue[];
+}
+
+export interface ReviewResult {
+  approved: boolean;
+  issues: Issue[];
+  summary: string;
+  mustFix: Issue[];
+  suggestions: Issue[];
 }
 
 // Test Types
