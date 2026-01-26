@@ -7,14 +7,15 @@
  * - Slack/Discord (optional integration)
  */
 
-const axios = require('axios');
-const { URL } = require('url');
-const { logger } = require('../../dist/utils/logger');
+import axios from 'axios';
+import { URL } from 'url';
+import type { Redis } from 'ioredis';
+import { logger } from '../utils/logger';
 
 /**
- * Notification types
+ * Notification types enum
  */
-const NotificationType = {
+export const NotificationType = {
   BUILD_STARTED: 'build.started',
   BUILD_COMPLETED: 'build.completed',
   BUILD_FAILED: 'build.failed',
@@ -23,15 +24,62 @@ const NotificationType = {
   APPROVAL_REJECTED: 'approval.rejected',
   AGENT_COMPLETED: 'agent.completed',
   AGENT_FAILED: 'agent.failed',
-};
+} as const;
+
+export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType];
+
+/**
+ * Notification channels enum
+ */
+export const NotificationChannel = {
+  EMAIL: 'email',
+  WEBHOOK: 'webhook',
+  SLACK: 'slack',
+  DISCORD: 'discord',
+} as const;
+
+export type NotificationChannelValue =
+  (typeof NotificationChannel)[keyof typeof NotificationChannel];
+
+/**
+ * Notification data structure
+ */
+export interface Notification {
+  type: NotificationTypeValue;
+  teamId: string;
+  teamName?: string;
+  buildId?: string;
+  status?: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Channel configuration structure
+ */
+export interface Channel {
+  type: NotificationChannelValue;
+  url?: string;
+  email?: string;
+}
+
+/**
+ * Webhook response structure
+ */
+export interface WebhookResponse {
+  success: boolean;
+  status?: number;
+  data?: unknown;
+  error?: string;
+}
 
 /**
  * Sanitize channel type to prevent log injection
  *
- * @param {string} channelType - Channel type to sanitize
- * @returns {string} Sanitized channel type
+ * @param channelType - Channel type to sanitize
+ * @returns Sanitized channel type
  */
-function sanitizeChannelType(channelType) {
+function sanitizeChannelType(channelType: string): string {
   // Whitelist of allowed channel types
   const allowedTypes = ['email', 'webhook', 'slack', 'discord'];
 
@@ -49,22 +97,12 @@ function sanitizeChannelType(channelType) {
 }
 
 /**
- * Notification channels
- */
-const NotificationChannel = {
-  EMAIL: 'email',
-  WEBHOOK: 'webhook',
-  SLACK: 'slack',
-  DISCORD: 'discord',
-};
-
-/**
  * Validate webhook URL to prevent SSRF attacks
  *
- * @param {string} webhookUrl - URL to validate
- * @throws {Error} If URL is invalid or points to private network
+ * @param webhookUrl - URL to validate
+ * @throws Error if URL is invalid or points to private network
  */
-function validateWebhookUrl(webhookUrl) {
+function validateWebhookUrl(webhookUrl: string): boolean {
   try {
     const url = new URL(webhookUrl);
 
@@ -89,16 +127,19 @@ function validateWebhookUrl(webhookUrl) {
     const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
     const match = hostname.match(ipv4Regex);
     if (match) {
-      const [, a, b, c, d] = match.map(Number);
+      const numbers = match.map(Number);
+      const a = numbers[1];
+      const b = numbers[2];
 
       // Check for private IP ranges
       if (
-        a === 10 || // 10.0.0.0/8
-        (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12
-        (a === 192 && b === 168) || // 192.168.0.0/16
-        a === 169 && b === 254 || // 169.254.0.0/16 (link-local)
-        a === 0 || // 0.0.0.0/8
-        a >= 224 // Multicast and reserved
+        a !== undefined &&
+        (a === 10 || // 10.0.0.0/8
+          (a === 172 && b !== undefined && b >= 16 && b <= 31) || // 172.16.0.0/12
+          (a === 192 && b === 168) || // 192.168.0.0/16
+          (a === 169 && b === 254) || // 169.254.0.0/16 (link-local)
+          a === 0 || // 0.0.0.0/8
+          a >= 224) // Multicast and reserved
       ) {
         throw new Error('Private IP addresses are not allowed');
       }
@@ -118,7 +159,7 @@ function validateWebhookUrl(webhookUrl) {
 
     return true;
   } catch (error) {
-    if (error.message.includes('Invalid URL')) {
+    if (error instanceof Error && error.message.includes('Invalid URL')) {
       throw new Error('Invalid webhook URL format');
     }
     throw error;
@@ -128,11 +169,11 @@ function validateWebhookUrl(webhookUrl) {
 /**
  * Send notification via webhook
  *
- * @param {string} webhookUrl - Webhook URL
- * @param {Object} payload - Notification payload
- * @returns {Promise<Object>} Response
+ * @param webhookUrl - Webhook URL
+ * @param payload - Notification payload
+ * @returns Response object
  */
-async function sendWebhook(webhookUrl, payload) {
+export async function sendWebhook(webhookUrl: string, payload: unknown): Promise<WebhookResponse> {
   // Validate URL to prevent SSRF
   validateWebhookUrl(webhookUrl);
 
@@ -151,32 +192,53 @@ async function sendWebhook(webhookUrl, payload) {
       data: response.data,
     };
   } catch (error) {
-    logger.error('Webhook delivery failed', {
-      webhookUrl: webhookUrl.replace(/([?&]token=)[^&]*/, '$1***'),
-      error: error.message,
-      status: error.response?.status || null,
-      statusText: error.response?.statusText,
-    });
-    return {
-      success: false,
-      error: error.message,
-      status: error.response?.status || null,
-    };
+    if (axios.isAxiosError(error)) {
+      logger.error('Webhook delivery failed', {
+        webhookUrl: webhookUrl.replace(/([?&]token=)[^&]*/, '$1***'),
+        error: error.message,
+        status: error.response?.status || null,
+        statusText: error.response?.statusText,
+      });
+      return {
+        success: false,
+        error: error.message,
+        status: error.response?.status || undefined,
+      };
+    }
+    throw error;
   }
 }
 
 /**
  * Send Slack notification
  *
- * @param {string} webhookUrl - Slack webhook URL
- * @param {Object} notification - Notification data
- * @returns {Promise<Object>} Response
+ * @param webhookUrl - Slack webhook URL
+ * @param notification - Notification data
+ * @returns Response object
  */
-async function sendSlackNotification(webhookUrl, notification) {
+export async function sendSlackNotification(
+  webhookUrl: string,
+  notification: Notification
+): Promise<WebhookResponse> {
   const { type, teamId, teamName, buildId, status, message } = notification;
 
   // Build Slack message
-  const slackPayload = {
+  const slackPayload: {
+    text: string;
+    blocks?: Array<{
+      type: string;
+      text?: { type: string; text: string; emoji?: boolean };
+      fields?: Array<{ type: string; text: string }>;
+    }>;
+    attachments?: Array<{
+      color: string;
+      blocks: Array<{
+        type: string;
+        text?: { type: string; text: string; emoji?: boolean };
+        fields?: Array<{ type: string; text: string }>;
+      }>;
+    }>;
+  } = {
     text: message,
     blocks: [
       {
@@ -204,8 +266,8 @@ async function sendSlackNotification(webhookUrl, notification) {
   };
 
   // Add build ID if present
-  if (buildId) {
-    slackPayload.blocks[1].fields.push({
+  if (buildId && slackPayload.blocks && slackPayload.blocks[1]) {
+    slackPayload.blocks[1].fields?.push({
       type: 'mrkdwn',
       text: `*Build ID:*\n\`${buildId}\``,
     });
@@ -213,7 +275,7 @@ async function sendSlackNotification(webhookUrl, notification) {
 
   // Add color based on type
   const color = getNotificationColor(type);
-  if (color) {
+  if (color && slackPayload.blocks) {
     slackPayload.attachments = [
       {
         color,
@@ -229,15 +291,26 @@ async function sendSlackNotification(webhookUrl, notification) {
 /**
  * Send Discord notification
  *
- * @param {string} webhookUrl - Discord webhook URL
- * @param {Object} notification - Notification data
- * @returns {Promise<Object>} Response
+ * @param webhookUrl - Discord webhook URL
+ * @param notification - Notification data
+ * @returns Response object
  */
-async function sendDiscordNotification(webhookUrl, notification) {
+export async function sendDiscordNotification(
+  webhookUrl: string,
+  notification: Notification
+): Promise<WebhookResponse> {
   const { type, teamId, teamName, buildId, status, message } = notification;
 
   // Build Discord embed
-  const discordPayload = {
+  const discordPayload: {
+    content: string;
+    embeds: Array<{
+      title: string;
+      color: number;
+      fields: Array<{ name: string; value: string; inline?: boolean }>;
+      timestamp: string;
+    }>;
+  } = {
     content: message,
     embeds: [
       {
@@ -261,7 +334,7 @@ async function sendDiscordNotification(webhookUrl, notification) {
   };
 
   // Add build ID if present
-  if (buildId) {
+  if (buildId && discordPayload.embeds[0]) {
     discordPayload.embeds[0].fields.push({
       name: 'Build ID',
       value: `\`${buildId}\``,
@@ -275,11 +348,14 @@ async function sendDiscordNotification(webhookUrl, notification) {
 /**
  * Send email notification (placeholder - requires email service setup)
  *
- * @param {string} to - Recipient email
- * @param {Object} notification - Notification data
- * @returns {Promise<Object>} Response
+ * @param to - Recipient email
+ * @param notification - Notification data
+ * @returns Response object
  */
-async function sendEmailNotification(to, notification) {
+export async function sendEmailNotification(
+  to: string,
+  notification: Notification
+): Promise<WebhookResponse> {
   // Email sending would require nodemailer or similar service
   // For now, return a placeholder response
   logger.info('Email notification (placeholder)', {
@@ -291,29 +367,35 @@ async function sendEmailNotification(to, notification) {
 
   return {
     success: true,
-    placeholder: true,
-    message: 'Email service not configured',
+    data: {
+      placeholder: true,
+      message: 'Email service not configured',
+    },
   };
 }
 
 /**
  * Send notification via specified channels
  *
- * @param {Object} redis - Redis client
- * @param {Object} notification - Notification data
- * @param {Array<string>} channels - Notification channels
- * @returns {Promise<Array>} Results
+ * @param redis - Redis client
+ * @param notification - Notification data
+ * @param channels - Notification channels
+ * @returns Array of results
  */
-async function sendNotification(redis, notification, channels = []) {
-  const results = [];
+export async function sendNotification(
+  redis: Redis,
+  notification: Notification,
+  channels: Channel[] = []
+): Promise<Array<WebhookResponse & { channel: string }>> {
+  const results: Array<WebhookResponse & { channel: string }> = [];
 
   for (const channel of channels) {
     try {
-      let result;
+      let result: WebhookResponse;
 
       switch (channel.type) {
         case NotificationChannel.WEBHOOK:
-          result = await sendWebhook(channel.url, {
+          result = await sendWebhook(channel.url!, {
             type: notification.type,
             timestamp: new Date().toISOString(),
             data: notification,
@@ -321,15 +403,15 @@ async function sendNotification(redis, notification, channels = []) {
           break;
 
         case NotificationChannel.SLACK:
-          result = await sendSlackNotification(channel.url, notification);
+          result = await sendSlackNotification(channel.url!, notification);
           break;
 
         case NotificationChannel.DISCORD:
-          result = await sendDiscordNotification(channel.url, notification);
+          result = await sendDiscordNotification(channel.url!, notification);
           break;
 
         case NotificationChannel.EMAIL:
-          result = await sendEmailNotification(channel.email, notification);
+          result = await sendEmailNotification(channel.email!, notification);
           break;
 
         default:
@@ -349,16 +431,17 @@ async function sendNotification(redis, notification, channels = []) {
     } catch (error) {
       // Sanitize channel type to prevent log injection
       const sanitizedType = sanitizeChannelType(channel.type);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('Failed to send notification', {
         channelType: sanitizedType,
         notificationType: notification.type,
         teamId: notification.teamId,
-        error: error.message,
+        error: errorMessage,
       });
       results.push({
         channel: channel.type,
         success: false,
-        error: error.message,
+        error: errorMessage,
       });
     }
   }
@@ -369,12 +452,17 @@ async function sendNotification(redis, notification, channels = []) {
 /**
  * Store notification in Redis
  *
- * @param {Object} redis - Redis client
- * @param {Object} notification - Notification data
- * @param {string} channel - Channel type
- * @param {Object} result - Delivery result
+ * @param redis - Redis client
+ * @param notification - Notification data
+ * @param channel - Channel type
+ * @param result - Delivery result
  */
-async function storeNotification(redis, notification, channel, result) {
+async function storeNotification(
+  redis: Redis,
+  notification: Notification,
+  channel: string,
+  result: WebhookResponse
+): Promise<void> {
   const notificationId = `notif:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
   const key = `notification:${notificationId}`;
 
@@ -394,22 +482,18 @@ async function storeNotification(redis, notification, channel, result) {
 
   // Add to team's notification list
   if (notification.teamId) {
-    await redis.zadd(
-      `team:${notification.teamId}:notifications`,
-      Date.now(),
-      notificationId
-    );
+    await redis.zadd(`team:${notification.teamId}:notifications`, Date.now(), notificationId);
   }
 }
 
 /**
  * Get notification title based on type
  *
- * @param {string} type - Notification type
- * @returns {string} Title
+ * @param type - Notification type
+ * @returns Title string
  */
-function getNotificationTitle(type) {
-  const titles = {
+function getNotificationTitle(type: NotificationTypeValue): string {
+  const titles: Record<NotificationTypeValue, string> = {
     [NotificationType.BUILD_STARTED]: '🚀 Build Started',
     [NotificationType.BUILD_COMPLETED]: '✅ Build Completed',
     [NotificationType.BUILD_FAILED]: '❌ Build Failed',
@@ -425,32 +509,39 @@ function getNotificationTitle(type) {
 /**
  * Get notification color based on type
  *
- * @param {string} type - Notification type
- * @param {boolean} hex - Return hex color for Discord
- * @returns {string} Color
+ * @param type - Notification type
+ * @param hex - Return hex color for Discord
+ * @returns Color string
  */
-function getNotificationColor(type, hex = false) {
-  const colors = {
-    [NotificationType.BUILD_STARTED]: hex ? '3B82F6' : '#3B82F6',
-    [NotificationType.BUILD_COMPLETED]: hex ? '22C55E' : 'good',
-    [NotificationType.BUILD_FAILED]: hex ? 'EF4444' : 'danger',
-    [NotificationType.APPROVAL_REQUIRED]: hex ? 'F59E0B' : 'warning',
-    [NotificationType.APPROVAL_APPROVED]: hex ? '22C55E' : 'good',
-    [NotificationType.APPROVAL_REJECTED]: hex ? 'EF4444' : 'danger',
-    [NotificationType.AGENT_COMPLETED]: hex ? '22C55E' : 'good',
-    [NotificationType.AGENT_FAILED]: hex ? 'F59E0B' : 'warning',
+function getNotificationColor(type: NotificationTypeValue, hex: boolean = false): string {
+  const colors: Record<NotificationTypeValue, { hex: string; slack: string }> = {
+    [NotificationType.BUILD_STARTED]: { hex: '3B82F6', slack: '#3B82F6' },
+    [NotificationType.BUILD_COMPLETED]: { hex: '22C55E', slack: 'good' },
+    [NotificationType.BUILD_FAILED]: { hex: 'EF4444', slack: 'danger' },
+    [NotificationType.APPROVAL_REQUIRED]: { hex: 'F59E0B', slack: 'warning' },
+    [NotificationType.APPROVAL_APPROVED]: { hex: '22C55E', slack: 'good' },
+    [NotificationType.APPROVAL_REJECTED]: { hex: 'EF4444', slack: 'danger' },
+    [NotificationType.AGENT_COMPLETED]: { hex: '22C55E', slack: 'good' },
+    [NotificationType.AGENT_FAILED]: { hex: 'F59E0B', slack: 'warning' },
   };
-  return colors[type] || (hex ? '6B7280' : '#6B7280');
+
+  const defaultColor = { hex: '6B7280', slack: '#6B7280' };
+  const color = colors[type] || defaultColor;
+
+  return hex ? color.hex : color.slack;
 }
 
 /**
  * Get team notification channels from Redis
  *
- * @param {Object} redis - Redis client
- * @param {string} teamId - Team ID
- * @returns {Promise<Array>} Notification channels
+ * @param redis - Redis client
+ * @param teamId - Team ID
+ * @returns Array of notification channels
  */
-async function getTeamNotificationChannels(redis, teamId) {
+export async function getTeamNotificationChannels(
+  redis: Redis,
+  teamId: string
+): Promise<Channel[]> {
   const teamKey = `team:${teamId}`;
   const teamData = await redis.get(teamKey);
 
@@ -458,18 +549,22 @@ async function getTeamNotificationChannels(redis, teamId) {
     return [];
   }
 
-  const team = JSON.parse(teamData);
+  const team = JSON.parse(teamData) as { notificationChannels?: Channel[] };
   return team.notificationChannels || [];
 }
 
 /**
  * Update team notification channels
  *
- * @param {Object} redis - Redis client
- * @param {string} teamId - Team ID
- * @param {Array} channels - Notification channels
+ * @param redis - Redis client
+ * @param teamId - Team ID
+ * @param channels - Notification channels
  */
-async function updateTeamNotificationChannels(redis, teamId, channels) {
+export async function updateTeamNotificationChannels(
+  redis: Redis,
+  teamId: string,
+  channels: Channel[]
+): Promise<void> {
   const teamKey = `team:${teamId}`;
   const teamData = await redis.get(teamKey);
 
@@ -477,22 +572,12 @@ async function updateTeamNotificationChannels(redis, teamId, channels) {
     throw new Error(`Team ${teamId} not found`);
   }
 
-  const team = JSON.parse(teamData);
+  const team = JSON.parse(teamData) as {
+    notificationChannels?: Channel[];
+    updatedAt?: string;
+  };
   team.notificationChannels = channels;
   team.updatedAt = new Date().toISOString();
 
   await redis.set(teamKey, JSON.stringify(team));
 }
-
-module.exports = {
-  NotificationType,
-  NotificationChannel,
-  sendNotification,
-  sendWebhook,
-  sendSlackNotification,
-  sendDiscordNotification,
-  sendEmailNotification,
-  getTeamNotificationChannels,
-  updateTeamNotificationChannels,
-  storeNotification,
-};

@@ -7,7 +7,8 @@
  * Integrates with Build Tracker for persistence and cost tracking.
  */
 
-const {
+import type { Redis } from 'ioredis';
+import {
   startBuild,
   markBuildRunning,
   completeBuild,
@@ -16,35 +17,180 @@ const {
   completeAgentRun,
   failAgentRun,
   getBuildStatus,
-} = require('./build-tracker');
+  type AgentRun,
+} from './build-tracker.js';
 
-const { getPreset, getPresetModels } = require('../config/presets');
+import { getPreset, getPresetModels } from '../config/presets.js';
 
-const {
+import {
   sendNotification,
   NotificationType,
   getTeamNotificationChannels,
-} = require('./notification-service');
+} from './notification-service.js';
 
-const { checkBudgetAfterBuild } = require('./budget-alert-service');
-const { logger } = require('../../dist/utils/logger');
+import { checkBudgetAfterBuild } from './budget-alert-service.js';
+import { logger } from '../utils/logger';
+
+/**
+ * Stream emitter interface
+ */
+interface StreamEmitter {
+  emitAgentStart: (data: { agent: string; task: string; buildId: string }) => void;
+  emitAgentComplete: (data: {
+    agent: string;
+    success: boolean;
+    duration: number;
+    buildId: string;
+  }) => void;
+  emitFileChange: (data: unknown) => void;
+  emitTestRun: (data: unknown) => void;
+  emitBuildStart: (data: { buildId: string }) => void;
+  emitBuildComplete: (data: { buildId: string; success: boolean; errors: string[] }) => void;
+  emitTaskStart: (data: unknown) => void;
+  emitTaskComplete: (data: unknown) => void;
+}
+
+// Create a no-op emitter as fallback
+const noOpEmitter: StreamEmitter = {
+  emitAgentStart: () => {},
+  emitAgentComplete: () => {},
+  emitFileChange: () => {},
+  emitTestRun: () => {},
+  emitBuildStart: () => {},
+  emitBuildComplete: () => {},
+  emitTaskStart: () => {},
+  emitTaskComplete: () => {},
+};
 
 // Try to import streamEmitter, but provide a fallback if not available
-let streamEmitter;
+let streamEmitter: StreamEmitter = noOpEmitter;
 try {
-  streamEmitter = require('../utils/events').streamEmitter;
-} catch (error) {
-  // Fallback: create a no-op emitter
-  streamEmitter = {
-    emitAgentStart: () => {},
-    emitAgentComplete: () => {},
-    emitFileChange: () => {},
-    emitTestRun: () => {},
-    emitBuildStart: () => {},
-    emitBuildComplete: () => {},
-    emitTaskStart: () => {},
-    emitTaskComplete: () => {},
-  };
+  const eventsModule = require('../utils/events.js');
+  streamEmitter = eventsModule.streamEmitter || noOpEmitter;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+} catch (_error) {
+  // Use fallback no-op emitter
+  streamEmitter = noOpEmitter;
+}
+
+/**
+ * Orchestration options
+ */
+export interface OrchestrationOptions {
+  teamId: string;
+  preset: string;
+  phase: string;
+  task: string;
+  projectPath: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Build result
+ */
+export interface BuildResult {
+  buildId: string;
+  success: boolean;
+  filesChanged: FileChange[];
+  testsWritten: TestInfo[];
+  docsUpdated: DocInfo[];
+  totalCost: number;
+  totalTokens: number;
+  duration: number;
+  errors: string[];
+}
+
+/**
+ * File change info
+ */
+interface FileChange {
+  path: string;
+  action: string;
+  changes: number;
+}
+
+/**
+ * Test info
+ */
+interface TestInfo {
+  path: string;
+  tests: number;
+}
+
+/**
+ * Documentation info
+ */
+interface DocInfo {
+  path: string;
+  action: string;
+  changes: number;
+}
+
+/**
+ * Agent execution result
+ */
+interface AgentExecutionResult {
+  inputTokens: number;
+  outputTokens: number;
+  duration: number;
+  output: Record<string, unknown> | null;
+  filesChanged?: FileChange[];
+  testsWritten?: TestInfo[];
+  docsUpdated?: DocInfo[];
+  runbook?: Array<{ step: number; description: string }>;
+  subtasks?: Array<{ id: string; description: string; agent: string }>;
+  executionPlan?: { parallel: boolean; sequential: boolean };
+}
+
+/**
+ * Execution sequence result
+ */
+interface ExecutionSequenceResult {
+  success: boolean;
+  filesChanged: FileChange[];
+  testsWritten: TestInfo[];
+  docsUpdated: DocInfo[];
+  errors: string[];
+  error?: string;
+}
+
+/**
+ * Agent execution options
+ */
+interface AgentExecutionOptions {
+  task: string;
+  projectPath: string;
+  runbook: Array<{ step: number; description: string }> | null;
+  subtasks: Array<{ id: string; description: string; agent: string }>;
+  executionPlan: { parallel: boolean; sequential: boolean } | null;
+  model: string;
+}
+
+/**
+ * Execution sequence options
+ */
+interface ExecutionSequenceOptions {
+  buildId: string;
+  teamId: string;
+  preset: string;
+  agentSequence: string[];
+  task: string;
+  projectPath: string;
+}
+
+/**
+ * Preset configuration
+ */
+interface PresetConfig {
+  agents?: Record<string, unknown>;
+}
+
+/**
+ * Model configuration
+ */
+interface ModelConfig {
+  id: string;
+  model_id?: string;
 }
 
 // ===================================================================
@@ -54,17 +200,14 @@ try {
 /**
  * Execute a multi-agent build
  *
- * @param {Object} redis - Redis client
- * @param {Object} options - Orchestration options
- * @param {string} options.teamId - Team ID
- * @param {string} options.preset - Preset ID (A, B, C, D)
- * @param {string} options.phase - Build phase (prototype or premium)
- * @param {string} options.task - Task description
- * @param {string} options.projectPath - Project path
- * @param {Object} options.metadata - Optional metadata
- * @returns {Promise<Object>} Build result with status and cost
+ * @param redis - Redis client
+ * @param options - Orchestration options
+ * @returns Build result with status and cost
  */
-async function orchestrateBuild(redis, options) {
+export async function orchestrateBuild(
+  redis: Redis,
+  options: OrchestrationOptions
+): Promise<BuildResult> {
   const { teamId, preset, phase, task, projectPath, metadata = {} } = options;
 
   // Validate preset
@@ -95,16 +238,21 @@ async function orchestrateBuild(redis, options) {
   try {
     const channels = await getTeamNotificationChannels(redis, teamId);
     if (channels.length > 0) {
-      await sendNotification(redis, {
-        type: NotificationType.BUILD_STARTED,
-        teamId,
-        buildId,
-        status: 'started',
-        message: `Build ${buildId} has started for preset ${preset}`,
-      }, channels);
+      await sendNotification(
+        redis,
+        {
+          type: NotificationType.BUILD_STARTED,
+          teamId,
+          buildId,
+          status: 'started',
+          message: `Build ${buildId} has started for preset ${preset}`,
+        },
+        channels
+      );
     }
   } catch (notifError) {
-    logger.error('Failed to send build start notification', { error: notifError.message, buildId, teamId });
+    const errorMsg = notifError instanceof Error ? notifError.message : 'Unknown error';
+    logger.error('Failed to send build start notification', { error: errorMsg, buildId, teamId });
   }
 
   try {
@@ -142,35 +290,42 @@ async function orchestrateBuild(redis, options) {
     try {
       const channels = await getTeamNotificationChannels(redis, teamId);
       if (channels.length > 0) {
-        await sendNotification(redis, {
-          type: NotificationType.BUILD_COMPLETED,
-          teamId,
-          buildId,
-          status: 'completed',
-          message: `Build ${buildId} completed successfully (${completedBuild.cost.totalCost.toFixed(2)} USD, ${Math.round(completedBuild.build.duration / 1000)}s)`,
-        }, channels);
+        await sendNotification(
+          redis,
+          {
+            type: NotificationType.BUILD_COMPLETED,
+            teamId,
+            buildId,
+            status: 'completed',
+            message: `Build ${buildId} completed successfully (${completedBuild.cost.totalCost.toFixed(2)} USD, ${Math.round((completedBuild.build.duration ?? 0) / 1000)}s)`,
+          },
+          channels
+        );
       }
     } catch (notifError) {
-      logger.error('Failed to send build completion notification', { error: notifError.message, buildId });
+      const errorMsg = notifError instanceof Error ? notifError.message : 'Unknown error';
+      logger.error('Failed to send build completion notification', { error: errorMsg, buildId });
     }
 
     // Check budget and send alerts if thresholds exceeded
     try {
-      const budgetCheck = await checkBudgetAfterBuild(
-        redis,
-        teamId,
-        completedBuild.cost.totalCost
-      );
+      const budgetCheck = await checkBudgetAfterBuild(redis, teamId, completedBuild.cost.totalCost);
       if (budgetCheck.alertSent) {
         logger.warn('Build cost exceeds budget limit', {
-          teamId, alertLevel: budgetCheck.alertLevel, percentage: budgetCheck.percentage
+          teamId,
+          alertLevel: budgetCheck.alertLevel,
+          percentage: budgetCheck.percentage,
         });
       }
     } catch (budgetError) {
-      logger.error('Failed to check budget', { error: budgetError.message, buildId });
+      const errorMsg = budgetError instanceof Error ? budgetError.message : 'Unknown error';
+      logger.error('Failed to check budget', { error: errorMsg, buildId });
     }
 
-    logger.info('Build completed successfully', { buildId, duration: completedBuild.build.duration });
+    logger.info('Build completed successfully', {
+      buildId,
+      duration: completedBuild.build.duration,
+    });
 
     return {
       buildId: build.id,
@@ -180,36 +335,43 @@ async function orchestrateBuild(redis, options) {
       docsUpdated: result.docsUpdated || [],
       totalCost: completedBuild.cost.totalCost,
       totalTokens: completedBuild.cost.totalTokens,
-      duration: completedBuild.build.duration,
+      duration: completedBuild.build.duration ?? 0,
       errors: result.errors || [],
     };
   } catch (error) {
-    logger.error('Build failed', { buildId, error: error.message, stack: error.stack });
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    logger.error('Build failed', { buildId, error: errorMsg, stack: errorStack });
 
     // Fail build
-    await failBuild(redis, buildId, error.message);
+    await failBuild(redis, buildId, errorMsg);
 
     // Emit build complete event with failure
     streamEmitter.emitBuildComplete({
       buildId,
       success: false,
-      errors: [error.message],
+      errors: [errorMsg],
     });
 
     // Send build failed notification
     try {
       const channels = await getTeamNotificationChannels(redis, teamId);
       if (channels.length > 0) {
-        await sendNotification(redis, {
-          type: NotificationType.BUILD_FAILED,
-          teamId,
-          buildId,
-          status: 'failed',
-          message: `Build ${buildId} failed: ${error.message}`,
-        }, channels);
+        await sendNotification(
+          redis,
+          {
+            type: NotificationType.BUILD_FAILED,
+            teamId,
+            buildId,
+            status: 'failed',
+            message: `Build ${buildId} failed: ${errorMsg}`,
+          },
+          channels
+        );
       }
     } catch (notifError) {
-      logger.error('Failed to send build failure notification', { error: notifError.message, buildId });
+      const notifErrorMsg = notifError instanceof Error ? notifError.message : 'Unknown error';
+      logger.error('Failed to send build failure notification', { error: notifErrorMsg, buildId });
     }
 
     throw error;
@@ -219,16 +381,19 @@ async function orchestrateBuild(redis, options) {
 /**
  * Execute agent sequence
  *
- * @param {Object} redis - Redis client
- * @param {Object} options - Execution options
- * @returns {Promise<Object>} Execution result
+ * @param redis - Redis client
+ * @param options - Execution options
+ * @returns Execution result
  */
-async function executeAgentSequence(redis, options) {
+async function executeAgentSequence(
+  redis: Redis,
+  options: ExecutionSequenceOptions
+): Promise<ExecutionSequenceResult> {
   const { buildId, teamId, preset, agentSequence, task, projectPath } = options;
 
   const presetModels = getPresetModels(preset);
 
-  const result = {
+  const result: ExecutionSequenceResult = {
     success: true,
     filesChanged: [],
     testsWritten: [],
@@ -237,15 +402,15 @@ async function executeAgentSequence(redis, options) {
   };
 
   // State to pass between agents
-  let runbook = null;
-  let subtasks = [];
-  let executionPlan = null;
+  let runbook: Array<{ step: number; description: string }> | null = null;
+  let subtasks: Array<{ id: string; description: string; agent: string }> = [];
+  let executionPlan: { parallel: boolean; sequential: boolean } | null = null;
 
   for (const agentName of agentSequence) {
     logger.info('Agent executing', { agent: agentName, buildId });
 
     // Get model for this agent
-    const model = presetModels[agentName];
+    const model = presetModels[agentName] as ModelConfig | undefined;
     if (!model) {
       logger.warn('Agent skipped - no model configured', { agent: agentName });
       continue;
@@ -280,7 +445,7 @@ async function executeAgentSequence(redis, options) {
       }
       if (agentName === 'coach' && agentResult.subtasks) {
         subtasks = agentResult.subtasks;
-        executionPlan = agentResult.executionPlan;
+        executionPlan = agentResult.executionPlan ?? null;
       }
 
       // Collect results
@@ -299,7 +464,7 @@ async function executeAgentSequence(redis, options) {
         success: true,
         inputTokens: agentResult.inputTokens || 0,
         outputTokens: agentResult.outputTokens || 0,
-        output: agentResult.output || null,
+        output: agentResult.output ? JSON.stringify(agentResult.output) : null,
       });
 
       // Emit agent complete event
@@ -312,16 +477,18 @@ async function executeAgentSequence(redis, options) {
 
       logger.info('Agent completed', { agent: agentName, duration: agentResult.duration || 0 });
     } catch (error) {
-      logger.error('Agent failed', { agent: agentName, error: error.message, stack: error.stack });
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      logger.error('Agent failed', { agent: agentName, error: errorMsg, stack: errorStack });
 
       // Record error
-      result.errors.push(`${agentName}: ${error.message}`);
+      result.errors.push(`${agentName}: ${errorMsg}`);
       result.success = false;
 
       // Fail agent run
       const agentRun = await getAgentRunByName(redis, buildId, agentName);
       if (agentRun) {
-        await failAgentRun(redis, agentRun.id, error.message);
+        await failAgentRun(redis, agentRun.id, errorMsg);
       }
 
       // Emit agent complete event with failure
@@ -345,24 +512,20 @@ async function executeAgentSequence(redis, options) {
 /**
  * Execute a single agent
  *
- * @param {string} agentName - Agent name
- * @param {Object} options - Execution options
- * @returns {Promise<Object>} Agent execution result
+ * @param agentName - Agent name
+ * @param options - Execution options
+ * @returns Agent execution result
  */
-async function executeAgent(agentName, options) {
-  const { task, projectPath, runbook, subtasks, executionPlan, model } = options;
-
+async function executeAgent(
+  agentName: string,
+  _options: AgentExecutionOptions
+): Promise<AgentExecutionResult> {
   // Simulate agent execution
   // In a real implementation, this would call the actual agent
   const startTime = Date.now();
 
   // Mock execution based on agent type
-  let result = {
-    inputTokens: 0,
-    outputTokens: 0,
-    duration: 0,
-    output: null,
-  };
+  let result: AgentExecutionResult;
 
   switch (agentName) {
     case 'supervisor':
@@ -460,10 +623,10 @@ async function executeAgent(agentName, options) {
 /**
  * Get agent sequence from preset configuration
  *
- * @param {Object} preset - Preset configuration
- * @returns {Array<string>} Array of agent names in execution order
+ * @param preset - Preset configuration
+ * @returns Array of agent names in execution order
  */
-function getAgentSequence(preset) {
+function getAgentSequence(preset: PresetConfig): string[] {
   // Default sequence
   const defaultSequence = ['supervisor', 'architect', 'coach', 'code', 'review', 'test', 'docs'];
 
@@ -480,20 +643,24 @@ function getAgentSequence(preset) {
 /**
  * Helper: Get agent run by agent name
  *
- * @param {Object} redis - Redis client
- * @param {string} buildId - Build ID
- * @param {string} agentName - Agent name
- * @returns {Promise<Object|null>} Agent run or null
+ * @param redis - Redis client
+ * @param buildId - Build ID
+ * @param agentName - Agent name
+ * @returns Agent run or null
  */
-async function getAgentRunByName(redis, buildId, agentName) {
-  const { getBuildAgentRuns, getAgentRun } = require('../database/redis-schema');
+async function getAgentRunByName(
+  redis: Redis,
+  buildId: string,
+  agentName: string
+): Promise<AgentRun | null> {
+  const { getBuildAgentRuns, getAgentRun } = await import('../database/redis-schema.js');
 
   const runIds = await getBuildAgentRuns(redis, buildId);
 
   for (const runId of runIds) {
     const run = await getAgentRun(redis, runId);
     if (run && run.agentName === agentName) {
-      return run;
+      return run as AgentRun;
     }
   }
 
@@ -507,11 +674,32 @@ async function getAgentRunByName(redis, buildId, agentName) {
 /**
  * Get live build progress
  *
- * @param {Object} redis - Redis client
- * @param {string} buildId - Build ID
- * @returns {Promise<Object>} Build progress
+ * @param redis - Redis client
+ * @param buildId - Build ID
+ * @returns Build progress
  */
-async function getBuildProgress(redis, buildId) {
+export async function getBuildProgress(
+  redis: Redis,
+  buildId: string
+): Promise<{
+  buildId: string;
+  status: string;
+  currentAgent: string | null | undefined;
+  progress: { percent: number; completed: number; total: number };
+  agentRuns: Array<{
+    agent: string;
+    status: string;
+    tokens: number;
+    cost: number;
+    duration: number;
+  }>;
+  cost: {
+    totalCost: number;
+    totalTokens: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+  } | null;
+}> {
   const status = await getBuildStatus(redis, buildId);
 
   return {
@@ -529,16 +717,3 @@ async function getBuildProgress(redis, buildId) {
     cost: status.cost,
   };
 }
-
-// ===================================================================
-// EXPORTS
-// ===================================================================
-
-module.exports = {
-  // Orchestration
-  orchestrateBuild,
-  executeAgentSequence,
-
-  // Monitoring
-  getBuildProgress,
-};

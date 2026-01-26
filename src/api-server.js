@@ -11,14 +11,14 @@ const {
   sendNotification,
   NotificationType,
   getTeamNotificationChannels,
-} = require('./services/notification-service');
+} = require('../dist/services/notification-service.js');
 const {
   ExportFormat,
   exportBuildReport,
   exportCostReport,
   exportAgentPerformanceReport,
   exportBudgetReport,
-} = require('./services/export-service');
+} = require('../dist/services/export-service.js');
 const {
   createUser,
   authenticateUser,
@@ -26,7 +26,7 @@ const {
   revokeRefreshToken,
   createApiKey,
   Roles,
-} = require('./services/auth-service');
+} = require('../dist/services/auth-service.js');
 const {
   authenticate,
   requireRole,
@@ -1969,7 +1969,7 @@ const {
   getTeamBudgetLimit,
   getBudgetStatus,
   getBudgetAlertHistory,
-} = require('./services/budget-alert-service');
+} = require('../dist/services/budget-alert-service.js');
 
 /**
  * Set team budget limits

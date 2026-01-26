@@ -6,14 +6,20 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { Redis } from 'ioredis';
-import { verifyToken, verifyApiKey, hasRole, Roles } from '../../src/services/auth-service';
+import {
+  verifyToken,
+  verifyApiKey,
+  hasRole,
+  Roles,
+  type RoleValue,
+} from '../services/auth-service.js';
 
 /**
  * Authentication data attached to request
  */
 interface AuthData {
   type: 'apikey' | 'jwt';
-  role: string;
+  role: RoleValue;
   userId?: string;
   email?: string;
   teamId?: string;
@@ -118,7 +124,7 @@ function authenticate(
             type: 'jwt',
             userId: decoded.userId,
             email: decoded.email,
-            role: decoded.role,
+            role: decoded.role || 'viewer',
           };
 
           return next();
@@ -166,7 +172,7 @@ function authenticate(
  * @param requiredRole - Required role(s)
  */
 function requireRole(
-  requiredRole: string | string[]
+  requiredRole: RoleValue | RoleValue[]
 ): (req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response {
   const requiredRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
 

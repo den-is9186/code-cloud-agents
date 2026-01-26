@@ -8,34 +8,165 @@
  * - Budget status reports
  */
 
-const { Parser } = require('json2csv');
-const { logger } = require('../../dist/utils/logger');
+import { Parser } from 'json2csv';
+import type { Redis } from 'ioredis';
+import { logger } from '../utils/logger';
+import type { BudgetStatus } from './budget-alert-service.js';
 
 /**
  * Export formats
  */
-const ExportFormat = {
+export const ExportFormat = {
   JSON: 'json',
   CSV: 'csv',
   TEXT: 'text',
-};
+} as const;
+
+export type ExportFormatValue = (typeof ExportFormat)[keyof typeof ExportFormat];
+
+/**
+ * Agent run data structure
+ */
+interface AgentRun {
+  id: string;
+  agentName: string;
+  status: string;
+  cost?: number;
+  totalTokens?: number;
+  duration?: number;
+  model: string;
+}
+
+/**
+ * Build details structure
+ */
+interface BuildDetails {
+  id: string;
+  teamId: string;
+  status: string;
+  preset: string;
+  phase: string;
+  totalCost: number;
+  totalTokens: number;
+  duration?: number;
+  createdAt: string;
+  completedAt?: string;
+  agentRuns?: AgentRun[];
+}
+
+/**
+ * Build export options
+ */
+export interface BuildExportOptions {
+  buildId?: string;
+  teamId?: string;
+  startDate?: Date;
+  endDate?: Date;
+  format?: ExportFormatValue;
+}
+
+/**
+ * Cost export options
+ */
+export interface CostExportOptions {
+  teamId: string;
+  period?: 'month' | 'quarter' | 'year';
+  startDate?: Date;
+  endDate?: Date;
+  format?: ExportFormatValue;
+}
+
+/**
+ * Agent performance export options
+ */
+export interface AgentPerformanceOptions {
+  teamId?: string;
+  agentName?: string;
+  startDate?: Date;
+  endDate?: Date;
+  format?: ExportFormatValue;
+}
+
+/**
+ * Cost data structure
+ */
+interface CostData {
+  teamId: string;
+  period: string;
+  startDate: string;
+  endDate: string;
+  totalBuilds: number;
+  totalCost: number;
+  totalTokens: number;
+  costByAgent: Record<string, { cost: number; tokens: number; runs: number }>;
+  costByModel: Record<string, { cost: number; tokens: number; runs: number }>;
+  buildDetails: Array<{
+    buildId: string;
+    status: string;
+    cost: number;
+    tokens: number;
+    duration?: number;
+    createdAt: string;
+  }>;
+}
+
+/**
+ * Agent stats structure
+ */
+interface AgentStats {
+  totalRuns: number;
+  successfulRuns: number;
+  failedRuns: number;
+  totalCost: number;
+  totalTokens: number;
+  avgDuration: number;
+  avgCost: number;
+  totalDuration: number;
+  successRate?: number;
+}
+
+/**
+ * Performance data structure
+ */
+interface PerformanceData {
+  period: {
+    startDate: string;
+    endDate: string;
+  };
+  totalBuilds: number;
+  agentStats: Record<string, AgentStats>;
+}
+
+/**
+ * Budget report data structure
+ */
+interface BudgetReportData {
+  teamId: string;
+  generatedAt: string;
+  budgetLimits: BudgetStatus['budgetLimits'];
+  currentSpending: {
+    monthly: number;
+    percentage?: string;
+    remaining?: number;
+    status?: string;
+  };
+  alertHistory: BudgetStatus['alertHistory'];
+}
 
 /**
  * Export build report
  *
- * @param {Object} redis - Redis client
- * @param {Object} options - Export options
- * @param {string} options.buildId - Build ID (optional, if not provided exports all)
- * @param {string} options.teamId - Team ID filter (optional)
- * @param {Date} options.startDate - Start date filter (optional)
- * @param {Date} options.endDate - End date filter (optional)
- * @param {string} options.format - Export format (json, csv)
- * @returns {Promise<string>} Exported data as string
+ * @param redis - Redis client
+ * @param options - Export options
+ * @returns Exported data as string
  */
-async function exportBuildReport(redis, options = {}) {
+export async function exportBuildReport(
+  redis: Redis,
+  options: BuildExportOptions = {}
+): Promise<string> {
   const { buildId, teamId, startDate, endDate, format = ExportFormat.JSON } = options;
 
-  let builds = [];
+  let builds: BuildDetails[] = [];
 
   if (buildId) {
     // Single build export
@@ -59,16 +190,11 @@ async function exportBuildReport(redis, options = {}) {
 /**
  * Export cost report
  *
- * @param {Object} redis - Redis client
- * @param {Object} options - Export options
- * @param {string} options.teamId - Team ID (required)
- * @param {string} options.period - Period (month, quarter, year)
- * @param {Date} options.startDate - Start date
- * @param {Date} options.endDate - End date
- * @param {string} options.format - Export format
- * @returns {Promise<string>} Exported cost data
+ * @param redis - Redis client
+ * @param options - Export options
+ * @returns Exported cost data
  */
-async function exportCostReport(redis, options = {}) {
+export async function exportCostReport(redis: Redis, options: CostExportOptions): Promise<string> {
   const { teamId, period = 'month', startDate, endDate, format = ExportFormat.JSON } = options;
 
   if (!teamId) {
@@ -82,7 +208,7 @@ async function exportCostReport(redis, options = {}) {
   const builds = await getBuilds(redis, { teamId, startDate: start, endDate: end });
 
   // Calculate costs
-  const costData = {
+  const costData: CostData = {
     teamId,
     period,
     startDate: start.toISOString(),
@@ -144,21 +270,19 @@ async function exportCostReport(redis, options = {}) {
 /**
  * Export agent performance report
  *
- * @param {Object} redis - Redis client
- * @param {Object} options - Export options
- * @param {string} options.teamId - Team ID filter (optional)
- * @param {string} options.agentName - Agent name filter (optional)
- * @param {Date} options.startDate - Start date (optional)
- * @param {Date} options.endDate - End date (optional)
- * @param {string} options.format - Export format
- * @returns {Promise<string>} Agent performance data
+ * @param redis - Redis client
+ * @param options - Export options
+ * @returns Agent performance data
  */
-async function exportAgentPerformanceReport(redis, options = {}) {
+export async function exportAgentPerformanceReport(
+  redis: Redis,
+  options: AgentPerformanceOptions = {}
+): Promise<string> {
   const { teamId, agentName, startDate, endDate, format = ExportFormat.JSON } = options;
 
   const builds = await getBuilds(redis, { teamId, startDate, endDate });
 
-  const performanceData = {
+  const performanceData: PerformanceData = {
     period: {
       startDate: startDate ? startDate.toISOString() : 'all',
       endDate: endDate ? endDate.toISOString() : 'all',
@@ -209,9 +333,11 @@ async function exportAgentPerformanceReport(redis, options = {}) {
   // Calculate averages
   for (const agent in performanceData.agentStats) {
     const stats = performanceData.agentStats[agent];
-    stats.avgDuration = stats.totalRuns > 0 ? stats.totalDuration / stats.totalRuns : 0;
-    stats.avgCost = stats.totalRuns > 0 ? stats.totalCost / stats.totalRuns : 0;
-    stats.successRate = stats.totalRuns > 0 ? (stats.successfulRuns / stats.totalRuns) * 100 : 0;
+    if (stats) {
+      stats.avgDuration = stats.totalRuns > 0 ? stats.totalDuration / stats.totalRuns : 0;
+      stats.avgCost = stats.totalRuns > 0 ? stats.totalCost / stats.totalRuns : 0;
+      stats.successRate = stats.totalRuns > 0 ? (stats.successfulRuns / stats.totalRuns) * 100 : 0;
+    }
   }
 
   if (format === ExportFormat.CSV) {
@@ -224,13 +350,17 @@ async function exportAgentPerformanceReport(redis, options = {}) {
 /**
  * Export budget report
  *
- * @param {Object} redis - Redis client
- * @param {string} teamId - Team ID
- * @param {string} format - Export format
- * @returns {Promise<string>} Budget report data
+ * @param redis - Redis client
+ * @param teamId - Team ID
+ * @param format - Export format
+ * @returns Budget report data
  */
-async function exportBudgetReport(redis, teamId, format = ExportFormat.JSON) {
-  const { getBudgetStatus } = require('./budget-alert-service');
+export async function exportBudgetReport(
+  redis: Redis,
+  teamId: string,
+  format: ExportFormatValue = ExportFormat.JSON
+): Promise<string> {
+  const { getBudgetStatus } = await import('./budget-alert-service.js');
 
   const budgetStatus = await getBudgetStatus(redis, teamId);
 
@@ -238,7 +368,7 @@ async function exportBudgetReport(redis, teamId, format = ExportFormat.JSON) {
     throw new Error(`No budget data found for team ${teamId}`);
   }
 
-  const reportData = {
+  const reportData: BudgetReportData = {
     teamId: budgetStatus.teamId,
     generatedAt: new Date().toISOString(),
     budgetLimits: budgetStatus.budgetLimits,
@@ -264,9 +394,13 @@ async function exportBudgetReport(redis, teamId, format = ExportFormat.JSON) {
 
 /**
  * Get build details
+ *
+ * @param redis - Redis client
+ * @param buildId - Build ID
+ * @returns Build details or null
  */
-async function getBuildDetails(redis, buildId) {
-  const { getBuildStatus } = require('./build-tracker');
+async function getBuildDetails(redis: Redis, buildId: string): Promise<BuildDetails | null> {
+  const { getBuildStatus } = await import('./build-tracker.js');
 
   try {
     const status = await getBuildStatus(redis, buildId);
@@ -276,17 +410,18 @@ async function getBuildDetails(redis, buildId) {
       status: status.build.status,
       preset: status.build.preset,
       phase: status.build.phase,
-      totalCost: status.cost.totalCost,
-      totalTokens: status.cost.totalTokens,
+      totalCost: status.cost?.totalCost ?? 0,
+      totalTokens: status.cost?.totalTokens ?? 0,
       duration: status.build.duration,
       createdAt: status.build.createdAt,
       completedAt: status.build.completedAt,
       agentRuns: status.agentRuns,
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     logger.error('Failed to get build for export', {
       buildId,
-      error: error.message,
+      error: errorMessage,
     });
     return null;
   }
@@ -294,8 +429,15 @@ async function getBuildDetails(redis, buildId) {
 
 /**
  * Get builds with filters
+ *
+ * @param redis - Redis client
+ * @param filters - Filter options
+ * @returns Array of builds
  */
-async function getBuilds(redis, filters = {}) {
+async function getBuilds(
+  redis: Redis,
+  filters: { teamId?: string; startDate?: Date; endDate?: Date } = {}
+): Promise<BuildDetails[]> {
   const { teamId, startDate, endDate } = filters;
 
   // Get team builds
@@ -305,7 +447,7 @@ async function getBuilds(redis, filters = {}) {
 
   const buildIds = await redis.zrange(`team:${teamId}:builds`, 0, -1);
 
-  const builds = [];
+  const builds: BuildDetails[] = [];
   for (const buildId of buildIds) {
     const build = await getBuildDetails(redis, buildId);
     if (!build) continue;
@@ -326,15 +468,25 @@ async function getBuilds(redis, filters = {}) {
 
 /**
  * Calculate date range based on period
+ *
+ * @param period - Time period
+ * @param startDate - Start date override
+ * @param endDate - End date override
+ * @returns Start and end dates
  */
-function calculateDateRange(period, startDate, endDate) {
+function calculateDateRange(
+  period: 'month' | 'quarter' | 'year',
+  startDate?: Date,
+  endDate?: Date
+): { start: Date; end: Date } {
   const now = new Date();
 
   if (startDate && endDate) {
     return { start: new Date(startDate), end: new Date(endDate) };
   }
 
-  let start, end;
+  let start: Date;
+  let end: Date;
 
   switch (period) {
     case 'month':
@@ -368,8 +520,11 @@ function calculateDateRange(period, startDate, endDate) {
 
 /**
  * Format build report as CSV
+ *
+ * @param builds - Array of builds
+ * @returns CSV string
  */
-function formatBuildReportCSV(builds) {
+function formatBuildReportCSV(builds: BuildDetails[]): string {
   const fields = [
     'id',
     'teamId',
@@ -389,9 +544,12 @@ function formatBuildReportCSV(builds) {
 
 /**
  * Format cost report as CSV
+ *
+ * @param costData - Cost data
+ * @returns CSV string
  */
-function formatCostReportCSV(costData) {
-  const lines = [];
+function formatCostReportCSV(costData: CostData): string {
+  const lines: string[] = [];
 
   // Summary
   lines.push('Cost Report Summary');
@@ -432,9 +590,12 @@ function formatCostReportCSV(costData) {
 
 /**
  * Format agent performance as CSV
+ *
+ * @param performanceData - Performance data
+ * @returns CSV string
  */
-function formatAgentPerformanceCSV(performanceData) {
-  const lines = [];
+function formatAgentPerformanceCSV(performanceData: PerformanceData): string {
+  const lines: string[] = [];
 
   lines.push('Agent Performance Report');
   lines.push(`Period,${performanceData.period.startDate} to ${performanceData.period.endDate}`);
@@ -447,7 +608,7 @@ function formatAgentPerformanceCSV(performanceData) {
 
   for (const [agent, stats] of Object.entries(performanceData.agentStats)) {
     lines.push(
-      `${agent},${stats.totalRuns},${stats.successfulRuns},${stats.failedRuns},${stats.successRate.toFixed(2)},${stats.totalCost.toFixed(2)},${stats.avgCost.toFixed(4)},${stats.totalTokens},${Math.round(stats.avgDuration)}`
+      `${agent},${stats.totalRuns},${stats.successfulRuns},${stats.failedRuns},${(stats.successRate ?? 0).toFixed(2)},${stats.totalCost.toFixed(2)},${stats.avgCost.toFixed(4)},${stats.totalTokens},${Math.round(stats.avgDuration)}`
     );
   }
 
@@ -456,9 +617,12 @@ function formatAgentPerformanceCSV(performanceData) {
 
 /**
  * Format budget report as CSV
+ *
+ * @param reportData - Budget report data
+ * @returns CSV string
  */
-function formatBudgetReportCSV(reportData) {
-  const lines = [];
+function formatBudgetReportCSV(reportData: BudgetReportData): string {
+  const lines: string[] = [];
 
   lines.push('Budget Report');
   lines.push(`Team ID,${reportData.teamId}`);
@@ -489,11 +653,3 @@ function formatBudgetReportCSV(reportData) {
 
   return lines.join('\n');
 }
-
-module.exports = {
-  ExportFormat,
-  exportBuildReport,
-  exportCostReport,
-  exportAgentPerformanceReport,
-  exportBudgetReport,
-};

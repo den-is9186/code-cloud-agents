@@ -6,7 +6,7 @@ jest.mock('ioredis');
 
 const app = require('../src/api-server');
 const { States } = require('../src/workflow/state-machine');
-const { generateToken, Roles } = require('../src/services/auth-service');
+const { generateToken, Roles } = require('../dist/services/auth-service');
 
 // Helper to generate test auth token
 function getTestToken(role = Roles.MANAGER) {

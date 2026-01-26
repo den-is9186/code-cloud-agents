@@ -15,7 +15,7 @@ const {
   getTeamBuildHistory,
   getLatestTeamBuild,
   getBuildStatistics,
-} = require('../src/services/build-tracker');
+} = require('../dist/services/build-tracker');
 
 const { getBuild, getAgentRun } = require('../src/database/redis-schema');
 

@@ -11,10 +11,10 @@ const {
   exportCostReport,
   exportAgentPerformanceReport,
   exportBudgetReport,
-} = require('../src/services/export-service');
+} = require('../dist/services/export-service');
 const { getTestToken, Roles } = require('./helpers/auth-helper');
 
-jest.mock('../src/services/export-service');
+jest.mock('../dist/services/export-service');
 
 // Helper to create authenticated request (MANAGER role for team ownership endpoints)
 const authGet = (url) =>
