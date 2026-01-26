@@ -32,6 +32,8 @@ const {
   requireTeamOwnership,
   rateLimit,
 } = require('./middleware/auth');
+const { cors } = require('./middleware/cors');
+const { csrfProtection, getCsrfTokenEndpoint } = require('./middleware/csrf');
 
 const app = express();
 
@@ -56,6 +58,9 @@ redis.on('error', (err) => {
 redis.on('connect', () => {
   console.log('Redis connected successfully');
 });
+
+// CORS middleware (must be early in the chain)
+app.use(cors());
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -321,6 +326,15 @@ app.get('/health', async (req, res) => {
     });
   }
 });
+
+/**
+ * Get CSRF token (for cookie-based sessions)
+ * GET /api/csrf-token
+ *
+ * Note: Not needed for JWT-based API authentication
+ * Only use this if implementing cookie-based sessions
+ */
+app.get('/api/csrf-token', getCsrfTokenEndpoint);
 
 // =============================================================================
 // Agent State Management API
@@ -2467,6 +2481,107 @@ const gracefulShutdown = async (signal) => {
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// =============================================================================
+// GLOBAL ERROR HANDLERS
+// =============================================================================
+
+// Track if we're already shutting down to prevent multiple shutdowns
+let isShuttingDown = false;
+
+/**
+ * Handle unhandled promise rejections
+ * These occur when a Promise is rejected and no .catch() handler is attached
+ */
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🚨 Unhandled Rejection detected:');
+  console.error('   Reason:', reason);
+  console.error('   Promise:', promise);
+
+  // Log stack trace if available
+  if (reason instanceof Error) {
+    console.error('   Stack:', reason.stack);
+  }
+
+  // In production, we might want to gracefully shutdown
+  // For now, we log and continue, but track the error
+  if (process.env.NODE_ENV === 'production') {
+    // Optionally send to error tracking service (e.g., Sentry)
+    // sendToErrorTracking(reason);
+  }
+});
+
+/**
+ * Handle uncaught exceptions
+ * These are synchronous errors that were not caught in a try/catch block
+ * CRITICAL: These can leave the application in an undefined state
+ */
+process.on('uncaughtException', async (error) => {
+  console.error('💀 Uncaught Exception detected:');
+  console.error('   Error:', error.message);
+  console.error('   Stack:', error.stack);
+
+  // Uncaught exceptions are critical - the application state may be corrupted
+  // We must shutdown gracefully to prevent data corruption
+  if (!isShuttingDown) {
+    isShuttingDown = true;
+    console.error('⚠️  Application state may be corrupted. Initiating graceful shutdown...');
+
+    try {
+      // Give ongoing requests a chance to complete (max 10 seconds)
+      await new Promise((resolve) => {
+        const timeout = setTimeout(resolve, 10000);
+
+        if (server) {
+          server.close(() => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        } else {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+
+      // Close Redis connection
+      await redis.quit().catch(() => {});
+
+      console.error('✓ Graceful shutdown completed after uncaught exception');
+    } catch (shutdownError) {
+      console.error('Error during graceful shutdown:', shutdownError);
+    }
+
+    // Exit with error code
+    process.exit(1);
+  }
+});
+
+/**
+ * Handle uncaughtExceptionMonitor
+ * This allows monitoring uncaught exceptions without preventing the default behavior
+ * Useful for logging/metrics while still allowing the process to crash
+ */
+process.on('uncaughtExceptionMonitor', (error, origin) => {
+  console.error(`📊 Exception Monitor: ${origin}`);
+  console.error('   This is logged before the uncaughtException handler runs');
+
+  // Track metrics here
+  // metrics.increment('uncaught_exceptions', { origin });
+});
+
+/**
+ * Handle process warnings
+ * Node.js emits warnings for various conditions (memory, deprecated APIs, etc.)
+ */
+process.on('warning', (warning) => {
+  console.warn('⚠️  Process Warning:');
+  console.warn('   Name:', warning.name);
+  console.warn('   Message:', warning.message);
+
+  if (warning.stack) {
+    console.warn('   Stack:', warning.stack);
+  }
+});
 
 // Export app for testing
 module.exports = app;
