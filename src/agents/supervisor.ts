@@ -1,4 +1,4 @@
-import { Agent, AgentRole, BuildResult, SubTask, ReviewResult, FileChange, TestFile, TestResult } from './types';
+import { Agent, AgentRole, BuildResult, SubTask, ReviewResult, FileChange, TestFile, TestResult, Step, Dependency, Issue, TestFailure } from './types';
 import { llmClient } from '../llm/client';
 
 interface SupervisorConfig {
@@ -40,7 +40,7 @@ export class SupervisorAgent implements Agent {
       // Step 1: Architect creates runbook
       console.log('📐 Architect analyzing task...');
       const architect = this.getAgent('architect');
-      const { runbook } = await architect.execute(input);
+      const { runbook } = await (architect as Agent<{ task: string; projectPath: string }, { runbook: Step[]; estimatedComplexity: string }>).execute(input);
 
       // Step 2: Coach creates subtasks
       console.log('🎯 Coach planning tasks...');
@@ -77,7 +77,7 @@ export class SupervisorAgent implements Agent {
             try {
               await this.executeTaskWithResult(task, taskChanges);
               return taskChanges;
-            } catch (error: any) {
+            } catch (error: unknown) {
               const errorMessage = error instanceof Error ? error.message : String(error);
               console.error(`❌ Task ${taskId} failed:`, errorMessage);
               taskChanges.errors = [errorMessage];

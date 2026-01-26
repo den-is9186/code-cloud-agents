@@ -5,11 +5,11 @@ export type AgentRole = "supervisor" | "architect" | "coach" | "code" | "review"
 export type AgentStatus = "idle" | "working" | "waiting" | "error" | "done";
 
 // Base Agent Interface
-export interface Agent {
+export interface Agent<TInput = unknown, TOutput = unknown> {
   role: AgentRole;
   model: string;
   status: AgentStatus;
-  execute(input: any): Promise<any>;
+  execute(input: TInput): Promise<TOutput>;
 }
 
 // Runbook Types
@@ -24,7 +24,6 @@ export interface Step {
 export interface TaskInput {
   files?: string[];
   feedback?: ReviewResult;
-  [key: string]: any;
 }
 
 export interface SubTask {
@@ -112,7 +111,7 @@ export interface TokenUsage {
 export interface ToolCall {
   id: string;
   name: string;
-  arguments: Record<string, any>;
+  arguments: Record<string, unknown>;
 }
 
 export interface LLMResponse {
