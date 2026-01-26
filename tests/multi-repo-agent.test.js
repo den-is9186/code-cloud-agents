@@ -365,6 +365,72 @@ describe('MultiRepoAgent', () => {
       expect(result.changes[0].filesChanged).toHaveLength(0);
     });
 
+    test('should handle LLM response with markdown code fences (```json)', async () => {
+      const mockRepos = [{ path: '/repos/repo1', name: 'repo1' }];
+
+      mockReaddir.mockResolvedValue([]);
+
+      llmClient.chat.mockResolvedValue({
+        content: '```json\n{"files": [{"path": "src/config.js", "action": "modify", "content": "config"}], "explanation": "Updated"}\n```',
+        usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
+      });
+
+      const result = await agent.execute({
+        repos: mockRepos,
+        task: 'Update',
+        changes: 'Changes',
+        createPRs: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.changes[0].filesChanged).toHaveLength(1);
+      expect(result.changes[0].filesChanged[0].path).toBe('src/config.js');
+    });
+
+    test('should handle LLM response with markdown code fences (```)', async () => {
+      const mockRepos = [{ path: '/repos/repo1', name: 'repo1' }];
+
+      mockReaddir.mockResolvedValue([]);
+
+      llmClient.chat.mockResolvedValue({
+        content: '```\n{"files": [{"path": "README.md", "action": "create", "content": "# README"}], "explanation": "Created README"}\n```',
+        usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
+      });
+
+      const result = await agent.execute({
+        repos: mockRepos,
+        task: 'Create README',
+        changes: 'Add README',
+        createPRs: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.changes[0].filesChanged).toHaveLength(1);
+      expect(result.changes[0].filesChanged[0].path).toBe('README.md');
+    });
+
+    test('should handle LLM response with uppercase JSON marker (```JSON)', async () => {
+      const mockRepos = [{ path: '/repos/repo1', name: 'repo1' }];
+
+      mockReaddir.mockResolvedValue([]);
+
+      llmClient.chat.mockResolvedValue({
+        content: '```JSON\n{"files": [{"path": "test.js", "action": "modify", "content": "test"}]}\n```',
+        usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
+      });
+
+      const result = await agent.execute({
+        repos: mockRepos,
+        task: 'Update test',
+        changes: 'Change test',
+        createPRs: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.changes[0].filesChanged).toHaveLength(1);
+      expect(result.changes[0].filesChanged[0].path).toBe('test.js');
+    });
+
     test('should generate summary', async () => {
       const mockRepos = [
         { path: '/repos/repo1', name: 'repo1' },
