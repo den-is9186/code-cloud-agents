@@ -10,7 +10,8 @@ export type AgentRole =
   | 'vision'
   | 'refactor'
   | 'merge'
-  | 'tool-builder';
+  | 'tool-builder'
+  | 'multi-repo';
 
 // Agent Status
 export type AgentStatus =
@@ -190,4 +191,41 @@ export interface AgentAssignment {
   role: AgentRole;
   model: string;
   reason: string;
+}
+
+// Multi-Repo Types
+export interface RepositoryConfig {
+  path: string;
+  name: string;
+  branch?: string;
+  remote?: string;
+}
+
+export interface MultiRepoChange {
+  repo: string;
+  filesChanged: FileChange[];
+  branch: string;
+  commitHash?: string;
+  prUrl?: string;
+}
+
+export interface MultiRepoOperation {
+  repos: RepositoryConfig[];
+  task: string;
+  changes: string;
+  createPRs: boolean;
+  baseBranch?: string;
+  targetBranch?: string;
+}
+
+export interface MultiRepoResult {
+  success: boolean;
+  reposProcessed: number;
+  reposFailed: number;
+  changes: MultiRepoChange[];
+  errors: Array<{ repo: string; error: string }>;
+  summary: string;
+  totalCost: number;
+  totalTokens: number;
+  duration: number;
 }
