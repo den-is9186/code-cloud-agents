@@ -1,14 +1,351 @@
 # Capabilities Registry
 # Jede Feature-Funktion wird hier registriert mit Test-Anforderungen
 
-version: "1.0"
+schema_version: "2.0"
 project: "code-cloud-agents"
+updated: "2026-01-26"
 
-capabilities:
+# ═══════════════════════════════════════════════════════════════
+# MULTI-AGENT SYSTEM CAPABILITIES (NEU)
+# ═══════════════════════════════════════════════════════════════
+
+multi_agent_system:
+
+  # ──────────────────────────────────────────────────────────────
+  # Team Management
+  # ──────────────────────────────────────────────────────────────
+
+  - id: "team-management"
+    name: "Team Management"
+    description: "Create, configure, and manage agent teams"
+    mode: "HTTP"
+    criticality: "HIGH"
+    status: "planned"
+    endpoints:
+      - "GET /api/teams"
+      - "POST /api/teams"
+      - "GET /api/teams/:id"
+      - "PUT /api/teams/:id"
+      - "DELETE /api/teams/:id"
+    tests_required:
+      - type: "unit"
+        name: "team_create_validation"
+        description: "Validate team creation input (name, repo, preset, task)"
+      - type: "http"
+        name: "team_create_201"
+        description: "POST /api/teams returns 201 Created with team object"
+      - type: "http"
+        name: "team_list_200"
+        description: "GET /api/teams returns 200 with team array"
+      - type: "http"
+        name: "team_get_200"
+        description: "GET /api/teams/:id returns 200 with team details"
+      - type: "http"
+        name: "team_update_200"
+        description: "PUT /api/teams/:id updates and returns 200"
+      - type: "http"
+        name: "team_delete_204"
+        description: "DELETE /api/teams/:id returns 204 No Content"
+      - type: "integration"
+        name: "team_crud_flow"
+        description: "Full CRUD flow: Create → Read → Update → Delete"
+
+  # ──────────────────────────────────────────────────────────────
+  # Workflow Control
+  # ──────────────────────────────────────────────────────────────
+
+  - id: "workflow-control"
+    name: "Workflow Control"
+    description: "Control build workflow with approval gates (Prototype → Approval → Premium)"
+    mode: "HTTP"
+    criticality: "CRITICAL"
+    status: "planned"
+    endpoints:
+      - "GET /api/teams/:id/status"
+      - "POST /api/teams/:id/approve"
+      - "POST /api/teams/:id/reject"
+      - "POST /api/teams/:id/partial"
+      - "POST /api/teams/:id/skip-premium"
+    tests_required:
+      - type: "unit"
+        name: "workflow_state_machine"
+        description: "Test state transitions: TEAM_CREATED → PROTOTYPE_RUNNING → AWAITING_APPROVAL → PREMIUM_RUNNING → COMPLETED"
+      - type: "unit"
+        name: "workflow_state_validation"
+        description: "Validate illegal transitions (e.g., COMPLETED → PROTOTYPE_RUNNING)"
+      - type: "http"
+        name: "status_200"
+        description: "GET /api/teams/:id/status returns 200 with workflow state"
+      - type: "http"
+        name: "approve_triggers_premium"
+        description: "POST /api/teams/:id/approve triggers premium build (Preset C)"
+      - type: "http"
+        name: "reject_restarts_prototype"
+        description: "POST /api/teams/:id/reject restarts prototype with new requirements"
+      - type: "http"
+        name: "partial_adjusts_prototype"
+        description: "POST /api/teams/:id/partial adjusts and re-runs prototype"
+      - type: "http"
+        name: "skip_completes_workflow"
+        description: "POST /api/teams/:id/skip-premium marks workflow as completed"
+      - type: "integration"
+        name: "full_workflow_flow"
+        description: "Full flow: Create Team → Prototype → Approval → Premium → Completed"
+
+  # ──────────────────────────────────────────────────────────────
+  # Preset Configuration
+  # ──────────────────────────────────────────────────────────────
+
+  - id: "preset-configuration"
+    name: "Preset Configuration"
+    description: "Configure team presets (A/B/C/D) and individual agent models"
+    mode: "HTTP"
+    criticality: "HIGH"
+    status: "planned"
+    endpoints:
+      - "GET /api/teams/:id/preset"
+      - "PUT /api/teams/:id/preset"
+      - "GET /api/teams/:id/agents"
+      - "PUT /api/teams/:id/agents/:agent"
+    config_files:
+      - "config/presets.yml"
+      - "config/models.yml"
+    tests_required:
+      - type: "unit"
+        name: "preset_validation"
+        description: "Validate preset values (A, B, C, D, custom)"
+      - type: "unit"
+        name: "load_presets_yml"
+        description: "Load and parse config/presets.yml correctly"
+      - type: "unit"
+        name: "load_models_yml"
+        description: "Load and parse config/models.yml correctly"
+      - type: "http"
+        name: "preset_get_200"
+        description: "GET /api/teams/:id/preset returns current preset config"
+      - type: "http"
+        name: "preset_change_200"
+        description: "PUT /api/teams/:id/preset changes preset and returns updated config"
+      - type: "http"
+        name: "agents_get_200"
+        description: "GET /api/teams/:id/agents returns all 7 agent configs"
+      - type: "http"
+        name: "agent_update_200"
+        description: "PUT /api/teams/:id/agents/:agent updates single agent model"
+      - type: "integration"
+        name: "custom_agent_config"
+        description: "Set preset to 'custom' and configure individual agents"
+
+  # ──────────────────────────────────────────────────────────────
+  # Build Management
+  # ──────────────────────────────────────────────────────────────
+
+  - id: "build-management"
+    name: "Build Management"
+    description: "Track and manage builds, logs, and costs"
+    mode: "HTTP"
+    criticality: "HIGH"
+    status: "planned"
+    endpoints:
+      - "GET /api/teams/:id/builds"
+      - "GET /api/teams/:id/builds/:buildId"
+      - "GET /api/teams/:id/builds/:buildId/logs"
+      - "GET /api/teams/:id/builds/:buildId/cost"
+    tests_required:
+      - type: "http"
+        name: "build_list_200"
+        description: "GET /api/teams/:id/builds returns all builds for team"
+      - type: "http"
+        name: "build_get_200"
+        description: "GET /api/teams/:id/builds/:buildId returns build details"
+      - type: "http"
+        name: "build_logs_stream"
+        description: "GET /api/teams/:id/builds/:buildId/logs streams logs (SSE/WebSocket)"
+      - type: "http"
+        name: "build_cost_200"
+        description: "GET /api/teams/:id/builds/:buildId/cost returns cost breakdown"
+      - type: "unit"
+        name: "cost_calculation"
+        description: "Calculate total cost from agent runs (tokens × cost_per_1m)"
+      - type: "integration"
+        name: "build_tracking_flow"
+        description: "Create build → Track agent runs → Calculate cost → Return details"
+
+  # ──────────────────────────────────────────────────────────────
+  # Agent Orchestration
+  # ──────────────────────────────────────────────────────────────
+
+  - id: "agent-orchestration"
+    name: "Agent Orchestration"
+    description: "Orchestrate sequential agent execution (Supervisor → Architect → Coach → Code → Review → Test → Docs)"
+    mode: "INTERNAL"
+    criticality: "CRITICAL"
+    status: "planned"
+    tests_required:
+      - type: "unit"
+        name: "agent_sequence"
+        description: "Validate correct agent execution order"
+      - type: "unit"
+        name: "agent_error_handling"
+        description: "Handle agent failures gracefully (retry, fallback, skip)"
+      - type: "unit"
+        name: "agent_timeout"
+        description: "Timeout agents that run too long"
+      - type: "unit"
+        name: "agent_fallback"
+        description: "Use fallback model if primary agent fails"
+      - type: "integration"
+        name: "full_agent_flow"
+        description: "Execute full agent sequence and produce valid result"
+      - type: "integration"
+        name: "agent_run_tracking"
+        description: "Track tokens, cost, and status for each agent run"
+
+  # ──────────────────────────────────────────────────────────────
+  # Cost Tracking
+  # ──────────────────────────────────────────────────────────────
+
+  - id: "cost-tracking"
+    name: "Cost Tracking & Budget Alerts"
+    description: "Track costs per build, team, and user with budget alerts"
+    mode: "INTERNAL"
+    criticality: "HIGH"
+    status: "planned"
+    tests_required:
+      - type: "unit"
+        name: "calculate_agent_cost"
+        description: "Calculate cost from tokens: (input_tokens × input_cost + output_tokens × output_cost) / 1M"
+      - type: "unit"
+        name: "calculate_build_cost"
+        description: "Sum all agent costs in a build"
+      - type: "unit"
+        name: "calculate_team_cost"
+        description: "Sum all builds for a team"
+      - type: "unit"
+        name: "budget_alert_trigger"
+        description: "Trigger alert when 80% of budget reached"
+      - type: "integration"
+        name: "cost_tracking_flow"
+        description: "Track costs throughout build and update database"
+
+# ═══════════════════════════════════════════════════════════════
+# DASHBOARD & UI CAPABILITIES (NEU)
+# ═══════════════════════════════════════════════════════════════
+
+dashboard_ui:
+
+  - id: "team-dashboard"
+    name: "Team Dashboard UI"
+    description: "Display all teams with status, costs, and actions"
+    mode: "UI"
+    criticality: "HIGH"
+    status: "planned"
+    components:
+      - "TeamList"
+      - "TeamCard"
+      - "CreateTeamButton"
+    tests_required:
+      - type: "e2e"
+        name: "dashboard_loads"
+        description: "Dashboard loads and displays teams"
+      - type: "e2e"
+        name: "create_team_button"
+        description: "Click 'Create Team' opens dialog"
+      - type: "e2e"
+        name: "team_status_display"
+        description: "Team status (AWAITING_APPROVAL, etc.) displayed correctly"
+
+  - id: "team-settings"
+    name: "Team Settings UI"
+    description: "Configure preset, agents, and view cost estimates"
+    mode: "UI"
+    criticality: "MEDIUM"
+    status: "planned"
+    components:
+      - "TeamSettings"
+      - "PresetSelector"
+      - "AgentConfigurator"
+      - "CostEstimate"
+    tests_required:
+      - type: "e2e"
+        name: "preset_selection"
+        description: "User can select preset A/B/C/D"
+      - type: "e2e"
+        name: "custom_agent_config"
+        description: "User can configure individual agents"
+      - type: "e2e"
+        name: "cost_estimate_updates"
+        description: "Cost estimate updates when preset changes"
+
+  - id: "approval-dialog"
+    name: "Approval Dialog UI"
+    description: "Review prototype and approve/reject/partial/skip"
+    mode: "UI"
+    criticality: "HIGH"
+    status: "planned"
+    components:
+      - "ApprovalDialog"
+      - "PrototypeResults"
+      - "ActionButtons"
+    tests_required:
+      - type: "e2e"
+        name: "approval_dialog_opens"
+        description: "Dialog opens when prototype is AWAITING_APPROVAL"
+      - type: "e2e"
+        name: "approve_triggers_premium"
+        description: "Click 'Approve' triggers premium build"
+      - type: "e2e"
+        name: "reject_restarts"
+        description: "Click 'Reject' restarts prototype with new requirements"
+
+  - id: "build-progress"
+    name: "Build Progress UI"
+    description: "Live progress bar, agent status, and log stream"
+    mode: "UI"
+    criticality: "MEDIUM"
+    status: "planned"
+    components:
+      - "BuildProgress"
+      - "ProgressBar"
+      - "AgentStatusList"
+      - "LogStream"
+    tests_required:
+      - type: "e2e"
+        name: "progress_bar_updates"
+        description: "Progress bar updates as agents complete"
+      - type: "e2e"
+        name: "log_stream_works"
+        description: "Logs stream in real-time via WebSocket/SSE"
+
+  - id: "build-details"
+    name: "Build Details UI"
+    description: "View files changed, test results, PR link, and cost breakdown"
+    mode: "UI"
+    criticality: "LOW"
+    status: "planned"
+    components:
+      - "BuildDetails"
+      - "FileChanges"
+      - "TestResults"
+      - "CostBreakdown"
+    tests_required:
+      - type: "e2e"
+        name: "build_details_display"
+        description: "Build details page displays correctly"
+      - type: "e2e"
+        name: "pr_link_opens"
+        description: "PR link opens in new tab"
+
+# ═══════════════════════════════════════════════════════════════
+# ORIGINAL CAPABILITIES (Behalten)
+# ═══════════════════════════════════════════════════════════════
+
+original_features:
+
   - id: "auto-build-workflow"
     name: "Auto Build Workflow"
     description: "GitHub Actions Workflow für autonome Code-Generation"
-    status: "planned"
+    status: "implemented"
     tests_required:
       - type: "integration"
         description: "Workflow triggered erfolgreich"
@@ -20,7 +357,7 @@ capabilities:
   - id: "task-input"
     name: "Task Input via Workflow Dispatch"
     description: "User kann Tasks via GitHub UI eingeben"
-    status: "planned"
+    status: "implemented"
     tests_required:
       - type: "integration"
         description: "Task wird korrekt an Aider übergeben"
@@ -30,7 +367,7 @@ capabilities:
   - id: "aider-integration"
     name: "Aider AI Integration"
     description: "Aider mit Claude Sonnet 4 konfiguriert"
-    status: "planned"
+    status: "implemented"
     tests_required:
       - type: "unit"
         description: "API Key wird korrekt geladen"
@@ -40,16 +377,86 @@ capabilities:
   - id: "error-handling"
     name: "Build Error Handling"
     description: "Fehler werden geloggt und gemeldet"
-    status: "planned"
+    status: "implemented"
     tests_required:
       - type: "unit"
         description: "API-Fehler werden caught"
       - type: "integration"
         description: "Workflow schlägt graceful fehl bei Fehlern"
 
-# Testing Coverage Requirements
+# ═══════════════════════════════════════════════════════════════
+# TESTING COVERAGE REQUIREMENTS
+# ═══════════════════════════════════════════════════════════════
+
 coverage:
   minimum: 80
   targets:
     unit: 90
     integration: 70
+    e2e: 60
+  critical_paths:
+    - "Team CRUD"
+    - "Workflow State Machine"
+    - "Agent Orchestration"
+    - "Cost Calculation"
+    - "Approval Flow"
+
+# ═══════════════════════════════════════════════════════════════
+# AGENT PROFILES (Referenz)
+# ═══════════════════════════════════════════════════════════════
+
+agents:
+  standard:
+    - supervisor   # Orchestrator
+    - architect    # Planner
+    - coach        # Task Manager
+    - code         # Developer
+    - review       # QA
+    - test         # Tester
+    - docs         # Documenter
+
+  refactor:
+    - refactor-budget      # DeepSeek R1
+    - refactor-standard    # Claude Sonnet
+    - refactor-premium     # Claude Opus
+
+  merge:
+    - merge-budget         # DeepSeek R1
+    - merge-standard       # Claude Sonnet
+    - merge-premium        # Claude Opus
+
+  multi_repo:
+    - multi-repo-budget    # DeepSeek R1
+    - multi-repo-premium   # Claude Opus
+
+  tool_builder:
+    - tool-builder-budget  # DeepSeek V3.2 + R1
+    - tool-builder-premium # Claude Opus
+
+# ═══════════════════════════════════════════════════════════════
+# PRESETS (Referenz)
+# ═══════════════════════════════════════════════════════════════
+
+presets:
+  A:
+    name: "Budget"
+    cost_estimate: 8
+    quality_score: 71
+  B:
+    name: "Optimal"
+    cost_estimate: 25
+    quality_score: 79
+  C:
+    name: "Premium"
+    cost_estimate: 130
+    quality_score: 90
+  D:
+    name: "Smart"
+    cost_estimate: 80
+    quality_score: 86
+  E:
+    name: "Refactor"
+    cost_range: "1-30"
+  F:
+    name: "Merge"
+    cost_range: "1-45"

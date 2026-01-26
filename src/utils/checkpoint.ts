@@ -90,7 +90,9 @@ export class CheckpointManager {
   async list(): Promise<Checkpoint[]> {
     try {
       const files = await fs.readdir(this.checkpointDir);
-      const checkpointFiles = files.filter((f) => f.startsWith('checkpoint-') && f.endsWith('.json'));
+      const checkpointFiles = files.filter(
+        (f) => f.startsWith('checkpoint-') && f.endsWith('.json')
+      );
 
       const checkpoints = await Promise.all(
         checkpointFiles.map(async (file) => {
@@ -111,7 +113,7 @@ export class CheckpointManager {
    */
   async getLatest(): Promise<Checkpoint | null> {
     const checkpoints = await this.list();
-    return checkpoints.length > 0 ? (checkpoints[0] || null) : null;
+    return checkpoints.length > 0 ? checkpoints[0] || null : null;
   }
 
   /**

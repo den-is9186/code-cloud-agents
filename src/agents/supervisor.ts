@@ -42,7 +42,11 @@ export class SupervisorAgent implements Agent {
     this.agents.set(agent.role, agent);
   }
 
-  async execute(input: { task: string; projectPath: string; resumeCheckpointId?: string }): Promise<BuildResult> {
+  async execute(input: {
+    task: string;
+    projectPath: string;
+    resumeCheckpointId?: string;
+  }): Promise<BuildResult> {
     this.status = 'working';
     const startTime = Date.now();
     const result: BuildResult = {
@@ -64,7 +68,8 @@ export class SupervisorAgent implements Agent {
     let executionOrder: string[][] = [];
     let taskMap: Map<string, SubTask> | null = null;
     let completedTaskIds: Set<string> = new Set();
-    let currentPhase: 'architect' | 'coach' | 'execution' | 'documentation' | 'complete' = 'architect';
+    let currentPhase: 'architect' | 'coach' | 'execution' | 'documentation' | 'complete' =
+      'architect';
 
     // Check if we're resuming from a checkpoint
     if (input.resumeCheckpointId) {
@@ -77,7 +82,7 @@ export class SupervisorAgent implements Agent {
         executionOrder = (checkpoint.executionOrder as string[][]) || [];
         completedTaskIds = new Set(checkpoint.completedTasks || []);
         currentPhase = checkpoint.currentPhase;
-        
+
         // Restore partial result
         if (checkpoint.result.filesChanged) {
           result.filesChanged = checkpoint.result.filesChanged as FileChange[];
@@ -91,7 +96,7 @@ export class SupervisorAgent implements Agent {
         if (checkpoint.result.errors) {
           result.errors = checkpoint.result.errors as string[];
         }
-        
+
         console.log(`📊 Resumed: phase=${currentPhase}, completed tasks=${completedTaskIds.size}`);
       }
     }
@@ -110,11 +115,23 @@ export class SupervisorAgent implements Agent {
         ).execute(input);
         runbook = architectResult.runbook;
         const architectDuration = Date.now() - architectStart;
-        streamEmitter.emitAgentComplete({ agent: 'architect', success: true, duration: architectDuration });
-        
+        streamEmitter.emitAgentComplete({
+          agent: 'architect',
+          success: true,
+          duration: architectDuration,
+        });
+
         // Save checkpoint after architect phase
         currentPhase = 'coach';
-        await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
+        await this.saveCheckpoint(
+          input,
+          currentPhase,
+          completedTaskIds,
+          tasks,
+          result,
+          runbook,
+          executionOrder
+        );
       }
 
       // Step 2: Coach creates subtasks (if not already done)
@@ -132,10 +149,18 @@ export class SupervisorAgent implements Agent {
         executionOrder = coachResult.executionOrder;
         const coachDuration = Date.now() - coachStart;
         streamEmitter.emitAgentComplete({ agent: 'coach', success: true, duration: coachDuration });
-        
+
         // Save checkpoint after coach phase
         currentPhase = 'execution';
-        await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
+        await this.saveCheckpoint(
+          input,
+          currentPhase,
+          completedTaskIds,
+          tasks,
+          result,
+          runbook,
+          executionOrder
+        );
       }
 
       // Step 3: Execute tasks
@@ -144,13 +169,13 @@ export class SupervisorAgent implements Agent {
 
       for (const taskBatch of executionOrder) {
         // Filter out already completed tasks
-        const pendingTaskBatch = taskBatch.filter(taskId => !completedTaskIds.has(taskId));
-        
+        const pendingTaskBatch = taskBatch.filter((taskId) => !completedTaskIds.has(taskId));
+
         if (pendingTaskBatch.length === 0) {
           console.log(`⏭️ Skipping batch, all tasks already completed`);
           continue;
         }
-        
+
         // Execute tasks in the same batch in parallel
         const batchResults = await Promise.all(
           pendingTaskBatch.map(async (taskId: string) => {
@@ -185,11 +210,19 @@ export class SupervisorAgent implements Agent {
               await this.executeTaskWithResult(task, taskChanges);
               // Mark task as completed
               completedTaskIds.add(task.id);
-              
+
               // Save checkpoint after each task
               currentPhase = 'execution';
-              await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
-              
+              await this.saveCheckpoint(
+                input,
+                currentPhase,
+                completedTaskIds,
+                tasks,
+                result,
+                runbook,
+                executionOrder
+              );
+
               // Emit task complete event on success
               streamEmitter.emitTaskComplete({
                 taskId: task.id,
@@ -203,7 +236,15 @@ export class SupervisorAgent implements Agent {
               taskChanges.errors = [errorMessage];
               // Save checkpoint on error
               currentPhase = 'execution';
-              await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
+              await this.saveCheckpoint(
+                input,
+                currentPhase,
+                completedTaskIds,
+                tasks,
+                result,
+                runbook,
+                executionOrder
+              );
               // Emit task complete event on failure
               streamEmitter.emitTaskComplete({
                 taskId: task.id,
@@ -252,10 +293,18 @@ export class SupervisorAgent implements Agent {
           });
           result.docsUpdated = docsUpdated;
         }
-        
+
         // Save checkpoint after documentation phase
         currentPhase = 'complete';
-        await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
+        await this.saveCheckpoint(
+          input,
+          currentPhase,
+          completedTaskIds,
+          tasks,
+          result,
+          runbook,
+          executionOrder
+        );
       }
 
       result.success = true;
@@ -268,7 +317,15 @@ export class SupervisorAgent implements Agent {
       result.errors = [errorMessage];
       this.status = 'failed';
       // Save checkpoint on error
-      await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
+      await this.saveCheckpoint(
+        input,
+        currentPhase,
+        completedTaskIds,
+        tasks,
+        result,
+        runbook,
+        executionOrder
+      );
       // Emit build complete event on failure
       streamEmitter.emitBuildComplete({ success: false, errors: result.errors });
     }
@@ -306,7 +363,7 @@ export class SupervisorAgent implements Agent {
       projectPath: input.projectPath,
       currentPhase,
       completedTasks: Array.from(completedTaskIds),
-      pendingTasks: pendingTasks.filter(task => !completedTaskIds.has(task.id)),
+      pendingTasks: pendingTasks.filter((task) => !completedTaskIds.has(task.id)),
       result: result,
       runbook: runbook || undefined,
       executionOrder: executionOrder,
@@ -327,7 +384,7 @@ export class SupervisorAgent implements Agent {
     try {
       const agent = this.getAgent(task.assignedAgent);
       console.log(`⚡ ${task.assignedAgent}: ${task.description}`);
-      
+
       // Emit agent start event
       streamEmitter.emitAgentStart({ agent: task.assignedAgent, task: task.description });
 
@@ -347,9 +404,9 @@ export class SupervisorAgent implements Agent {
             >
           ).execute({ task, feedback: undefined });
           taskFilesChanged.push(...codeResult.filesChanged);
-          
+
           // Emit file change events
-          codeResult.filesChanged.forEach(fileChange => {
+          codeResult.filesChanged.forEach((fileChange) => {
             streamEmitter.emitFileChange({
               path: fileChange.path,
               action: fileChange.action,
@@ -406,13 +463,16 @@ export class SupervisorAgent implements Agent {
           });
           taskChanges.testsWritten.push(...testResult.testsWritten);
           taskChanges.testResults = testResult.testResults;
-            
+
           // Emit test run event
           if (testResult.testResults) {
             streamEmitter.emitTestRun({
               passed: testResult.testResults.passed,
               failed: testResult.testResults.failed,
-              total: testResult.testResults.passed + testResult.testResults.failed + (testResult.testResults.skipped || 0),
+              total:
+                testResult.testResults.passed +
+                testResult.testResults.failed +
+                (testResult.testResults.skipped || 0),
             });
           }
         }

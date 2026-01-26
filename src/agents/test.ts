@@ -142,7 +142,7 @@ Antworte NUR mit validem JSON:
         testsWritten: parsed.testsWritten,
         testResults,
       };
-    } catch (_error: unknown) {
+    } catch {
       return {
         testsWritten: [],
         testResults: { passed: 0, failed: 0, skipped: 0, duration: 0 },
