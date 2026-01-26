@@ -9,7 +9,6 @@ jest.mock('ioredis');
 const app = require('../src/api-server');
 
 describe('Integration Tests - File Operations API', () => {
-  let mockRedis;
   const testDir = path.join(process.cwd(), 'tests', 'test-files');
   const testFile = path.join(testDir, 'test.txt');
 
@@ -20,14 +19,9 @@ describe('Integration Tests - File Operations API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    const RedisMock = Redis;
-    mockRedis = RedisMock.mock.instances[0];
-    
-    if (!mockRedis.on) {
-      mockRedis.on = jest.fn();
-    }
-    if (!mockRedis.once) {
+    Redis.mockStore.clear();
+
+    if (false) {
       mockRedis.once = jest.fn();
     }
     if (!mockRedis.ping) {
@@ -493,11 +487,10 @@ describe('Integration Tests - File Operations API', () => {
 
 describe('Integration Tests - Agent State Management API', () => {
   let mockRedis;
-  const redisStore = new Map();
 
   beforeEach(() => {
     jest.clearAllMocks();
-    redisStore.clear();
+    Redis.mockStore.clear();
     
     const RedisMock = Redis;
     mockRedis = RedisMock.mock.instances[0];
@@ -508,22 +501,22 @@ describe('Integration Tests - Agent State Management API', () => {
     mockRedis.ping = jest.fn().mockResolvedValue('PONG');
     
     mockRedis.get = jest.fn((key) => {
-      return Promise.resolve(redisStore.get(key) || null);
+      return Promise.resolve(Redis.mockStore.get(key) || null);
     });
     
     mockRedis.setex = jest.fn((key, ttl, value) => {
-      redisStore.set(key, value);
+      Redis.mockStore.set(key, value);
       return Promise.resolve('OK');
     });
     
     mockRedis.del = jest.fn((key) => {
-      const existed = redisStore.has(key);
-      redisStore.delete(key);
+      const existed = Redis.mockStore.has(key);
+      Redis.mockStore.delete(key);
       return Promise.resolve(existed ? 1 : 0);
     });
     
     mockRedis.exists = jest.fn((key) => {
-      return Promise.resolve(redisStore.has(key) ? 1 : 0);
+      return Promise.resolve(Redis.mockStore.has(key) ? 1 : 0);
     });
     
     mockRedis.ttl = jest.fn(() => {
@@ -531,32 +524,32 @@ describe('Integration Tests - Agent State Management API', () => {
     });
     
     mockRedis.sadd = jest.fn((key, member) => {
-      const set = redisStore.get(key);
+      const set = Redis.mockStore.get(key);
       if (set) {
         const parsed = JSON.parse(set);
         if (!parsed.includes(member)) {
           parsed.push(member);
-          redisStore.set(key, JSON.stringify(parsed));
+          Redis.mockStore.set(key, JSON.stringify(parsed));
         }
       } else {
-        redisStore.set(key, JSON.stringify([member]));
+        Redis.mockStore.set(key, JSON.stringify([member]));
       }
       return Promise.resolve(1);
     });
     
     mockRedis.srem = jest.fn((key, member) => {
-      const set = redisStore.get(key);
+      const set = Redis.mockStore.get(key);
       if (set) {
         const parsed = JSON.parse(set);
         const filtered = parsed.filter(m => m !== member);
-        redisStore.set(key, JSON.stringify(filtered));
+        Redis.mockStore.set(key, JSON.stringify(filtered));
         return Promise.resolve(1);
       }
       return Promise.resolve(0);
     });
     
     mockRedis.smembers = jest.fn((key) => {
-      const set = redisStore.get(key);
+      const set = Redis.mockStore.get(key);
       return Promise.resolve(set ? JSON.parse(set) : []);
     });
     
@@ -570,7 +563,7 @@ describe('Integration Tests - Agent State Management API', () => {
         exec: async () => {
           return commands.map(({ cmd, key }) => {
             if (cmd === 'get') {
-              return [null, redisStore.get(key) || null];
+              return [null, Redis.mockStore.get(key) || null];
             }
             return [null, null];
           });
@@ -873,7 +866,7 @@ describe('Integration Tests - Agent State Management API', () => {
     });
 
     test('should return empty array when no states exist', async () => {
-      redisStore.clear();
+      Redis.mockStore.clear();
       
       const response = await request(app)
         .get('/api/v1/agent/states');
@@ -920,12 +913,11 @@ describe('Integration Tests - Agent State Management API', () => {
 
 describe('Integration Tests - Task Queue Management API', () => {
   let mockRedis;
-  const redisStore = new Map();
   const TASK_QUEUE_FILE = path.join(process.cwd(), 'task-queue.txt');
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    redisStore.clear();
+    Redis.mockStore.clear();
     
     const RedisMock = Redis;
     mockRedis = RedisMock.mock.instances[0];
@@ -934,41 +926,41 @@ describe('Integration Tests - Task Queue Management API', () => {
     mockRedis.on = jest.fn();
     mockRedis.once = jest.fn();
     mockRedis.ping = jest.fn().mockResolvedValue('PONG');
-    mockRedis.get = jest.fn((key) => Promise.resolve(redisStore.get(key) || null));
+    mockRedis.get = jest.fn((key) => Promise.resolve(Redis.mockStore.get(key) || null));
     mockRedis.setex = jest.fn((key, ttl, value) => {
-      redisStore.set(key, value);
+      Redis.mockStore.set(key, value);
       return Promise.resolve('OK');
     });
     mockRedis.del = jest.fn((key) => {
-      const existed = redisStore.has(key);
-      redisStore.delete(key);
+      const existed = Redis.mockStore.has(key);
+      Redis.mockStore.delete(key);
       return Promise.resolve(existed ? 1 : 0);
     });
     mockRedis.sadd = jest.fn((key, member) => {
-      const set = redisStore.get(key);
+      const set = Redis.mockStore.get(key);
       if (set) {
         const parsed = JSON.parse(set);
         if (!parsed.includes(member)) {
           parsed.push(member);
-          redisStore.set(key, JSON.stringify(parsed));
+          Redis.mockStore.set(key, JSON.stringify(parsed));
         }
       } else {
-        redisStore.set(key, JSON.stringify([member]));
+        Redis.mockStore.set(key, JSON.stringify([member]));
       }
       return Promise.resolve(1);
     });
     mockRedis.srem = jest.fn((key, member) => {
-      const set = redisStore.get(key);
+      const set = Redis.mockStore.get(key);
       if (set) {
         const parsed = JSON.parse(set);
         const filtered = parsed.filter(m => m !== member);
-        redisStore.set(key, JSON.stringify(filtered));
+        Redis.mockStore.set(key, JSON.stringify(filtered));
         return Promise.resolve(1);
       }
       return Promise.resolve(0);
     });
     mockRedis.smembers = jest.fn((key) => {
-      const set = redisStore.get(key);
+      const set = Redis.mockStore.get(key);
       return Promise.resolve(set ? JSON.parse(set) : []);
     });
     mockRedis.pipeline = jest.fn(() => {
@@ -981,7 +973,7 @@ describe('Integration Tests - Task Queue Management API', () => {
         exec: async () => {
           return commands.map(({ cmd, key }) => {
             if (cmd === 'get') {
-              return [null, redisStore.get(key) || null];
+              return [null, Redis.mockStore.get(key) || null];
             }
             return [null, null];
           });
@@ -1234,12 +1226,11 @@ describe('Integration Tests - Task Queue Management API', () => {
 
 describe('End-to-end Agent Orchestration Workflows', () => {
   let mockRedis;
-  const redisStore = new Map();
   const TASK_QUEUE_FILE = path.join(process.cwd(), 'task-queue.txt');
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    redisStore.clear();
+    Redis.mockStore.clear();
     
     const RedisMock = Redis;
     mockRedis = RedisMock.mock.instances[0];
@@ -1248,43 +1239,43 @@ describe('End-to-end Agent Orchestration Workflows', () => {
     mockRedis.on = jest.fn();
     mockRedis.once = jest.fn();
     mockRedis.ping = jest.fn().mockResolvedValue('PONG');
-    mockRedis.get = jest.fn((key) => Promise.resolve(redisStore.get(key) || null));
+    mockRedis.get = jest.fn((key) => Promise.resolve(Redis.mockStore.get(key) || null));
     mockRedis.setex = jest.fn((key, ttl, value) => {
-      redisStore.set(key, value);
+      Redis.mockStore.set(key, value);
       return Promise.resolve('OK');
     });
     mockRedis.del = jest.fn((key) => {
-      const existed = redisStore.has(key);
-      redisStore.delete(key);
+      const existed = Redis.mockStore.has(key);
+      Redis.mockStore.delete(key);
       return Promise.resolve(existed ? 1 : 0);
     });
-    mockRedis.exists = jest.fn((key) => Promise.resolve(redisStore.has(key) ? 1 : 0));
+    mockRedis.exists = jest.fn((key) => Promise.resolve(Redis.mockStore.has(key) ? 1 : 0));
     mockRedis.ttl = jest.fn(() => Promise.resolve(86400));
     mockRedis.sadd = jest.fn((key, member) => {
-      const set = redisStore.get(key);
+      const set = Redis.mockStore.get(key);
       if (set) {
         const parsed = JSON.parse(set);
         if (!parsed.includes(member)) {
           parsed.push(member);
-          redisStore.set(key, JSON.stringify(parsed));
+          Redis.mockStore.set(key, JSON.stringify(parsed));
         }
       } else {
-        redisStore.set(key, JSON.stringify([member]));
+        Redis.mockStore.set(key, JSON.stringify([member]));
       }
       return Promise.resolve(1);
     });
     mockRedis.srem = jest.fn((key, member) => {
-      const set = redisStore.get(key);
+      const set = Redis.mockStore.get(key);
       if (set) {
         const parsed = JSON.parse(set);
         const filtered = parsed.filter(m => m !== member);
-        redisStore.set(key, JSON.stringify(filtered));
+        Redis.mockStore.set(key, JSON.stringify(filtered));
         return Promise.resolve(1);
       }
       return Promise.resolve(0);
     });
     mockRedis.smembers = jest.fn((key) => {
-      const set = redisStore.get(key);
+      const set = Redis.mockStore.get(key);
       return Promise.resolve(set ? JSON.parse(set) : []);
     });
     mockRedis.pipeline = jest.fn(() => {
@@ -1297,7 +1288,7 @@ describe('End-to-end Agent Orchestration Workflows', () => {
         exec: async () => {
           return commands.map(({ cmd, key }) => {
             if (cmd === 'get') {
-              return [null, redisStore.get(key) || null];
+              return [null, Redis.mockStore.get(key) || null];
             }
             return [null, null];
           });

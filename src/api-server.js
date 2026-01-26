@@ -2,6 +2,9 @@ const express = require('express');
 const Redis = require('ioredis');
 const fs = require('fs').promises;
 const path = require('path');
+const { z } = require('zod');
+const crypto = require('crypto');
+const { WorkflowStateMachine, States, Events } = require('./workflow/state-machine');
 
 const app = express();
 
@@ -28,6 +31,9 @@ redis.on('connect', () => {
 });
 
 app.use(express.json({ limit: '10mb' }));
+
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, '../public')));
 
 // Add request timeout middleware
 app.use((req, res, next) => {
@@ -1025,6 +1031,609 @@ app.delete('/api/v1/files/content', async (req, res) => {
         code: 'INVALID_PATH',
         message: error.message
       }
+    });
+  }
+});
+
+// =============================================================================
+// Team Management API
+// =============================================================================
+
+const TEAM_PREFIX = 'team:';
+const TEAMS_INDEX = 'teams:index';
+const USER_TEAMS_PREFIX = 'user:teams:';
+
+// Team Schema Validation
+const TeamSchema = z.object({
+  name: z.string().min(1, 'Team name is required').max(100),
+  repo: z.string().regex(/^github\.com\/[\w-]+\/[\w-]+$/, 'Repository must be in format: github.com/owner/repo'),
+  preset: z.enum(['A', 'B', 'C', 'D', 'V', 'L', 'LOCAL', 'IQ'], {
+    errorMap: () => ({ message: 'Invalid preset. Must be one of: A, B, C, D, V, L, LOCAL, IQ' })
+  }),
+  task: z.string().min(10, 'Task description must be at least 10 characters'),
+  ownerId: z.string().uuid('Owner ID must be a valid UUID').optional()
+});
+
+const TeamUpdateSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  repo: z.string().regex(/^github\.com\/[\w-]+\/[\w-]+$/).optional(),
+  preset: z.enum(['A', 'B', 'C', 'D', 'V', 'L', 'LOCAL', 'IQ']).optional(),
+  task: z.string().min(10).optional()
+});
+
+// Helper function to generate UUID
+function generateUUID() {
+  return crypto.randomUUID();
+}
+
+// Helper function to validate team data
+function validateTeamData(data, isUpdate = false) {
+  try {
+    const schema = isUpdate ? TeamUpdateSchema : TeamSchema;
+    return schema.parse(data);
+  } catch (error) {
+    if (error instanceof z.ZodError && error.errors && Array.isArray(error.errors)) {
+      const messages = error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+      throw new Error(messages.join('; '));
+    }
+    throw error;
+  }
+}
+
+// Create a new team
+app.post('/api/v1/teams', async (req, res) => {
+  try {
+    const validatedData = validateTeamData(req.body);
+
+    const teamId = generateUUID();
+    const now = new Date().toISOString();
+
+    // Initialize state machine
+    const stateMachine = new WorkflowStateMachine(States.TEAM_CREATED);
+
+    const team = {
+      id: teamId,
+      name: validatedData.name,
+      repo: validatedData.repo,
+      preset: validatedData.preset,
+      task: validatedData.task,
+      ownerId: validatedData.ownerId || 'anonymous',
+      currentPhase: stateMachine.getState(),
+      status: 'pending',
+      workflowState: stateMachine.getState(),
+      workflowHistory: JSON.stringify(stateMachine.getHistory()),
+      prototypeResult: null,
+      premiumResult: null,
+      totalCost: 0,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    // Save to Redis
+    const teamKey = `${TEAM_PREFIX}${teamId}`;
+    await redis.hmset(teamKey, team);
+    await redis.sadd(TEAMS_INDEX, teamId);
+
+    // Add to user's teams if ownerId provided
+    if (validatedData.ownerId) {
+      await redis.sadd(`${USER_TEAMS_PREFIX}${validatedData.ownerId}`, teamId);
+    }
+
+    res.status(201).json({
+      team,
+      message: 'Team created successfully'
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: {
+        code: 'INVALID_INPUT',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Get all teams
+app.get('/api/v1/teams', async (req, res) => {
+  try {
+    const { ownerId, status, limit = 50, offset = 0 } = req.query;
+
+    let teamIds;
+
+    // Filter by ownerId if provided
+    if (ownerId) {
+      teamIds = await redis.smembers(`${USER_TEAMS_PREFIX}${ownerId}`);
+    } else {
+      teamIds = await redis.smembers(TEAMS_INDEX);
+    }
+
+    if (teamIds.length === 0) {
+      return res.json({
+        teams: [],
+        total: 0,
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      });
+    }
+
+    // Fetch all team data
+    const pipeline = redis.pipeline();
+    teamIds.forEach(teamId => {
+      pipeline.hgetall(`${TEAM_PREFIX}${teamId}`);
+    });
+    const results = await pipeline.exec();
+
+    // Parse teams and filter by status if provided
+    let teams = [];
+    for (let i = 0; i < results.length; i++) {
+      const [err, teamData] = results[i];
+      if (!err && teamData && Object.keys(teamData).length > 0) {
+        const team = {
+          ...teamData,
+          totalCost: parseFloat(teamData.totalCost) || 0
+        };
+
+        // Filter by status if provided
+        if (!status || team.status === status) {
+          teams.push(team);
+        }
+      } else if (!teamData || Object.keys(teamData).length === 0) {
+        // Remove from index if team no longer exists
+        await redis.srem(TEAMS_INDEX, teamIds[i]);
+      }
+    }
+
+    // Sort by createdAt descending
+    teams.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Apply pagination
+    const total = teams.length;
+    const paginatedTeams = teams.slice(parseInt(offset), parseInt(offset) + parseInt(limit));
+
+    res.json({
+      teams: paginatedTeams,
+      total,
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Get team by ID
+app.get('/api/v1/teams/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Invalid team ID format'
+        }
+      });
+    }
+
+    const teamKey = `${TEAM_PREFIX}${id}`;
+    const teamData = await redis.hgetall(teamKey);
+
+    if (!teamData || Object.keys(teamData).length === 0) {
+      return res.status(404).json({
+        error: {
+          code: 'TEAM_NOT_FOUND',
+          message: `Team not found with id: ${id}`
+        }
+      });
+    }
+
+    const team = {
+      ...teamData,
+      totalCost: parseFloat(teamData.totalCost) || 0
+    };
+
+    res.json({ team });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Update team
+app.put('/api/v1/teams/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Invalid team ID format'
+        }
+      });
+    }
+
+    const validatedData = validateTeamData(req.body, true);
+
+    const teamKey = `${TEAM_PREFIX}${id}`;
+    const teamData = await redis.hgetall(teamKey);
+
+    if (!teamData || Object.keys(teamData).length === 0) {
+      return res.status(404).json({
+        error: {
+          code: 'TEAM_NOT_FOUND',
+          message: `Team not found with id: ${id}`
+        }
+      });
+    }
+
+    // Update only provided fields
+    const updatedTeam = {
+      ...teamData,
+      ...validatedData,
+      updatedAt: new Date().toISOString()
+    };
+
+    await redis.hmset(teamKey, updatedTeam);
+
+    res.json({
+      team: {
+        ...updatedTeam,
+        totalCost: parseFloat(updatedTeam.totalCost) || 0
+      },
+      message: 'Team updated successfully'
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: {
+        code: 'INVALID_INPUT',
+        message: error.message
+      }
+    });
+  }
+});
+
+// Delete team
+app.delete('/api/v1/teams/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Invalid team ID format'
+        }
+      });
+    }
+
+    const teamKey = `${TEAM_PREFIX}${id}`;
+    const teamData = await redis.hgetall(teamKey);
+
+    if (!teamData || Object.keys(teamData).length === 0) {
+      return res.status(404).json({
+        error: {
+          code: 'TEAM_NOT_FOUND',
+          message: `Team not found with id: ${id}`
+        }
+      });
+    }
+
+    // Remove from all indexes
+    await redis.del(teamKey);
+    await redis.srem(TEAMS_INDEX, id);
+
+    // Remove from user's teams if ownerId exists
+    if (teamData.ownerId) {
+      await redis.srem(`${USER_TEAMS_PREFIX}${teamData.ownerId}`, id);
+    }
+
+    res.json({
+      teamId: id,
+      deleted: true,
+      message: 'Team deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message
+      }
+    });
+  }
+});
+
+// =============================================================================
+// Team Approval/Reject API
+// =============================================================================
+
+// Helper function to load team and restore state machine
+async function loadTeamWithStateMachine(teamId) {
+  const teamKey = `${TEAM_PREFIX}${teamId}`;
+  const teamData = await redis.hgetall(teamKey);
+
+  if (!teamData || Object.keys(teamData).length === 0) {
+    return null;
+  }
+
+  // Restore state machine from history
+  let stateMachine;
+  if (teamData.workflowHistory) {
+    try {
+      const history = JSON.parse(teamData.workflowHistory);
+      stateMachine = WorkflowStateMachine.fromJSON({
+        currentState: teamData.workflowState || States.TEAM_CREATED,
+        history: history,
+      });
+    } catch (e) {
+      // Fallback: create new state machine with current state
+      stateMachine = new WorkflowStateMachine(
+        teamData.workflowState || States.TEAM_CREATED
+      );
+    }
+  } else {
+    stateMachine = new WorkflowStateMachine(
+      teamData.workflowState || States.TEAM_CREATED
+    );
+  }
+
+  return {
+    teamData,
+    stateMachine,
+    teamKey,
+  };
+}
+
+// Helper function to save team with state machine
+async function saveTeamWithStateMachine(teamKey, teamData, stateMachine, metadata = {}) {
+  const now = new Date().toISOString();
+
+  const updatedTeam = {
+    ...teamData,
+    workflowState: stateMachine.getState(),
+    workflowHistory: JSON.stringify(stateMachine.getHistory()),
+    currentPhase: stateMachine.getState(),
+    updatedAt: now,
+    ...metadata,
+  };
+
+  await redis.hmset(teamKey, updatedTeam);
+
+  return {
+    ...updatedTeam,
+    totalCost: parseFloat(updatedTeam.totalCost) || 0,
+  };
+}
+
+// Approve prototype - transition to APPROVED state
+app.post('/api/v1/teams/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, reason } = req.body;
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Invalid team ID format',
+        },
+      });
+    }
+
+    // Load team and state machine
+    const result = await loadTeamWithStateMachine(id);
+    if (!result) {
+      return res.status(404).json({
+        error: {
+          code: 'TEAM_NOT_FOUND',
+          message: `Team not found with id: ${id}`,
+        },
+      });
+    }
+
+    const { teamData, stateMachine, teamKey } = result;
+
+    // Check if transition is valid
+    if (!stateMachine.canTransition(Events.APPROVE)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_STATE_TRANSITION',
+          message: `Cannot approve team in state '${stateMachine.getState()}'. Team must be in AWAITING_APPROVAL state.`,
+          currentState: stateMachine.getState(),
+          availableActions: stateMachine.getAvailableTransitions(),
+        },
+      });
+    }
+
+    // Perform transition
+    const transitionResult = stateMachine.transition(Events.APPROVE, {
+      userId: userId || 'anonymous',
+      reason: reason || 'Prototype approved',
+      timestamp: new Date().toISOString(),
+    });
+
+    // Save updated team
+    const updatedTeam = await saveTeamWithStateMachine(teamKey, teamData, stateMachine, {
+      status: 'approved',
+    });
+
+    res.json({
+      team: updatedTeam,
+      transition: transitionResult,
+      message: 'Team prototype approved successfully',
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message,
+      },
+    });
+  }
+});
+
+// Reject prototype - transition to REJECTED state
+app.post('/api/v1/teams/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, reason } = req.body;
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Invalid team ID format',
+        },
+      });
+    }
+
+    // Validate reason is provided for rejection
+    if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Reason is required for rejection',
+        },
+      });
+    }
+
+    // Load team and state machine
+    const result = await loadTeamWithStateMachine(id);
+    if (!result) {
+      return res.status(404).json({
+        error: {
+          code: 'TEAM_NOT_FOUND',
+          message: `Team not found with id: ${id}`,
+        },
+      });
+    }
+
+    const { teamData, stateMachine, teamKey } = result;
+
+    // Check if transition is valid
+    if (!stateMachine.canTransition(Events.REJECT)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_STATE_TRANSITION',
+          message: `Cannot reject team in state '${stateMachine.getState()}'. Team must be in AWAITING_APPROVAL state.`,
+          currentState: stateMachine.getState(),
+          availableActions: stateMachine.getAvailableTransitions(),
+        },
+      });
+    }
+
+    // Perform transition
+    const transitionResult = stateMachine.transition(Events.REJECT, {
+      userId: userId || 'anonymous',
+      reason: reason.trim(),
+      timestamp: new Date().toISOString(),
+    });
+
+    // Save updated team
+    const updatedTeam = await saveTeamWithStateMachine(teamKey, teamData, stateMachine, {
+      status: 'rejected',
+      rejectionReason: reason.trim(),
+    });
+
+    res.json({
+      team: updatedTeam,
+      transition: transitionResult,
+      message: 'Team prototype rejected',
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message,
+      },
+    });
+  }
+});
+
+// Skip premium phase - transition to PARTIAL state
+app.post('/api/v1/teams/:id/skip-premium', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, reason } = req.body;
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Invalid team ID format',
+        },
+      });
+    }
+
+    // Load team and state machine
+    const result = await loadTeamWithStateMachine(id);
+    if (!result) {
+      return res.status(404).json({
+        error: {
+          code: 'TEAM_NOT_FOUND',
+          message: `Team not found with id: ${id}`,
+        },
+      });
+    }
+
+    const { teamData, stateMachine, teamKey } = result;
+
+    // Check if transition is valid
+    if (!stateMachine.canTransition(Events.SKIP_PREMIUM)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_STATE_TRANSITION',
+          message: `Cannot skip premium phase in state '${stateMachine.getState()}'. Team must be in AWAITING_APPROVAL state.`,
+          currentState: stateMachine.getState(),
+          availableActions: stateMachine.getAvailableTransitions(),
+        },
+      });
+    }
+
+    // Perform transition
+    const transitionResult = stateMachine.transition(Events.SKIP_PREMIUM, {
+      userId: userId || 'anonymous',
+      reason: reason || 'Premium phase skipped - prototype sufficient',
+      timestamp: new Date().toISOString(),
+    });
+
+    // Save updated team
+    const updatedTeam = await saveTeamWithStateMachine(teamKey, teamData, stateMachine, {
+      status: 'partial',
+    });
+
+    res.json({
+      team: updatedTeam,
+      transition: transitionResult,
+      message: 'Premium phase skipped - team completed with prototype only',
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message,
+      },
     });
   }
 });

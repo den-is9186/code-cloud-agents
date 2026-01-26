@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Agent Dashboard</title>
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+  <div class="dashboard-container">
+    <!-- Header -->
+    <header class="dashboard-header">
+      <div class="header-content">
+        <h1 class="header-title">
+          <span class="icon">🤖</span>
+          Multi-Agent Dashboard
+        </h1>
+        <div class="header-actions">
+          <button id="createTeamBtn" class="btn btn-primary">
+            <span class="icon">➕</span>
+            Neues Team erstellen
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="dashboard-main">
+      <!-- Stats Overview -->
+      <section class="stats-section">
+        <div class="stat-card">
+          <div class="stat-icon">👥</div>
+          <div class="stat-content">
+            <div class="stat-label">Teams</div>
+            <div class="stat-value" id="totalTeams">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">🚀</div>
+          <div class="stat-content">
+            <div class="stat-label">Aktive Builds</div>
+            <div class="stat-value" id="activeBuilds">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">✅</div>
+          <div class="stat-content">
+            <div class="stat-label">Abgeschlossen</div>
+            <div class="stat-value" id="completedBuilds">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">💰</div>
+          <div class="stat-content">
+            <div class="stat-label">Gesamtkosten</div>
+            <div class="stat-value" id="totalCost">$0.00</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Teams List -->
+      <section class="teams-section">
+        <div class="section-header">
+          <h2>Teams</h2>
+          <div class="filter-bar">
+            <input
+              type="text"
+              id="searchInput"
+              class="search-input"
+              placeholder="Team suchen..."
+            >
+            <select id="statusFilter" class="filter-select">
+              <option value="all">Alle Status</option>
+              <option value="TEAM_CREATED">Neu erstellt</option>
+              <option value="PROTOTYPE_RUNNING">Prototyp läuft</option>
+              <option value="AWAITING_APPROVAL">Wartet auf Freigabe</option>
+              <option value="PREMIUM_RUNNING">Premium läuft</option>
+              <option value="COMPLETED">Abgeschlossen</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading-state" style="display: none;">
+          <div class="spinner"></div>
+          <p>Teams werden geladen...</p>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="empty-state" style="display: none;">
+          <div class="empty-icon">📂</div>
+          <h3>Keine Teams vorhanden</h3>
+          <p>Erstelle dein erstes Team, um zu beginnen.</p>
+          <button class="btn btn-primary" onclick="document.getElementById('createTeamBtn').click()">
+            Team erstellen
+          </button>
+        </div>
+
+        <!-- Teams Grid -->
+        <div id="teamsGrid" class="teams-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Create Team Modal -->
+  <div id="createTeamModal" class="modal" style="display: none;">
+    <div class="modal-overlay" onclick="closeCreateTeamModal()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Neues Team erstellen</h2>
+        <button class="modal-close" onclick="closeCreateTeamModal()">✕</button>
+      </div>
+      <form id="createTeamForm" class="modal-body">
+        <div class="form-group">
+          <label for="teamName">Team Name</label>
+          <input
+            type="text"
+            id="teamName"
+            name="name"
+            required
+            placeholder="z.B. Authentication Team"
+            class="form-input"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="teamRepo">GitHub Repository</label>
+          <input
+            type="text"
+            id="teamRepo"
+            name="repo"
+            required
+            placeholder="github.com/owner/repo"
+            pattern="^github\.com\/[^\/]+\/[^\/]+$"
+            class="form-input"
+          >
+          <small class="form-help">Format: github.com/owner/repo</small>
+        </div>
+
+        <div class="form-group">
+          <label for="teamPreset">Preset</label>
+          <div class="preset-selector">
+            <label class="preset-option">
+              <input type="radio" name="preset" value="A" required checked>
+              <div class="preset-card">
+                <div class="preset-header">
+                  <span class="preset-name">Preset A</span>
+                  <span class="preset-badge budget">Budget</span>
+                </div>
+                <div class="preset-cost">~$8</div>
+                <div class="preset-desc">Schnell & günstig</div>
+              </div>
+            </label>
+            <label class="preset-option">
+              <input type="radio" name="preset" value="B" required>
+              <div class="preset-card">
+                <div class="preset-header">
+                  <span class="preset-name">Preset B</span>
+                  <span class="preset-badge optimal">Optimal</span>
+                </div>
+                <div class="preset-cost">~$25</div>
+                <div class="preset-desc">Empfohlen</div>
+              </div>
+            </label>
+            <label class="preset-option">
+              <input type="radio" name="preset" value="C" required>
+              <div class="preset-card">
+                <div class="preset-header">
+                  <span class="preset-name">Preset C</span>
+                  <span class="preset-badge premium">Premium</span>
+                </div>
+                <div class="preset-cost">~$130</div>
+                <div class="preset-desc">Beste Qualität</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="teamTask">Aufgabe</label>
+          <textarea
+            id="teamTask"
+            name="task"
+            required
+            rows="4"
+            minlength="10"
+            placeholder="Beschreibe, was das Team entwickeln soll..."
+            class="form-textarea"
+          ></textarea>
+          <small class="form-help">Mindestens 10 Zeichen</small>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeCreateTeamModal()">
+            Abbrechen
+          </button>
+          <button type="submit" class="btn btn-primary">
+            Team erstellen
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="/js/dashboard.js"></script>
+</body>
+</html>

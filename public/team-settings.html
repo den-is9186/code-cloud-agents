@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Einstellungen - Multi-Agent Dashboard</title>
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <link rel="stylesheet" href="/css/team-settings.css">
+</head>
+<body>
+  <div class="settings-container">
+    <!-- Header -->
+    <header class="settings-header">
+      <div class="header-content">
+        <div class="header-left">
+          <a href="/index.html" class="back-link">
+            <span class="icon">←</span>
+            Zurück zum Dashboard
+          </a>
+          <h1 class="header-title">
+            <span class="icon">⚙️</span>
+            Team Einstellungen
+          </h1>
+        </div>
+        <div class="header-actions">
+          <button id="saveSettingsBtn" class="btn btn-primary">
+            <span class="icon">💾</span>
+            Änderungen speichern
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="settings-main">
+      <!-- Team Info Card -->
+      <section class="card info-card">
+        <div class="card-header">
+          <h2>Team Information</h2>
+        </div>
+        <div class="card-body">
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Name</span>
+              <span class="info-value" id="teamName">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Repository</span>
+              <span class="info-value" id="teamRepo">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Status</span>
+              <span class="info-value" id="teamStatus">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Erstellt</span>
+              <span class="info-value" id="teamCreated">-</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Preset Selector -->
+      <section class="card preset-card">
+        <div class="card-header">
+          <h2>Preset Auswahl</h2>
+          <span class="card-badge">Phase: <span id="currentPhase">prototype</span></span>
+        </div>
+        <div class="card-body">
+          <p class="card-description">
+            Wähle das Preset für dein Team. Presets bestimmen, welche AI-Modelle für welche Agents verwendet werden.
+          </p>
+
+          <div class="preset-selector-grid">
+            <!-- Preset A -->
+            <label class="preset-option-large">
+              <input type="radio" name="preset" value="A" id="presetA">
+              <div class="preset-card-large">
+                <div class="preset-header-large">
+                  <div class="preset-title">
+                    <h3>Preset A</h3>
+                    <span class="preset-badge budget">Budget</span>
+                  </div>
+                  <div class="preset-cost-large">~$8</div>
+                </div>
+                <div class="preset-description">
+                  <p>Schnell und günstig - ideal für Prototypen und einfache Projekte.</p>
+                  <ul class="preset-features">
+                    <li><span class="icon">✓</span> DeepSeek V3.2 für alle Agents</li>
+                    <li><span class="icon">✓</span> Schnelle Ausführung</li>
+                    <li><span class="icon">✓</span> Niedrige Kosten</li>
+                  </ul>
+                </div>
+              </div>
+            </label>
+
+            <!-- Preset B -->
+            <label class="preset-option-large">
+              <input type="radio" name="preset" value="B" id="presetB" checked>
+              <div class="preset-card-large">
+                <div class="preset-header-large">
+                  <div class="preset-title">
+                    <h3>Preset B</h3>
+                    <span class="preset-badge optimal">Optimal</span>
+                  </div>
+                  <div class="preset-cost-large">~$25</div>
+                </div>
+                <div class="preset-description">
+                  <p>Empfohlen - beste Balance zwischen Qualität und Kosten.</p>
+                  <ul class="preset-features">
+                    <li><span class="icon">✓</span> Claude Sonnet 4 für kritische Agents</li>
+                    <li><span class="icon">✓</span> DeepSeek für Support-Agents</li>
+                    <li><span class="icon">✓</span> Ausgewogene Performance</li>
+                  </ul>
+                </div>
+              </div>
+            </label>
+
+            <!-- Preset C -->
+            <label class="preset-option-large">
+              <input type="radio" name="preset" value="C" id="presetC">
+              <div class="preset-card-large">
+                <div class="preset-header-large">
+                  <div class="preset-title">
+                    <h3>Preset C</h3>
+                    <span class="preset-badge premium">Premium</span>
+                  </div>
+                  <div class="preset-cost-large">~$130</div>
+                </div>
+                <div class="preset-description">
+                  <p>Maximale Qualität - beste AI-Modelle für alle Agents.</p>
+                  <ul class="preset-features">
+                    <li><span class="icon">✓</span> Claude Opus 4 für alle Agents</li>
+                    <li><span class="icon">✓</span> Höchste Code-Qualität</li>
+                    <li><span class="icon">✓</span> Beste Ergebnisse</li>
+                  </ul>
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Agent Configuration -->
+      <section class="card agents-card">
+        <div class="card-header">
+          <h2>Agent Konfiguration</h2>
+          <button id="toggleAdvancedBtn" class="btn btn-secondary btn-sm">
+            <span class="icon">🔧</span>
+            Erweiterte Einstellungen
+          </button>
+        </div>
+        <div class="card-body">
+          <p class="card-description">
+            Konfiguriere einzelne Agents individuell. Standardmäßig werden die Agents gemäß dem gewählten Preset konfiguriert.
+          </p>
+
+          <div id="agentConfigList" class="agent-config-list">
+            <!-- Agent configs will be dynamically loaded -->
+          </div>
+
+          <div id="advancedSettings" class="advanced-settings" style="display: none;">
+            <h3>Erweiterte Agent-Einstellungen</h3>
+            <div class="advanced-grid">
+              <div class="form-group">
+                <label for="maxIterations">Max. Iterationen</label>
+                <input type="number" id="maxIterations" class="form-input" value="3" min="1" max="10">
+                <small class="form-help">Maximale Anzahl an Review-Zyklen für Code Agent</small>
+              </div>
+              <div class="form-group">
+                <label for="parallelExecution">Parallele Ausführung</label>
+                <select id="parallelExecution" class="form-select">
+                  <option value="auto">Automatisch</option>
+                  <option value="sequential">Sequenziell</option>
+                  <option value="parallel">Parallel</option>
+                </select>
+                <small class="form-help">Wie Agents ausgeführt werden sollen</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cost Estimate -->
+      <section class="card cost-card">
+        <div class="card-header">
+          <h2>Kostenschätzung</h2>
+          <span class="card-badge">Live-Berechnung</span>
+        </div>
+        <div class="card-body">
+          <div class="cost-estimate">
+            <div class="cost-breakdown">
+              <div class="cost-row total">
+                <span class="cost-label">Geschätzte Gesamtkosten</span>
+                <span class="cost-value" id="totalEstimate">$0.00</span>
+              </div>
+              <div class="cost-divider"></div>
+              <div class="cost-row">
+                <span class="cost-label">Prototyp Phase</span>
+                <span class="cost-value" id="prototypeEstimate">$0.00</span>
+              </div>
+              <div class="cost-row">
+                <span class="cost-label">Premium Phase</span>
+                <span class="cost-value" id="premiumEstimate">$0.00</span>
+              </div>
+            </div>
+
+            <div class="cost-details">
+              <h3>Kosten pro Agent</h3>
+              <div id="agentCostList" class="agent-cost-list">
+                <!-- Agent costs will be dynamically loaded -->
+              </div>
+            </div>
+
+            <div class="cost-comparison">
+              <h3>Vergleich mit anderen Presets</h3>
+              <div id="presetComparison" class="preset-comparison-grid">
+                <!-- Comparison will be dynamically loaded -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Danger Zone -->
+      <section class="card danger-card">
+        <div class="card-header danger">
+          <h2>Gefahrenzone</h2>
+        </div>
+        <div class="card-body">
+          <div class="danger-actions">
+            <div class="danger-item">
+              <div class="danger-info">
+                <h4>Team zurücksetzen</h4>
+                <p>Setzt alle Builds und Konfigurationen zurück. Team bleibt erhalten.</p>
+              </div>
+              <button id="resetTeamBtn" class="btn btn-danger">
+                Zurücksetzen
+              </button>
+            </div>
+            <div class="danger-item">
+              <div class="danger-info">
+                <h4>Team löschen</h4>
+                <p>Löscht das Team permanent inklusive aller Builds und Daten.</p>
+              </div>
+              <button id="deleteTeamBtn" class="btn btn-danger">
+                Löschen
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+    <div class="spinner-large"></div>
+    <p>Einstellungen werden gespeichert...</p>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="/js/team-settings.js"></script>
+</body>
+</html>
