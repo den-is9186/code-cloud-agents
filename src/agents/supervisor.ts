@@ -1,4 +1,4 @@
-import { Agent, AgentRole, BuildResult, SubTask, ReviewResult, FileChange, TestFile, TestResult, Step, Dependency, Issue, TestFailure } from './types';
+import { Agent, AgentRole, AgentStatus, BuildResult, SubTask, ReviewResult, FileChange, TestFile, TestResult, Step, Dependency, Issue, TestFailure } from './types';
 import { llmClient } from '../llm/client';
 import { SUPERVISOR_CONFIG } from '../config/constants';
 

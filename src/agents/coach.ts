@@ -1,4 +1,4 @@
-import { Agent, AgentRole, Step, SubTask, Dependency } from './types';
+import { Agent, AgentRole, AgentStatus, Step, SubTask, Dependency } from './types';
 import { llmClient } from '../llm/client';
 import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
