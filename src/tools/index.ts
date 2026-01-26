@@ -2,14 +2,21 @@ import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { FILE_CONFIG } from '../config/constants';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
-const BASE_DIR = process.cwd();
+const BASE_DIR = path.resolve(process.cwd());
+const MAX_FILE_SIZE_BYTES = FILE_CONFIG.MAX_FILE_SIZE_BYTES;
 
 function validatePath(filePath: string): string {
-  // Normalize and resolve path
+  // Check for null bytes and other malicious patterns first
+  if (filePath.includes('\0')) {
+    throw new Error(`Null byte detected in path: ${filePath}`);
+  }
+  
+  // Normalize and resolve path relative to BASE_DIR
   const resolved = path.resolve(BASE_DIR, filePath);
   
   // Check for path traversal using path.relative
@@ -17,12 +24,13 @@ function validatePath(filePath: string): string {
   
   // If relative path starts with '..' or is an absolute path, it's outside BASE_DIR
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error(`Path traversal detected: ${filePath}`);
+    throw new Error(`Path traversal detected: attempted to access ${filePath} which resolves outside project root`);
   }
   
-  // Additional check for null bytes and other malicious patterns
-  if (filePath.includes('\0')) {
-    throw new Error(`Null byte detected in path: ${filePath}`);
+  // Additional security: ensure the resolved path is within BASE_DIR
+  // This is a redundant check but provides extra safety
+  if (!resolved.startsWith(BASE_DIR + path.sep) && resolved !== BASE_DIR) {
+    throw new Error(`Security violation: path ${filePath} is outside project boundaries`);
   }
   
   return resolved;
@@ -42,6 +50,13 @@ export const fileRead: Tool = {
   parameters: { path: { type: 'string', required: true } },
   execute: async ({ path: filePath }) => {
     const safePath = validatePath(filePath);
+    
+    // Check file size before reading
+    const stats = await fs.stat(safePath);
+    if (stats.size > MAX_FILE_SIZE_BYTES) {
+      throw new Error(`File ${filePath} is too large (${stats.size} bytes > ${MAX_FILE_SIZE_BYTES} bytes)`);
+    }
+    
     const content = await fs.readFile(safePath, 'utf-8');
     return { content };
   }
