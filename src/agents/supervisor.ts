@@ -45,7 +45,7 @@ export class SupervisorAgent implements Agent {
       // Step 2: Coach creates subtasks
       console.log('🎯 Coach planning tasks...');
       const coach = this.getAgent('coach');
-      const { tasks, executionOrder } = await coach.execute({ runbook, context: input });
+      const { tasks, executionOrder } = await (coach as Agent<{ runbook: Step[]; context: unknown }, { tasks: SubTask[]; executionOrder: string[][]; dependencies: Dependency[] }>).execute({ runbook, context: input });
 
       // Step 3: Execute tasks
       // Create a Map for O(1) task lookups instead of O(n) find() in nested loops
