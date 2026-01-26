@@ -7,7 +7,8 @@ export type AgentRole =
   | 'review'
   | 'test'
   | 'docs'
-  | 'vision';
+  | 'vision'
+  | 'refactor';
 
 // Agent Status
 export type AgentStatus =
