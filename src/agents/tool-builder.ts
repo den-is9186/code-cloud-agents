@@ -8,6 +8,7 @@
 import { llmClient } from '../llm/client';
 import { executeTool } from '../tools';
 import type { Agent, AgentRole, FileChange } from './types';
+import { logger } from '../utils/logger';
 
 export interface ToolDefinition {
   name: string;
@@ -74,7 +75,10 @@ export class ToolBuilderAgent implements Agent {
       toolDefinitions = parsed.tools || [];
       warnings = parsed.warnings || [];
     } catch (error) {
-      console.error('[tool-builder] Failed to parse LLM response:', error);
+      logger.error('Failed to parse LLM response', {
+        agent: 'tool-builder',
+        error: error instanceof Error ? error.message : String(error),
+      });
       return {
         toolsCreated: [],
         filesChanged: [],

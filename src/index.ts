@@ -7,6 +7,7 @@ import { TestAgent } from './agents/test';
 import { DocsAgent } from './agents/docs';
 import { VisionAgent } from './agents/vision';
 import { BuildResult } from './agents/types';
+import { logger } from './utils/logger';
 
 interface RunConfig {
   task: string;
@@ -71,7 +72,14 @@ if (require.main === module) {
   const projectPath = process.argv[3] || '.';
   const preset = (process.argv[4] || 'LOCAL') as RunConfig['preset'];
 
-  run({ task, projectPath, preset }).catch(console.error);
+  run({ task, projectPath, preset }).catch((error) => {
+    logger.error('CLI execution failed', {
+      agent: 'cli',
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    console.error(error);
+  });
 }
 
 export { SupervisorAgent, ArchitectAgent, CoachAgent, CodeAgent, ReviewAgent, TestAgent, DocsAgent, VisionAgent };
