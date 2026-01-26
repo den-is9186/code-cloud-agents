@@ -17,6 +17,7 @@ import { llmClient } from '../llm/client';
 import { SUPERVISOR_CONFIG } from '../config/constants';
 import { sanitizeLogMessage } from '../utils/security';
 import { streamEmitter } from '../utils/events';
+import { checkpointManager, Checkpoint } from '../utils/checkpoint';
 
 interface SupervisorConfig {
   model: string;
@@ -41,7 +42,7 @@ export class SupervisorAgent implements Agent {
     this.agents.set(agent.role, agent);
   }
 
-  async execute(input: { task: string; projectPath: string }): Promise<BuildResult> {
+  async execute(input: { task: string; projectPath: string; resumeCheckpointId?: string }): Promise<BuildResult> {
     this.status = 'working';
     const startTime = Date.now();
     const result: BuildResult = {
@@ -57,42 +58,103 @@ export class SupervisorAgent implements Agent {
     // Emit build start event
     streamEmitter.emitBuildStart();
 
-    try {
-      // Step 1: Architect creates runbook
-      console.log('📐 Architect analyzing task...');
-      const architectStart = Date.now();
-      const architect = this.getAgent('architect');
-      const { runbook } = await (
-        architect as Agent<
-          { task: string; projectPath: string },
-          { runbook: Step[]; estimatedComplexity: string }
-        >
-      ).execute(input);
-      const architectDuration = Date.now() - architectStart;
-      streamEmitter.emitAgentComplete({ agent: 'architect', success: true, duration: architectDuration });
+    // Variables to track state for checkpointing
+    let runbook: Step[] | null = null;
+    let tasks: SubTask[] = [];
+    let executionOrder: string[][] = [];
+    let taskMap: Map<string, SubTask> | null = null;
+    let completedTaskIds: Set<string> = new Set();
+    let currentPhase: 'architect' | 'coach' | 'execution' | 'documentation' | 'complete' = 'architect';
 
-      // Step 2: Coach creates subtasks
-      console.log('🎯 Coach planning tasks...');
-      const coachStart = Date.now();
-      const coach = this.getAgent('coach');
-      const { tasks, executionOrder } = await (
-        coach as Agent<
-          { runbook: Step[]; context: unknown },
-          { tasks: SubTask[]; executionOrder: string[][]; dependencies: Dependency[] }
-        >
-      ).execute({ runbook, context: input });
-      const coachDuration = Date.now() - coachStart;
-      streamEmitter.emitAgentComplete({ agent: 'coach', success: true, duration: coachDuration });
+    // Check if we're resuming from a checkpoint
+    if (input.resumeCheckpointId) {
+      const checkpoint = await checkpointManager.load(input.resumeCheckpointId);
+      if (checkpoint) {
+        console.log(`🔄 Resuming from checkpoint: ${checkpoint.id}`);
+        // Restore state from checkpoint
+        runbook = checkpoint.result.runbook as Step[] || null;
+        tasks = checkpoint.pendingTasks || [];
+        executionOrder = checkpoint.result.executionOrder as string[][] || [];
+        completedTaskIds = new Set(checkpoint.completedTasks || []);
+        currentPhase = checkpoint.currentPhase;
+        
+        // Restore partial result
+        if (checkpoint.result.filesChanged) {
+          result.filesChanged = checkpoint.result.filesChanged as FileChange[];
+        }
+        if (checkpoint.result.testsWritten) {
+          result.testsWritten = checkpoint.result.testsWritten as TestFile[];
+        }
+        if (checkpoint.result.docsUpdated) {
+          result.docsUpdated = checkpoint.result.docsUpdated as FileChange[];
+        }
+        if (checkpoint.result.errors) {
+          result.errors = checkpoint.result.errors as string[];
+        }
+        
+        console.log(`📊 Resumed: phase=${currentPhase}, completed tasks=${completedTaskIds.size}`);
+      }
+    }
+
+    try {
+      // Step 1: Architect creates runbook (if not already done)
+      if (!runbook) {
+        console.log('📐 Architect analyzing task...');
+        const architectStart = Date.now();
+        const architect = this.getAgent('architect');
+        const architectResult = await (
+          architect as Agent<
+            { task: string; projectPath: string },
+            { runbook: Step[]; estimatedComplexity: string }
+          >
+        ).execute(input);
+        runbook = architectResult.runbook;
+        const architectDuration = Date.now() - architectStart;
+        streamEmitter.emitAgentComplete({ agent: 'architect', success: true, duration: architectDuration });
+        
+        // Save checkpoint after architect phase
+        currentPhase = 'coach';
+        await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
+      }
+
+      // Step 2: Coach creates subtasks (if not already done)
+      if (tasks.length === 0) {
+        console.log('🎯 Coach planning tasks...');
+        const coachStart = Date.now();
+        const coach = this.getAgent('coach');
+        const coachResult = await (
+          coach as Agent<
+            { runbook: Step[]; context: unknown },
+            { tasks: SubTask[]; executionOrder: string[][]; dependencies: Dependency[] }
+          >
+        ).execute({ runbook: runbook!, context: input });
+        tasks = coachResult.tasks;
+        executionOrder = coachResult.executionOrder;
+        const coachDuration = Date.now() - coachStart;
+        streamEmitter.emitAgentComplete({ agent: 'coach', success: true, duration: coachDuration });
+        
+        // Save checkpoint after coach phase
+        currentPhase = 'execution';
+        await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
+      }
 
       // Step 3: Execute tasks
       // Create a Map for O(1) task lookups instead of O(n) find() in nested loops
-      const taskMap = new Map(tasks.map((t: SubTask) => [t.id, t]));
+      taskMap = new Map(tasks.map((t: SubTask) => [t.id, t]));
 
       for (const taskBatch of executionOrder) {
+        // Filter out already completed tasks
+        const pendingTaskBatch = taskBatch.filter(taskId => !completedTaskIds.has(taskId));
+        
+        if (pendingTaskBatch.length === 0) {
+          console.log(`⏭️ Skipping batch, all tasks already completed`);
+          continue;
+        }
+        
         // Execute tasks in the same batch in parallel
         const batchResults = await Promise.all(
-          taskBatch.map(async (taskId: string) => {
-            const task = taskMap.get(taskId);
+          pendingTaskBatch.map(async (taskId: string) => {
+            const task = taskMap!.get(taskId);
             if (!task) {
               console.warn(`Task ${taskId} not found in task list`);
               return null;
@@ -121,6 +183,13 @@ export class SupervisorAgent implements Agent {
 
             try {
               await this.executeTaskWithResult(task, taskChanges);
+              // Mark task as completed
+              completedTaskIds.add(task.id);
+              
+              // Save checkpoint after each task
+              currentPhase = 'execution';
+              await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
+              
               // Emit task complete event on success
               streamEmitter.emitTaskComplete({
                 taskId: task.id,
@@ -132,6 +201,9 @@ export class SupervisorAgent implements Agent {
               const errorMessage = error instanceof Error ? error.message : String(error);
               console.error(sanitizeLogMessage(`❌ Task ${taskId} failed: ${errorMessage}`));
               taskChanges.errors = [errorMessage];
+              // Save checkpoint on error
+              currentPhase = 'execution';
+              await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
               // Emit task complete event on failure
               streamEmitter.emitTaskComplete({
                 taskId: task.id,
@@ -164,20 +236,26 @@ export class SupervisorAgent implements Agent {
         }
       }
 
-      // Step 4: Documentation
-      console.log('📝 Docs agent documenting...');
-      const docs = this.agents.get('docs');
-      if (docs) {
-        const { docsUpdated } = await (
-          docs as Agent<
-            { filesChanged: FileChange[]; task: { description: string } },
-            { docsUpdated: FileChange[]; changelogEntry?: string }
-          >
-        ).execute({
-          filesChanged: result.filesChanged,
-          task: { description: input.task },
-        });
-        result.docsUpdated = docsUpdated;
+      // Step 4: Documentation (if not already done)
+      if (currentPhase !== 'complete') {
+        console.log('📝 Docs agent documenting...');
+        const docs = this.agents.get('docs');
+        if (docs) {
+          const { docsUpdated } = await (
+            docs as Agent<
+              { filesChanged: FileChange[]; task: { description: string } },
+              { docsUpdated: FileChange[]; changelogEntry?: string }
+            >
+          ).execute({
+            filesChanged: result.filesChanged,
+            task: { description: input.task },
+          });
+          result.docsUpdated = docsUpdated;
+        }
+        
+        // Save checkpoint after documentation phase
+        currentPhase = 'complete';
+        await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
       }
 
       result.success = true;
@@ -189,6 +267,8 @@ export class SupervisorAgent implements Agent {
       console.error(sanitizeLogMessage(`[${this.role}] Error: ${errorMessage}`));
       result.errors = [errorMessage];
       this.status = 'failed';
+      // Save checkpoint on error
+      await this.saveCheckpoint(input, currentPhase, completedTaskIds, tasks, result, runbook, executionOrder);
       // Emit build complete event on failure
       streamEmitter.emitBuildComplete({ success: false, errors: result.errors });
     }
@@ -208,6 +288,33 @@ export class SupervisorAgent implements Agent {
       );
     }
     return agent;
+  }
+
+  private async saveCheckpoint(
+    input: { task: string; projectPath: string; resumeCheckpointId?: string },
+    currentPhase: 'architect' | 'coach' | 'execution' | 'documentation' | 'complete',
+    completedTaskIds: Set<string>,
+    pendingTasks: SubTask[],
+    result: BuildResult,
+    runbook: Step[] | null,
+    executionOrder: string[][]
+  ) {
+    const checkpoint: Checkpoint = {
+      id: Date.now().toString(),
+      timestamp: Date.now(),
+      task: input.task,
+      projectPath: input.projectPath,
+      currentPhase,
+      completedTasks: Array.from(completedTaskIds),
+      pendingTasks: pendingTasks.filter(task => !completedTaskIds.has(task.id)),
+      result: {
+        ...result,
+        runbook: runbook || undefined,
+        executionOrder: executionOrder,
+      }
+    };
+    await checkpointManager.save(checkpoint);
+    console.log(`💾 Checkpoint saved: ${checkpoint.id} (phase: ${currentPhase})`);
   }
 
   private async executeTaskWithResult(
