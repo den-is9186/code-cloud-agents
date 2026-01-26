@@ -9,6 +9,7 @@
  */
 
 const { Parser } = require('json2csv');
+const { logger } = require('../../dist/utils/logger');
 
 /**
  * Export formats
@@ -283,7 +284,10 @@ async function getBuildDetails(redis, buildId) {
       agentRuns: status.agentRuns,
     };
   } catch (error) {
-    console.error(`Failed to get build ${buildId}:`, error.message);
+    logger.error('Failed to get build for export', {
+      buildId,
+      error: error.message,
+    });
     return null;
   }
 }
