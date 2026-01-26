@@ -22,9 +22,13 @@ export class ChatAssistant {
   // Maximum number of messages to keep in history to prevent memory leak
   private readonly MAX_HISTORY_LENGTH = 50;
 
-  async process(message: string): Promise<string> {
-    this.conversationHistory.push({ role: 'user', content: message });
+  private addToHistory(role: 'user' | 'assistant', content: string): void {
+    this.conversationHistory.push({ role, content });
     this.pruneHistory();
+  }
+
+  async process(message: string): Promise<string> {
+    this.addToHistory('user', message);
 
     // Detect message type
     const messageType = this.detectMessageType(message);
@@ -48,8 +52,7 @@ export class ChatAssistant {
         response = await this.handleGeneral();
     }
 
-    this.conversationHistory.push({ role: 'assistant', content: response });
-    this.pruneHistory();
+    this.addToHistory('assistant', response);
     return response;
   }
 
