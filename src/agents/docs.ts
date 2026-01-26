@@ -1,6 +1,8 @@
 import { Agent, AgentRole, FileChange } from './types';
 import { llmClient } from '../llm/client';
 import { executeTool } from '../tools';
+import { safeJsonParse } from '../utils/schemas';
+import { z } from 'zod';
 
 export class DocsAgent implements Agent {
   role: AgentRole = 'docs';
@@ -39,7 +41,15 @@ Antworte NUR mit validem JSON:
     ]);
 
     try {
-      const parsed = JSON.parse(response.content);
+      const DocsResponseSchema = z.object({
+        docsUpdated: z.array(z.object({
+          path: z.string(),
+          action: z.enum(['create', 'modify', 'delete']),
+          content: z.string()
+        })),
+        changelogEntry: z.string().optional()
+      });
+      const parsed = safeJsonParse(response.content, DocsResponseSchema);
 
       // Write doc files
       for (const doc of parsed.docsUpdated) {

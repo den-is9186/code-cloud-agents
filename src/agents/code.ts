@@ -1,6 +1,7 @@
 import { Agent, AgentRole, SubTask, FileChange, ReviewFeedback } from './types';
 import { llmClient } from '../llm/client';
 import { executeTool } from '../tools';
+import { CodeResponseSchema, safeJsonParse } from '../utils/schemas';
 
 export class CodeAgent implements Agent {
   role: AgentRole = 'code';
@@ -53,7 +54,9 @@ Antworte NUR mit validem JSON:
     ]);
 
     try {
-      const parsed = JSON.parse(response.content);
+      const parsed = safeJsonParse(response.content, CodeResponseSchema.extend({
+        explanation: z.string()
+      }));
 
       // Write files
       for (const file of parsed.filesChanged) {

@@ -1,6 +1,7 @@
 import { Agent, AgentRole, Step } from './types';
 import { llmClient } from '../llm/client';
 import { executeTool } from '../tools';
+import { RunbookSchema, safeJsonParse } from '../utils/schemas';
 
 export class ArchitectAgent implements Agent {
   role: AgentRole = 'architect';
@@ -59,7 +60,9 @@ Antworte NUR mit validem JSON in diesem Format:
     ]);
 
     try {
-      const parsed = JSON.parse(response.content);
+      const parsed = safeJsonParse(response.content, RunbookSchema.extend({
+        estimatedComplexity: z.enum(['low', 'medium', 'high'])
+      }));
       return parsed;
     } catch {
       // Fallback: Simple single-step runbook
@@ -71,7 +74,7 @@ Antworte NUR mit validem JSON in diesem Format:
           expectedOutcome: 'Task completed',
           estimatedTokens: 2000
         }],
-        estimatedComplexity: 'medium'
+        estimatedComplexity: 'medium' as const
       };
     }
   }

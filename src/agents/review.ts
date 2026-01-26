@@ -1,5 +1,7 @@
 import { Agent, AgentRole, SubTask, FileChange, Issue } from './types';
 import { llmClient } from '../llm/client';
+import { ReviewResponseSchema, safeJsonParse } from '../utils/schemas';
+import { z } from 'zod';
 
 export class ReviewAgent implements Agent {
   role: AgentRole = 'review';
@@ -50,14 +52,16 @@ approved = true nur wenn keine "error" issues.`
     ]);
 
     try {
-      const parsed = JSON.parse(response.content);
-      const mustFix = parsed.issues.filter((i: Issue) => i.severity === 'error');
-      const suggestions = parsed.issues.filter((i: Issue) => i.severity !== 'error');
+      const parsed = safeJsonParse(response.content, ReviewResponseSchema.extend({
+        summary: z.string()
+      }));
+      const mustFix = parsed.issues?.filter((i: Issue) => i.severity === 'error') || [];
+      const suggestions = parsed.issues?.filter((i: Issue) => i.severity !== 'error') || [];
 
       return {
         approved: parsed.approved,
-        issues: parsed.issues,
-        summary: parsed.summary,
+        issues: parsed.issues || [],
+        summary: parsed.summary || 'No summary provided',
         mustFix,
         suggestions
       };

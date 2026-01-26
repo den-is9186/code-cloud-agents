@@ -1,5 +1,7 @@
 import { Agent, AgentRole } from './types';
 import { llmClient } from '../llm/client';
+import { safeJsonParse } from '../utils/schemas';
+import { z } from 'zod';
 
 type VisionTask = 'design_to_code' | 'bug_analysis' | 'ui_compare';
 
@@ -47,7 +49,13 @@ Antworte NUR mit validem JSON:
     ]);
 
     try {
-      return JSON.parse(response.content);
+      const VisionResponseSchema = z.object({
+        analysis: z.string(),
+        generatedCode: z.string().optional(),
+        suggestedFix: z.string().optional(),
+        confidence: z.number()
+      });
+      return safeJsonParse(response.content, VisionResponseSchema);
     } catch {
       return {
         analysis: response.content,
