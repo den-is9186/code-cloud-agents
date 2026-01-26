@@ -124,9 +124,9 @@ export class StreamEmitter extends EventEmitter {
     this.emit(StreamEventType.TEST_RUN, event);
   }
 
-  emitBuildStart() {
-    logger.info('Build started');
-    this.emit(StreamEventType.BUILD_START, {});
+  emitBuildStart(event?: { buildId?: string }) {
+    logger.info('Build started', event);
+    this.emit(StreamEventType.BUILD_START, event || {});
   }
 
   emitBuildComplete(event: BuildEvent) {

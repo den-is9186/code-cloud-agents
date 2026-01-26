@@ -19,6 +19,8 @@ let buildData = null;
 let pollInterval = null;
 let logsPaused = false;
 let logs = [];
+let eventSource = null;
+let sseConnected = false;
 
 const POLL_INTERVAL_MS = 2000; // Poll every 2 seconds
 const AGENT_SEQUENCE = ['supervisor', 'architect', 'coach', 'code', 'review', 'test', 'docs'];
@@ -39,7 +41,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   initializeEventListeners();
+
+  // Try SSE first, fallback to polling if it fails
+  connectToEventStream();
   startPolling();
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+  disconnectEventStream();
+  stopPolling();
 });
 
 function initializeEventListeners() {
@@ -82,6 +93,116 @@ function stopPolling() {
   }
 }
 
+// ===================================================================
+// SERVER-SENT EVENTS (SSE) - Real-time Streaming
+// ===================================================================
+function connectToEventStream() {
+  try {
+    eventSource = new EventSource(`/api/builds/${buildId}/logs/stream`);
+
+    eventSource.onopen = () => {
+      console.log('✓ SSE connected');
+      sseConnected = true;
+      addLog('info', 'System', '🔗 Live-Verbindung hergestellt');
+    };
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleSSEEvent(data);
+      } catch (error) {
+        console.error('Failed to parse SSE event:', error);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('SSE error:', error);
+      sseConnected = false;
+
+      if (eventSource.readyState === EventSource.CLOSED) {
+        addLog('warning', 'System', '⚠️ Live-Verbindung getrennt');
+        eventSource.close();
+        eventSource = null;
+      }
+    };
+  } catch (error) {
+    console.error('Failed to connect to event stream:', error);
+    addLog('warning', 'System', '⚠️ Live-Updates nicht verfügbar, nutze Polling');
+  }
+}
+
+function handleSSEEvent(data) {
+  const { type, message, agent, success, buildId: eventBuildId } = data;
+
+  // Only process events for this build
+  if (eventBuildId && eventBuildId !== buildId) {
+    return;
+  }
+
+  switch (type) {
+    case 'connected':
+      // Initial connection message
+      break;
+
+    case 'agent:start':
+      addLog('info', agent, message || `⚡ Agent ${agent} gestartet`);
+      // Trigger status update to reflect agent start
+      updateBuildStatus();
+      break;
+
+    case 'agent:complete':
+      if (success) {
+        addLog('success', agent, message || `✓ Agent ${agent} abgeschlossen`);
+      } else {
+        addLog('error', agent, message || `✗ Agent ${agent} fehlgeschlagen`);
+      }
+      // Trigger status update to reflect agent completion
+      updateBuildStatus();
+      break;
+
+    case 'build:start':
+      addLog('info', 'System', message || '🚀 Build gestartet');
+      break;
+
+    case 'build:complete':
+      if (success) {
+        addLog('success', 'System', message || '✅ Build erfolgreich abgeschlossen');
+        setTimeout(() => {
+          updateBuildStatus(); // Final status update
+        }, 500);
+      } else {
+        addLog('error', 'System', message || '❌ Build fehlgeschlagen');
+        setTimeout(() => {
+          updateBuildStatus(); // Final status update
+        }, 500);
+      }
+      break;
+
+    case 'file:change':
+      addLog('info', 'Files', message);
+      break;
+
+    case 'test:run':
+      addLog('info', 'Tests', message);
+      break;
+
+    case 'task:progress':
+      addLog('info', 'Progress', message);
+      break;
+
+    default:
+      console.log('Unknown SSE event type:', type, data);
+  }
+}
+
+function disconnectEventStream() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+    sseConnected = false;
+  }
+}
+
 async function updateBuildStatus() {
   try {
     // Fetch build status
@@ -108,7 +229,12 @@ async function updateBuildStatus() {
 
 function handleBuildComplete() {
   stopPolling();
-  addLog('success', 'System', '✅ Build erfolgreich abgeschlossen!');
+  disconnectEventStream();
+
+  if (!sseConnected) {
+    addLog('success', 'System', '✅ Build erfolgreich abgeschlossen!');
+  }
+
   document.getElementById('buildStatus').textContent = 'Abgeschlossen';
   document.getElementById('buildStatus').className = 'status-badge status-success';
   document.getElementById('liveIndicator').style.display = 'none';
@@ -117,8 +243,14 @@ function handleBuildComplete() {
 
 function handleBuildFailed() {
   stopPolling();
+  disconnectEventStream();
+
   const errorMessage = buildData.errorMessage || 'Unbekannter Fehler';
-  addLog('error', 'System', `❌ Build fehlgeschlagen: ${errorMessage}`);
+
+  if (!sseConnected) {
+    addLog('error', 'System', `❌ Build fehlgeschlagen: ${errorMessage}`);
+  }
+
   document.getElementById('buildStatus').textContent = 'Fehlgeschlagen';
   document.getElementById('buildStatus').className = 'status-badge status-danger';
   document.getElementById('liveIndicator').style.display = 'none';

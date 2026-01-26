@@ -79,6 +79,9 @@ async function orchestrateBuild(redis, options) {
   const buildId = build.id;
   console.log(`🚀 Starting build ${buildId} for team ${teamId}`);
 
+  // Emit build start event
+  streamEmitter.emitBuildStart({ buildId });
+
   try {
     // Mark build as running
     await markBuildRunning(redis, buildId, 'supervisor');
@@ -103,6 +106,13 @@ async function orchestrateBuild(redis, options) {
       errorMessage: result.error || null,
     });
 
+    // Emit build complete event
+    streamEmitter.emitBuildComplete({
+      buildId,
+      success: result.success,
+      errors: result.errors || [],
+    });
+
     console.log(`✅ Build ${buildId} completed successfully`);
 
     return {
@@ -121,6 +131,13 @@ async function orchestrateBuild(redis, options) {
 
     // Fail build
     await failBuild(redis, buildId, error.message);
+
+    // Emit build complete event with failure
+    streamEmitter.emitBuildComplete({
+      buildId,
+      success: false,
+      errors: [error.message],
+    });
 
     throw error;
   }
@@ -172,7 +189,7 @@ async function executeAgentSequence(redis, options) {
       });
 
       // Emit agent start event
-      streamEmitter.emitAgentStart({ agent: agentName, task });
+      streamEmitter.emitAgentStart({ agent: agentName, task, buildId });
 
       // Execute agent
       const agentResult = await executeAgent(agentName, {
@@ -217,6 +234,7 @@ async function executeAgentSequence(redis, options) {
         agent: agentName,
         success: true,
         duration: agentResult.duration || 0,
+        buildId,
       });
 
       console.log(`✓ Agent ${agentName} completed`);
@@ -238,6 +256,7 @@ async function executeAgentSequence(redis, options) {
         agent: agentName,
         success: false,
         duration: 0,
+        buildId,
       });
 
       // Stop execution on critical agents

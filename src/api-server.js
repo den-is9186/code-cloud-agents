@@ -5,6 +5,7 @@ const path = require('path');
 const { z } = require('zod');
 const crypto = require('crypto');
 const { WorkflowStateMachine, States, Events } = require('./workflow/state-machine');
+const { streamEmitter, StreamEventType } = require('../dist/utils/events');
 
 const app = express();
 
@@ -1636,6 +1637,148 @@ app.post('/api/v1/teams/:id/skip-premium', async (req, res) => {
       },
     });
   }
+});
+
+// ===================================================================
+// LOG STREAMING (Server-Sent Events)
+// ===================================================================
+
+/**
+ * Server-Sent Events endpoint for real-time build log streaming
+ * GET /api/builds/:buildId/logs/stream
+ */
+app.get('/api/builds/:buildId/logs/stream', async (req, res) => {
+  const { buildId } = req.params;
+
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
+  // Send initial connection message
+  res.write('data: {"type":"connected","buildId":"' + buildId + '"}\n\n');
+
+  // Event listeners
+  const sendEvent = (type, data) => {
+    const payload = {
+      type,
+      buildId,
+      timestamp: new Date().toISOString(),
+      ...data
+    };
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  // Agent start listener
+  const onAgentStart = (event) => {
+    if (event.buildId === buildId || event.task?.includes(buildId)) {
+      sendEvent('agent:start', {
+        agent: event.agent,
+        message: `⚡ Agent ${event.agent} gestartet`
+      });
+    }
+  };
+
+  // Agent complete listener
+  const onAgentComplete = (event) => {
+    if (event.buildId === buildId || event.agent) {
+      sendEvent('agent:complete', {
+        agent: event.agent,
+        success: event.success,
+        duration: event.duration,
+        message: event.success
+          ? `✓ Agent ${event.agent} abgeschlossen`
+          : `✗ Agent ${event.agent} fehlgeschlagen`
+      });
+    }
+  };
+
+  // Build start listener
+  const onBuildStart = (event) => {
+    if (event.buildId === buildId) {
+      sendEvent('build:start', {
+        message: '🚀 Build gestartet'
+      });
+    }
+  };
+
+  // Build complete listener
+  const onBuildComplete = (event) => {
+    if (event.buildId === buildId) {
+      sendEvent('build:complete', {
+        success: event.success,
+        message: event.success
+          ? '✅ Build erfolgreich abgeschlossen'
+          : '❌ Build fehlgeschlagen'
+      });
+
+      // Close connection after build completes
+      setTimeout(() => {
+        res.end();
+      }, 1000);
+    }
+  };
+
+  // File change listener
+  const onFileChange = (event) => {
+    if (event.buildId === buildId) {
+      sendEvent('file:change', {
+        path: event.path,
+        action: event.action,
+        message: `📝 ${event.action}: ${event.path}`
+      });
+    }
+  };
+
+  // Test run listener
+  const onTestRun = (event) => {
+    if (event.buildId === buildId) {
+      sendEvent('test:run', {
+        passed: event.passed,
+        failed: event.failed,
+        total: event.total,
+        message: `🧪 Tests: ${event.passed}/${event.total} passed`
+      });
+    }
+  };
+
+  // Task progress listener
+  const onTaskProgress = (event) => {
+    if (event.taskId?.includes(buildId)) {
+      sendEvent('task:progress', {
+        taskId: event.taskId,
+        progress: event.progress,
+        message: event.message
+      });
+    }
+  };
+
+  // Attach listeners
+  streamEmitter.on(StreamEventType.AGENT_START, onAgentStart);
+  streamEmitter.on(StreamEventType.AGENT_COMPLETE, onAgentComplete);
+  streamEmitter.on(StreamEventType.BUILD_START, onBuildStart);
+  streamEmitter.on(StreamEventType.BUILD_COMPLETE, onBuildComplete);
+  streamEmitter.on(StreamEventType.FILE_CHANGE, onFileChange);
+  streamEmitter.on(StreamEventType.TEST_RUN, onTestRun);
+  streamEmitter.on(StreamEventType.TASK_PROGRESS, onTaskProgress);
+
+  // Send keepalive ping every 15 seconds
+  const keepaliveInterval = setInterval(() => {
+    res.write(': keepalive\n\n');
+  }, 15000);
+
+  // Cleanup on client disconnect
+  req.on('close', () => {
+    clearInterval(keepaliveInterval);
+    streamEmitter.off(StreamEventType.AGENT_START, onAgentStart);
+    streamEmitter.off(StreamEventType.AGENT_COMPLETE, onAgentComplete);
+    streamEmitter.off(StreamEventType.BUILD_START, onBuildStart);
+    streamEmitter.off(StreamEventType.BUILD_COMPLETE, onBuildComplete);
+    streamEmitter.off(StreamEventType.FILE_CHANGE, onFileChange);
+    streamEmitter.off(StreamEventType.TEST_RUN, onTestRun);
+    streamEmitter.off(StreamEventType.TASK_PROGRESS, onTaskProgress);
+  });
 });
 
 // Declare server at module level for graceful shutdown
