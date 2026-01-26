@@ -18,6 +18,22 @@ const {
   exportAgentPerformanceReport,
   exportBudgetReport,
 } = require('./services/export-service');
+const {
+  createUser,
+  authenticateUser,
+  refreshAccessToken,
+  revokeRefreshToken,
+  createApiKey,
+  Roles,
+} = require('./services/auth-service');
+const {
+  authenticate,
+  requireRole,
+  requireTeamOwnership,
+  rateLimit,
+} = require('./middleware/auth');
+const { cors } = require('./middleware/cors');
+const { csrfProtection, getCsrfTokenEndpoint } = require('./middleware/csrf');
 
 const app = express();
 
@@ -43,7 +59,13 @@ redis.on('connect', () => {
   console.log('Redis connected successfully');
 });
 
+// CORS middleware (must be early in the chain)
+app.use(cors());
+
 app.use(express.json({ limit: '10mb' }));
+
+// Make Redis available to middleware
+app.locals.redis = redis;
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));
@@ -84,6 +106,207 @@ function validatePath(requestedPath) {
   return fullPath;
 }
 
+// =============================================================================
+// AUTHENTICATION API
+// =============================================================================
+
+/**
+ * Register a new user
+ * POST /api/v1/auth/register
+ */
+app.post('/api/v1/auth/register', async (req, res) => {
+  try {
+    const { userId, email, password, role } = req.body;
+
+    if (!userId || !email || !password) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'userId, email, and password are required',
+        },
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_EMAIL',
+          message: 'Invalid email format',
+        },
+      });
+    }
+
+    // Validate password strength
+    if (password.length < 8) {
+      return res.status(400).json({
+        error: {
+          code: 'WEAK_PASSWORD',
+          message: 'Password must be at least 8 characters long',
+        },
+      });
+    }
+
+    const user = await createUser(redis, {
+      userId,
+      email,
+      password,
+      role: role || Roles.VIEWER,
+    });
+
+    res.status(201).json({
+      success: true,
+      user,
+      message: 'User registered successfully',
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: {
+        code: 'REGISTRATION_FAILED',
+        message: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * Login with email and password
+ * POST /api/v1/auth/login
+ */
+app.post('/api/v1/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Email and password are required',
+        },
+      });
+    }
+
+    const result = await authenticateUser(redis, email, password);
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    res.status(401).json({
+      error: {
+        code: 'AUTHENTICATION_FAILED',
+        message: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * Refresh access token
+ * POST /api/v1/auth/refresh
+ */
+app.post('/api/v1/auth/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Refresh token is required',
+        },
+      });
+    }
+
+    const result = await refreshAccessToken(redis, refreshToken);
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    res.status(401).json({
+      error: {
+        code: 'REFRESH_FAILED',
+        message: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * Logout (revoke refresh token)
+ * POST /api/v1/auth/logout
+ */
+app.post('/api/v1/auth/logout', authenticate(), async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (refreshToken) {
+      await revokeRefreshToken(redis, refreshToken);
+    }
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully',
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: {
+        code: 'LOGOUT_FAILED',
+        message: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * Get current user info
+ * GET /api/v1/auth/me
+ */
+app.get('/api/v1/auth/me', authenticate(), (req, res) => {
+  res.json({
+    success: true,
+    auth: req.auth,
+  });
+});
+
+/**
+ * Create API key (admin only)
+ * POST /api/v1/auth/apikeys
+ */
+app.post('/api/v1/auth/apikeys', authenticate(), requireRole(Roles.ADMIN), async (req, res) => {
+  try {
+    const { name, teamId, permissions } = req.body;
+
+    if (!name) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'API key name is required',
+        },
+      });
+    }
+
+    const apiKey = await createApiKey(redis, { name, teamId, permissions });
+
+    res.status(201).json({
+      success: true,
+      apiKey,
+      message: 'API key created successfully. Save the key securely - it will not be shown again.',
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: {
+        code: 'API_KEY_CREATION_FAILED',
+        message: error.message,
+      },
+    });
+  }
+});
+
 app.get('/', (req, res) => {
   res.json({ message: 'Hello World' });
 });
@@ -104,7 +327,20 @@ app.get('/health', async (req, res) => {
   }
 });
 
+/**
+ * Get CSRF token (for cookie-based sessions)
+ * GET /api/csrf-token
+ *
+ * Note: Not needed for JWT-based API authentication
+ * Only use this if implementing cookie-based sessions
+ */
+app.get('/api/csrf-token', getCsrfTokenEndpoint);
+
+// =============================================================================
 // Agent State Management API
+// =============================================================================
+// Requires: DEVELOPER role or higher
+// Service accounts (API keys) are also allowed
 
 const AGENT_STATE_PREFIX = 'agent:state:';
 const AGENT_STATE_INDEX = 'agent:states:index';
@@ -126,7 +362,7 @@ function validateAgentId(agentId) {
 }
 
 // Create or update agent execution state
-app.post('/api/v1/agent/state', async (req, res) => {
+app.post('/api/v1/agent/state', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
   try {
     const { agentId, status, progress, metadata, ttl, error } = req.body;
 
@@ -230,7 +466,7 @@ app.post('/api/v1/agent/state', async (req, res) => {
 });
 
 // Get agent execution state
-app.get('/api/v1/agent/state/:agentId', async (req, res) => {
+app.get('/api/v1/agent/state/:agentId', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
   try {
     const { agentId } = req.params;
     validateAgentId(agentId);
@@ -266,7 +502,7 @@ app.get('/api/v1/agent/state/:agentId', async (req, res) => {
 });
 
 // Retry a failed agent task
-app.post('/api/v1/agent/state/:agentId/retry', async (req, res) => {
+app.post('/api/v1/agent/state/:agentId/retry', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
   try {
     const { agentId } = req.params;
     validateAgentId(agentId);
@@ -349,7 +585,7 @@ app.post('/api/v1/agent/state/:agentId/retry', async (req, res) => {
 });
 
 // List all agent states
-app.get('/api/v1/agent/states', async (req, res) => {
+app.get('/api/v1/agent/states', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
   try {
     const { status, limit = 100, offset = 0 } = req.query;
 
@@ -413,7 +649,7 @@ app.get('/api/v1/agent/states', async (req, res) => {
 });
 
 // Delete agent execution state
-app.delete('/api/v1/agent/state/:agentId', async (req, res) => {
+app.delete('/api/v1/agent/state/:agentId', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
   try {
     const { agentId } = req.params;
     validateAgentId(agentId);
@@ -449,7 +685,10 @@ app.delete('/api/v1/agent/state/:agentId', async (req, res) => {
   }
 });
 
+// =============================================================================
 // Task Queue Management API
+// =============================================================================
+// Requires: MANAGER role or higher
 
 const TASK_QUEUE_FILE = path.join(PROJECT_ROOT, 'task-queue.txt');
 const TASK_QUEUE_PREFIX = 'task:queue:';
@@ -493,7 +732,7 @@ async function writeTaskQueue(tasks) {
 }
 
 // Get all tasks in the queue
-app.get('/api/v1/supervisor/queue', async (req, res) => {
+app.get('/api/v1/supervisor/queue', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const tasks = await readTaskQueue();
     
@@ -528,7 +767,7 @@ app.get('/api/v1/supervisor/queue', async (req, res) => {
 });
 
 // Add a task to the queue
-app.post('/api/v1/supervisor/queue', async (req, res) => {
+app.post('/api/v1/supervisor/queue', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const { task, position } = req.body;
     
@@ -587,7 +826,7 @@ app.post('/api/v1/supervisor/queue', async (req, res) => {
 });
 
 // Remove a task from the queue
-app.delete('/api/v1/supervisor/queue/:index', async (req, res) => {
+app.delete('/api/v1/supervisor/queue/:index', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const index = parseInt(req.params.index);
     
@@ -638,7 +877,7 @@ app.delete('/api/v1/supervisor/queue/:index', async (req, res) => {
 });
 
 // Process next task in the queue
-app.post('/api/v1/supervisor/queue/process', async (req, res) => {
+app.post('/api/v1/supervisor/queue/process', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const tasks = await readTaskQueue();
     
@@ -692,7 +931,7 @@ app.post('/api/v1/supervisor/queue/process', async (req, res) => {
 });
 
 // Complete a task and remove it from queue
-app.post('/api/v1/supervisor/queue/complete', async (req, res) => {
+app.post('/api/v1/supervisor/queue/complete', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const { taskId, status, error: taskError } = req.body;
     
@@ -768,7 +1007,7 @@ app.post('/api/v1/supervisor/queue/complete', async (req, res) => {
 });
 
 // Get supervisor status
-app.get('/api/v1/supervisor/status', async (req, res) => {
+app.get('/api/v1/supervisor/status', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const tasks = await readTaskQueue();
     
@@ -804,10 +1043,13 @@ app.get('/api/v1/supervisor/status', async (req, res) => {
   }
 });
 
+// =============================================================================
 // File Operations API
+// =============================================================================
+// Requires: DEVELOPER role or higher
 
 // List files in a directory
-app.get('/api/v1/files', async (req, res) => {
+app.get('/api/v1/files', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
   try {
     const requestedPath = req.query.path || '.';
     const recursive = req.query.recursive === 'true';
@@ -864,7 +1106,7 @@ app.get('/api/v1/files', async (req, res) => {
 });
 
 // Read file content
-app.get('/api/v1/files/content', async (req, res) => {
+app.get('/api/v1/files/content', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
   try {
     const requestedPath = req.query.path;
     if (!requestedPath) {
@@ -928,7 +1170,7 @@ app.get('/api/v1/files/content', async (req, res) => {
 });
 
 // Write file content
-app.post('/api/v1/files/content', async (req, res) => {
+app.post('/api/v1/files/content', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
   try {
     const { path: requestedPath, content, createDirs } = req.body;
     
@@ -998,7 +1240,7 @@ app.post('/api/v1/files/content', async (req, res) => {
 });
 
 // Delete file
-app.delete('/api/v1/files/content', async (req, res) => {
+app.delete('/api/v1/files/content', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
   try {
     const requestedPath = req.query.path;
     if (!requestedPath) {
@@ -1051,6 +1293,10 @@ app.delete('/api/v1/files/content', async (req, res) => {
 // =============================================================================
 // Team Management API
 // =============================================================================
+// POST (create): Requires DEVELOPER role or higher
+// GET (list/view): Requires VIEWER role or higher (filtered by ownership)
+// PUT (update): Requires team ownership or MANAGER role
+// DELETE: Requires team ownership or ADMIN role
 
 const TEAM_PREFIX = 'team:';
 const TEAMS_INDEX = 'teams:index';
@@ -1094,7 +1340,7 @@ function validateTeamData(data, isUpdate = false) {
 }
 
 // Create a new team
-app.post('/api/v1/teams', async (req, res) => {
+app.post('/api/v1/teams', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
   try {
     const validatedData = validateTeamData(req.body);
 
@@ -1147,7 +1393,7 @@ app.post('/api/v1/teams', async (req, res) => {
 });
 
 // Get all teams
-app.get('/api/v1/teams', async (req, res) => {
+app.get('/api/v1/teams', authenticate(), requireRole(Roles.VIEWER), async (req, res) => {
   try {
     const { ownerId, status, limit = 50, offset = 0 } = req.query;
 
@@ -1220,7 +1466,7 @@ app.get('/api/v1/teams', async (req, res) => {
 });
 
 // Get team by ID
-app.get('/api/v1/teams/:id', async (req, res) => {
+app.get('/api/v1/teams/:id', authenticate(), requireRole(Roles.VIEWER), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1264,7 +1510,7 @@ app.get('/api/v1/teams/:id', async (req, res) => {
 });
 
 // Update team
-app.put('/api/v1/teams/:id', async (req, res) => {
+app.put('/api/v1/teams/:id', authenticate(), requireTeamOwnership('id'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1320,7 +1566,7 @@ app.put('/api/v1/teams/:id', async (req, res) => {
 });
 
 // Delete team
-app.delete('/api/v1/teams/:id', async (req, res) => {
+app.delete('/api/v1/teams/:id', authenticate(), requireRole(Roles.ADMIN), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1374,6 +1620,7 @@ app.delete('/api/v1/teams/:id', async (req, res) => {
 // =============================================================================
 // Team Approval/Reject API
 // =============================================================================
+// Requires: MANAGER role or higher
 
 // Helper function to load team and restore state machine
 async function loadTeamWithStateMachine(teamId) {
@@ -1434,7 +1681,7 @@ async function saveTeamWithStateMachine(teamKey, teamData, stateMachine, metadat
 }
 
 // Approve prototype - transition to APPROVED state
-app.post('/api/v1/teams/:id/approve', async (req, res) => {
+app.post('/api/v1/teams/:id/approve', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const { id } = req.params;
     const { userId, reason } = req.body;
@@ -1526,7 +1773,7 @@ app.post('/api/v1/teams/:id/approve', async (req, res) => {
 });
 
 // Reject prototype - transition to REJECTED state
-app.post('/api/v1/teams/:id/reject', async (req, res) => {
+app.post('/api/v1/teams/:id/reject', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const { id } = req.params;
     const { userId, reason } = req.body;
@@ -1629,7 +1876,7 @@ app.post('/api/v1/teams/:id/reject', async (req, res) => {
 });
 
 // Skip premium phase - transition to PARTIAL state
-app.post('/api/v1/teams/:id/skip-premium', async (req, res) => {
+app.post('/api/v1/teams/:id/skip-premium', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const { id } = req.params;
     const { userId, reason } = req.body;
@@ -1700,6 +1947,7 @@ app.post('/api/v1/teams/:id/skip-premium', async (req, res) => {
 // ===================================================================
 // BUDGET MANAGEMENT
 // ===================================================================
+// Requires: Team ownership or MANAGER role
 
 const {
   setTeamBudgetLimit,
@@ -1712,7 +1960,7 @@ const {
  * Set team budget limits
  * PUT /api/teams/:id/budget
  */
-app.put('/api/teams/:id/budget', async (req, res) => {
+app.put('/api/teams/:id/budget', authenticate(), requireTeamOwnership('id'), async (req, res) => {
   try {
     const { id } = req.params;
     const { monthlyLimit, perBuildLimit } = req.body;
@@ -1747,7 +1995,7 @@ app.put('/api/teams/:id/budget', async (req, res) => {
  * Get team budget limits
  * GET /api/teams/:id/budget
  */
-app.get('/api/teams/:id/budget', async (req, res) => {
+app.get('/api/teams/:id/budget', authenticate(), requireTeamOwnership('id'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1776,7 +2024,7 @@ app.get('/api/teams/:id/budget', async (req, res) => {
  * Get team budget status (spending, alerts, etc.)
  * GET /api/teams/:id/budget/status
  */
-app.get('/api/teams/:id/budget/status', async (req, res) => {
+app.get('/api/teams/:id/budget/status', authenticate(), requireTeamOwnership('id'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1799,7 +2047,7 @@ app.get('/api/teams/:id/budget/status', async (req, res) => {
  * Get team budget alert history
  * GET /api/teams/:id/budget/alerts
  */
-app.get('/api/teams/:id/budget/alerts', async (req, res) => {
+app.get('/api/teams/:id/budget/alerts', authenticate(), requireTeamOwnership('id'), async (req, res) => {
   try {
     const { id } = req.params;
     const limit = parseInt(req.query.limit) || 10;
@@ -1823,12 +2071,13 @@ app.get('/api/teams/:id/budget/alerts', async (req, res) => {
 // ===================================================================
 // LOG STREAMING (Server-Sent Events)
 // ===================================================================
+// Requires: VIEWER role or higher
 
 /**
  * Server-Sent Events endpoint for real-time build log streaming
  * GET /api/builds/:buildId/logs/stream
  */
-app.get('/api/builds/:buildId/logs/stream', async (req, res) => {
+app.get('/api/builds/:buildId/logs/stream', authenticate(), requireRole(Roles.VIEWER), async (req, res) => {
   const { buildId } = req.params;
 
   // Set SSE headers
@@ -1965,6 +2214,7 @@ app.get('/api/builds/:buildId/logs/stream', async (req, res) => {
 // ===================================================================
 // EXPORT & REPORTS API
 // ===================================================================
+// Requires: VIEWER role or higher
 
 /**
  * Export build report
@@ -1977,7 +2227,7 @@ app.get('/api/builds/:buildId/logs/stream', async (req, res) => {
  * - endDate: End date filter (ISO format, optional)
  * - format: json or csv (default: json)
  */
-app.get('/api/v1/export/builds', async (req, res) => {
+app.get('/api/v1/export/builds', authenticate(), requireRole(Roles.VIEWER), async (req, res) => {
   try {
     const { buildId, teamId, startDate, endDate, format = 'json' } = req.query;
 
@@ -2035,7 +2285,7 @@ app.get('/api/v1/export/builds', async (req, res) => {
  * - endDate: End date (ISO format, optional)
  * - format: json or csv (default: json)
  */
-app.get('/api/v1/export/costs', async (req, res) => {
+app.get('/api/v1/export/costs', authenticate(), requireRole(Roles.VIEWER), async (req, res) => {
   try {
     const { teamId, period = 'month', startDate, endDate, format = 'json' } = req.query;
 
@@ -2114,7 +2364,7 @@ app.get('/api/v1/export/costs', async (req, res) => {
  * - endDate: End date filter (ISO format, optional)
  * - format: json or csv (default: json)
  */
-app.get('/api/v1/export/agents', async (req, res) => {
+app.get('/api/v1/export/agents', authenticate(), requireRole(Roles.VIEWER), async (req, res) => {
   try {
     const { teamId, agentName, startDate, endDate, format = 'json' } = req.query;
 
@@ -2167,7 +2417,7 @@ app.get('/api/v1/export/agents', async (req, res) => {
  * Query params:
  * - format: json or csv (default: json)
  */
-app.get('/api/v1/export/budget/:teamId', async (req, res) => {
+app.get('/api/v1/export/budget/:teamId', authenticate(), requireTeamOwnership('teamId'), async (req, res) => {
   try {
     const { teamId } = req.params;
     const { format = 'json' } = req.query;
@@ -2231,6 +2481,107 @@ const gracefulShutdown = async (signal) => {
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// =============================================================================
+// GLOBAL ERROR HANDLERS
+// =============================================================================
+
+// Track if we're already shutting down to prevent multiple shutdowns
+let isShuttingDown = false;
+
+/**
+ * Handle unhandled promise rejections
+ * These occur when a Promise is rejected and no .catch() handler is attached
+ */
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🚨 Unhandled Rejection detected:');
+  console.error('   Reason:', reason);
+  console.error('   Promise:', promise);
+
+  // Log stack trace if available
+  if (reason instanceof Error) {
+    console.error('   Stack:', reason.stack);
+  }
+
+  // In production, we might want to gracefully shutdown
+  // For now, we log and continue, but track the error
+  if (process.env.NODE_ENV === 'production') {
+    // Optionally send to error tracking service (e.g., Sentry)
+    // sendToErrorTracking(reason);
+  }
+});
+
+/**
+ * Handle uncaught exceptions
+ * These are synchronous errors that were not caught in a try/catch block
+ * CRITICAL: These can leave the application in an undefined state
+ */
+process.on('uncaughtException', async (error) => {
+  console.error('💀 Uncaught Exception detected:');
+  console.error('   Error:', error.message);
+  console.error('   Stack:', error.stack);
+
+  // Uncaught exceptions are critical - the application state may be corrupted
+  // We must shutdown gracefully to prevent data corruption
+  if (!isShuttingDown) {
+    isShuttingDown = true;
+    console.error('⚠️  Application state may be corrupted. Initiating graceful shutdown...');
+
+    try {
+      // Give ongoing requests a chance to complete (max 10 seconds)
+      await new Promise((resolve) => {
+        const timeout = setTimeout(resolve, 10000);
+
+        if (server) {
+          server.close(() => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        } else {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+
+      // Close Redis connection
+      await redis.quit().catch(() => {});
+
+      console.error('✓ Graceful shutdown completed after uncaught exception');
+    } catch (shutdownError) {
+      console.error('Error during graceful shutdown:', shutdownError);
+    }
+
+    // Exit with error code
+    process.exit(1);
+  }
+});
+
+/**
+ * Handle uncaughtExceptionMonitor
+ * This allows monitoring uncaught exceptions without preventing the default behavior
+ * Useful for logging/metrics while still allowing the process to crash
+ */
+process.on('uncaughtExceptionMonitor', (error, origin) => {
+  console.error(`📊 Exception Monitor: ${origin}`);
+  console.error('   This is logged before the uncaughtException handler runs');
+
+  // Track metrics here
+  // metrics.increment('uncaught_exceptions', { origin });
+});
+
+/**
+ * Handle process warnings
+ * Node.js emits warnings for various conditions (memory, deprecated APIs, etc.)
+ */
+process.on('warning', (warning) => {
+  console.warn('⚠️  Process Warning:');
+  console.warn('   Name:', warning.name);
+  console.warn('   Message:', warning.message);
+
+  if (warning.stack) {
+    console.warn('   Stack:', warning.stack);
+  }
+});
 
 // Export app for testing
 module.exports = app;
