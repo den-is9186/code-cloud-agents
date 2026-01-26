@@ -52,7 +52,7 @@ Antworte NUR mit validem JSON:
           stepId: z.string(),
           assignedAgent: z.enum(['code', 'test', 'review', 'docs']),
           description: z.string(),
-          input: z.record(z.any()),
+          input: z.any(),
           expectedOutput: z.string(),
           status: z.enum(['pending', 'in_progress', 'completed', 'failed'])
         })),
