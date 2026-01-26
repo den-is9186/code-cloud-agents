@@ -91,7 +91,7 @@ function cors(options = {}) {
       res.setHeader('Access-Control-Expose-Headers', exposedHeaders.join(', '));
     }
 
-    next();
+    return next();
   };
 }
 
