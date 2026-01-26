@@ -180,6 +180,25 @@ class RedisMock {
     return Promise.resolve(slice.map((item) => item.member));
   }
 
+  zrangebyscore(key, min, max) {
+    const sortedSet = mockRedisStore.get(key);
+    if (!sortedSet) return Promise.resolve([]);
+
+    const parsed = JSON.parse(sortedSet);
+
+    // Parse min/max values
+    const minScore = min === '-inf' ? -Infinity : parseFloat(min);
+    const maxScore = max === '+inf' ? Infinity : parseFloat(max);
+
+    // Filter by score range
+    const filtered = parsed.filter((item) => {
+      const score = parseFloat(item.score);
+      return score >= minScore && score <= maxScore;
+    });
+
+    return Promise.resolve(filtered.map((item) => item.member));
+  }
+
   // List operations
   rpush(key, ...values) {
     const list = mockRedisStore.get(key);

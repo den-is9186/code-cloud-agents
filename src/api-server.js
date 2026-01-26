@@ -1691,6 +1691,129 @@ app.post('/api/v1/teams/:id/skip-premium', async (req, res) => {
 });
 
 // ===================================================================
+// BUDGET MANAGEMENT
+// ===================================================================
+
+const {
+  setTeamBudgetLimit,
+  getTeamBudgetLimit,
+  getBudgetStatus,
+  getBudgetAlertHistory,
+} = require('./services/budget-alert-service');
+
+/**
+ * Set team budget limits
+ * PUT /api/teams/:id/budget
+ */
+app.put('/api/teams/:id/budget', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { monthlyLimit, perBuildLimit } = req.body;
+
+    if (!monthlyLimit || monthlyLimit <= 0) {
+      return res.status(400).json({
+        error: 'monthlyLimit is required and must be greater than 0',
+      });
+    }
+
+    const budgetLimits = await setTeamBudgetLimit(
+      redis,
+      id,
+      monthlyLimit,
+      perBuildLimit || null
+    );
+
+    res.json({
+      success: true,
+      budgetLimits,
+    });
+  } catch (error) {
+    console.error('Error setting budget limits:', error);
+    res.status(500).json({
+      error: 'Failed to set budget limits',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * Get team budget limits
+ * GET /api/teams/:id/budget
+ */
+app.get('/api/teams/:id/budget', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const budgetLimits = await getTeamBudgetLimit(redis, id);
+
+    if (!budgetLimits) {
+      return res.status(404).json({
+        error: 'No budget limits configured for this team',
+      });
+    }
+
+    res.json({
+      success: true,
+      budgetLimits,
+    });
+  } catch (error) {
+    console.error('Error getting budget limits:', error);
+    res.status(500).json({
+      error: 'Failed to get budget limits',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * Get team budget status (spending, alerts, etc.)
+ * GET /api/teams/:id/budget/status
+ */
+app.get('/api/teams/:id/budget/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const status = await getBudgetStatus(redis, id);
+
+    res.json({
+      success: true,
+      ...status,
+    });
+  } catch (error) {
+    console.error('Error getting budget status:', error);
+    res.status(500).json({
+      error: 'Failed to get budget status',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * Get team budget alert history
+ * GET /api/teams/:id/budget/alerts
+ */
+app.get('/api/teams/:id/budget/alerts', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const alerts = await getBudgetAlertHistory(redis, id, limit);
+
+    res.json({
+      success: true,
+      alerts,
+      count: alerts.length,
+    });
+  } catch (error) {
+    console.error('Error getting budget alerts:', error);
+    res.status(500).json({
+      error: 'Failed to get budget alerts',
+      message: error.message,
+    });
+  }
+});
+
+// ===================================================================
 // LOG STREAMING (Server-Sent Events)
 // ===================================================================
 

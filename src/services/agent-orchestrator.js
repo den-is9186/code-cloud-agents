@@ -26,6 +26,8 @@ const {
   getTeamNotificationChannels,
 } = require('./notification-service');
 
+const { checkBudgetAfterBuild } = require('./budget-alert-service');
+
 // Try to import streamEmitter, but provide a fallback if not available
 let streamEmitter;
 try {
@@ -149,6 +151,22 @@ async function orchestrateBuild(redis, options) {
       }
     } catch (notifError) {
       console.error('Failed to send build completion notification:', notifError);
+    }
+
+    // Check budget and send alerts if thresholds exceeded
+    try {
+      const budgetCheck = await checkBudgetAfterBuild(
+        redis,
+        teamId,
+        completedBuild.cost.totalCost
+      );
+      if (budgetCheck.alertSent) {
+        console.warn(
+          `⚠️ Budget alert sent for team ${teamId}: ${budgetCheck.alertLevel} (${budgetCheck.percentage}%)`
+        );
+      }
+    } catch (budgetError) {
+      console.error('Failed to check budget:', budgetError);
     }
 
     console.log(`✅ Build ${buildId} completed successfully`);
