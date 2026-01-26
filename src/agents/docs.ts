@@ -13,9 +13,7 @@ export class DocsAgent implements Agent {
     docsUpdated: FileChange[];
     changelogEntry?: string;
   }> {
-    const changes = input.filesChanged
-      .map(f => `${f.action}: ${f.path}`)
-      .join('\n');
+    const changes = input.filesChanged.map((f) => `${f.action}: ${f.path}`).join('\n');
 
     const response = await llmClient.chat(this.model, [
       {
@@ -32,22 +30,24 @@ Antworte NUR mit validem JSON:
     }
   ],
   "changelogEntry": "- Added feature X"
-}`
+}`,
       },
       {
         role: 'user',
-        content: `Aufgabe: ${input.task.description}\n\nÄnderungen:\n${changes}`
-      }
+        content: `Aufgabe: ${input.task.description}\n\nÄnderungen:\n${changes}`,
+      },
     ]);
 
     try {
       const DocsResponseSchema = z.object({
-        docsUpdated: z.array(z.object({
-          path: z.string(),
-          action: z.enum(['create', 'modify', 'delete']),
-          content: z.string()
-        })),
-        changelogEntry: z.string().optional()
+        docsUpdated: z.array(
+          z.object({
+            path: z.string(),
+            action: z.enum(['create', 'modify', 'delete']),
+            content: z.string(),
+          })
+        ),
+        changelogEntry: z.string().optional(),
       });
       const parsed = safeJsonParse(response.content, DocsResponseSchema);
 

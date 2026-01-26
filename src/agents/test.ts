@@ -20,8 +20,8 @@ export class TestAgent implements Agent {
     failures?: TestFailure[];
   }> {
     const codeToTest = input.filesChanged
-      .filter(f => f.action !== 'delete')
-      .map(f => `--- ${f.path} ---\n${f.content}`)
+      .filter((f) => f.action !== 'delete')
+      .map((f) => `--- ${f.path} ---\n${f.content}`)
       .join('\n\n');
 
     const response = await llmClient.chat(this.model, [
@@ -38,21 +38,23 @@ Antworte NUR mit validem JSON:
       "content": "import { describe, it, expect } from 'vitest';\\n..."
     }
   ]
-}`
+}`,
       },
       {
         role: 'user',
-        content: `Schreibe Tests für:\n${codeToTest}`
-      }
+        content: `Schreibe Tests für:\n${codeToTest}`,
+      },
     ]);
 
     try {
       const TestAgentResponseSchema = z.object({
-        testsWritten: z.array(z.object({
-          path: z.string(),
-          testCount: z.number(),
-          content: z.string()
-        }))
+        testsWritten: z.array(
+          z.object({
+            path: z.string(),
+            testCount: z.number(),
+            content: z.string(),
+          })
+        ),
       });
       const parsed = safeJsonParse(response.content, TestAgentResponseSchema);
 
@@ -66,17 +68,17 @@ Antworte NUR mit validem JSON:
       // Run tests using execFileAsync for better security (prevents shell injection)
       let stdout = '';
       let exitCode = 0;
-      
+
       try {
         // Use execFileAsync instead of shell_exec to avoid shell injection
         // npm test with arguments passed as separate array elements
         const { execFile } = await import('child_process');
         const { promisify } = await import('util');
         const execFileAsync = promisify(execFile);
-        
+
         const result = await execFileAsync('npm', ['test', '--', '--reporter=json'], {
           cwd: process.cwd(),
-          timeout: 30000 // 30 second timeout
+          timeout: 30000, // 30 second timeout
         });
         stdout = result.stdout;
         exitCode = 0;
@@ -90,7 +92,7 @@ Antworte NUR mit validem JSON:
         passed: 0,
         failed: 0,
         skipped: 0,
-        duration: 0
+        duration: 0,
       };
 
       // Parse test output with Zod validation
@@ -98,39 +100,52 @@ Antworte NUR mit validem JSON:
         numPassedTests: z.number().optional(),
         numFailedTests: z.number().optional(),
         numSkippedTests: z.number().optional(),
-        testResults: z.array(z.object({
-          duration: z.number().optional()
-        })).optional()
+        testResults: z
+          .array(
+            z.object({
+              duration: z.number().optional(),
+            })
+          )
+          .optional(),
       });
 
       try {
         const results = safeJsonParse(stdout, TestOutputSchema, {
           numPassedTests: 0,
           numFailedTests: 0,
-          numSkippedTests: 0
+          numSkippedTests: 0,
         });
-        
+
         testResults.passed = results.numPassedTests || 0;
         testResults.failed = results.numFailedTests || 0;
         testResults.skipped = results.numSkippedTests || 0;
-        
+
         // Calculate duration if available
         if (results.testResults && Array.isArray(results.testResults)) {
-          testResults.duration = results.testResults.reduce((sum, test) => sum + (test.duration || 0), 0);
+          testResults.duration = results.testResults.reduce(
+            (sum, test) => sum + (test.duration || 0),
+            0
+          );
         }
       } catch {
         // Fallback to counting tests if parsing fails
-        testResults.passed = exitCode === 0 ? parsed.testsWritten.reduce((a: number, t: { testCount: number }) => a + t.testCount, 0) : 0;
+        testResults.passed =
+          exitCode === 0
+            ? parsed.testsWritten.reduce(
+                (a: number, t: { testCount: number }) => a + t.testCount,
+                0
+              )
+            : 0;
       }
 
       return {
         testsWritten: parsed.testsWritten,
-        testResults
+        testResults,
       };
-    } catch (error: unknown) {
+    } catch (_error: unknown) {
       return {
         testsWritten: [],
-        testResults: { passed: 0, failed: 0, skipped: 0, duration: 0 }
+        testResults: { passed: 0, failed: 0, skipped: 0, duration: 0 },
       };
     }
   }

@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pbcopy)"
+      "Bash(pbcopy)",
+      "Bash(ssh:*)"
     ]
   }
 }

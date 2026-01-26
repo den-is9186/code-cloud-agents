@@ -20,7 +20,7 @@ export class ReviewAgent implements Agent {
     suggestions: Issue[];
   }> {
     const codeToReview = input.filesChanged
-      .map(f => `--- ${f.path} ---\n${f.content}`)
+      .map((f) => `--- ${f.path} ---\n${f.content}`)
       .join('\n\n');
 
     const response = await llmClient.chat(this.model, [
@@ -43,18 +43,21 @@ Antworte NUR mit validem JSON:
   "summary": "Zusammenfassung"
 }
 
-approved = true nur wenn keine "error" issues.`
+approved = true nur wenn keine "error" issues.`,
       },
       {
         role: 'user',
-        content: `Aufgabe war: ${input.originalTask.description}\n\nCode:\n${codeToReview}`
-      }
+        content: `Aufgabe war: ${input.originalTask.description}\n\nCode:\n${codeToReview}`,
+      },
     ]);
 
     try {
-      const parsed = safeJsonParse(response.content, ReviewResponseSchema.extend({
-        summary: z.string()
-      }));
+      const parsed = safeJsonParse(
+        response.content,
+        ReviewResponseSchema.extend({
+          summary: z.string(),
+        })
+      );
       const mustFix = parsed.issues?.filter((i: Issue) => i.severity === 'error') || [];
       const suggestions = parsed.issues?.filter((i: Issue) => i.severity !== 'error') || [];
 
@@ -63,7 +66,7 @@ approved = true nur wenn keine "error" issues.`
         issues: parsed.issues || [],
         summary: parsed.summary || 'No summary provided',
         mustFix,
-        suggestions
+        suggestions,
       };
     } catch {
       return {
@@ -71,7 +74,7 @@ approved = true nur wenn keine "error" issues.`
         issues: [],
         summary: 'Review completed',
         mustFix: [],
-        suggestions: []
+        suggestions: [],
       };
     }
   }

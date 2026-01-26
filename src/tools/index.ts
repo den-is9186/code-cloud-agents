@@ -11,42 +11,42 @@ const BASE_DIR = path.resolve(process.cwd());
 const MAX_FILE_SIZE_BYTES = FILE_CONFIG.MAX_FILE_SIZE_BYTES;
 
 // Tool Parameter Interfaces
-export interface FileReadParams { 
-  path: string; 
+export interface FileReadParams {
+  path: string;
 }
 
-export interface FileWriteParams { 
-  path: string; 
-  content: string; 
+export interface FileWriteParams {
+  path: string;
+  content: string;
 }
 
-export interface FilePatchParams { 
-  path: string; 
-  diff: string; 
+export interface FilePatchParams {
+  path: string;
+  diff: string;
 }
 
-export interface FileDeleteParams { 
-  path: string; 
+export interface FileDeleteParams {
+  path: string;
 }
 
-export interface DirectoryListParams { 
-  path: string; 
-  recursive?: boolean; 
+export interface DirectoryListParams {
+  path: string;
+  recursive?: boolean;
 }
 
-export interface ShellExecParams { 
-  command: string; 
+export interface ShellExecParams {
+  command: string;
   args?: string[];
-  cwd?: string; 
+  cwd?: string;
 }
 
-export interface GitDiffParams { 
-  file?: string; 
+export interface GitDiffParams {
+  file?: string;
 }
 
-export interface GitCommitParams { 
-  message: string; 
-  files?: string[]; 
+export interface GitCommitParams {
+  message: string;
+  files?: string[];
 }
 
 export function validatePath(filePath: string): string {
@@ -54,24 +54,26 @@ export function validatePath(filePath: string): string {
   if (filePath.includes('\0')) {
     throw new Error(`Null byte detected in path: ${filePath}`);
   }
-  
+
   // Normalize and resolve path relative to BASE_DIR
   const resolved = path.resolve(BASE_DIR, filePath);
-  
+
   // Check for path traversal using path.relative
   const relative = path.relative(BASE_DIR, resolved);
-  
+
   // If relative path starts with '..' or is an absolute path, it's outside BASE_DIR
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error(`Path traversal detected: attempted to access ${filePath} which resolves outside project root`);
+    throw new Error(
+      `Path traversal detected: attempted to access ${filePath} which resolves outside project root`
+    );
   }
-  
+
   // Additional security: ensure the resolved path is within BASE_DIR
   // This is a redundant check but provides extra safety
   if (!resolved.startsWith(BASE_DIR + path.sep) && resolved !== BASE_DIR) {
     throw new Error(`Security violation: path ${filePath} is outside project boundaries`);
   }
-  
+
   return resolved;
 }
 
@@ -89,16 +91,18 @@ export const fileRead: Tool<FileReadParams, { content: string }> = {
   parameters: { path: { type: 'string', required: true } },
   execute: async ({ path: filePath }: FileReadParams) => {
     const safePath = validatePath(filePath);
-    
+
     // Check file size before reading
     const stats = await fs.stat(safePath);
     if (stats.size > MAX_FILE_SIZE_BYTES) {
-      throw new Error(`File ${filePath} is too large (${stats.size} bytes > ${MAX_FILE_SIZE_BYTES} bytes)`);
+      throw new Error(
+        `File ${filePath} is too large (${stats.size} bytes > ${MAX_FILE_SIZE_BYTES} bytes)`
+      );
     }
-    
+
     const content = await fs.readFile(safePath, 'utf-8');
     return { content };
-  }
+  },
 };
 
 export const fileWrite: Tool<FileWriteParams, { success: boolean }> = {
@@ -110,7 +114,7 @@ export const fileWrite: Tool<FileWriteParams, { success: boolean }> = {
     await fs.mkdir(path.dirname(safePath), { recursive: true });
     await fs.writeFile(safePath, content, 'utf-8');
     return { success: true };
-  }
+  },
 };
 
 export const filePatch: Tool<FilePatchParams, { success: boolean }> = {
@@ -123,7 +127,7 @@ export const filePatch: Tool<FilePatchParams, { success: boolean }> = {
     await fs.readFile(safePath, 'utf-8');
     // Apply diff logic here
     return { success: true };
-  }
+  },
 };
 
 export const fileDelete: Tool<FileDeleteParams, { success: boolean }> = {
@@ -134,7 +138,7 @@ export const fileDelete: Tool<FileDeleteParams, { success: boolean }> = {
     const safePath = validatePath(filePath);
     await fs.unlink(safePath);
     return { success: true };
-  }
+  },
 };
 
 export const directoryList: Tool<DirectoryListParams, { files: string[] }> = {
@@ -157,11 +161,14 @@ export const directoryList: Tool<DirectoryListParams, { files: string[] }> = {
     };
     await readDir(safePath);
     return { files };
-  }
+  },
 };
 
 // Shell Tools
-export const shellExec: Tool<ShellExecParams, { stdout: string; stderr: string; exitCode: number }> = {
+export const shellExec: Tool<
+  ShellExecParams,
+  { stdout: string; stderr: string; exitCode: number }
+> = {
   name: 'shell_exec',
   description: 'Execute shell command',
   parameters: { command: { type: 'string' }, cwd: { type: 'string' } },
@@ -173,14 +180,14 @@ export const shellExec: Tool<ShellExecParams, { stdout: string; stderr: string; 
     if (command.includes(';') || command.includes('&&') || command.includes('|')) {
       throw new Error('Invalid command: contains forbidden characters');
     }
-    
+
     try {
       const { stdout, stderr } = await execAsync(command, { cwd });
       return { stdout, stderr, exitCode: 0 };
     } catch (error: any) {
       return { stdout: '', stderr: error.message, exitCode: error.code || 1 };
     }
-  }
+  },
 };
 
 // Git Tools
@@ -191,11 +198,11 @@ export const gitStatus: Tool<{}, { modified: string[]; staged: string[]; untrack
   execute: async () => {
     const { stdout } = await execFileAsync('git', ['status', '--porcelain']);
     const lines = stdout.trim().split('\n').filter(Boolean);
-    const modified = lines.filter(l => l.startsWith(' M')).map(l => l.slice(3));
-    const staged = lines.filter(l => l.startsWith('M ')).map(l => l.slice(3));
-    const untracked = lines.filter(l => l.startsWith('??')).map(l => l.slice(3));
+    const modified = lines.filter((l) => l.startsWith(' M')).map((l) => l.slice(3));
+    const staged = lines.filter((l) => l.startsWith('M ')).map((l) => l.slice(3));
+    const untracked = lines.filter((l) => l.startsWith('??')).map((l) => l.slice(3));
     return { modified, staged, untracked };
-  }
+  },
 };
 
 export const gitDiff: Tool<GitDiffParams, { diff: string }> = {
@@ -209,7 +216,7 @@ export const gitDiff: Tool<GitDiffParams, { diff: string }> = {
     }
     const { stdout } = await execFileAsync('git', args);
     return { diff: stdout };
-  }
+  },
 };
 
 export const gitCommit: Tool<GitCommitParams, { hash: string }> = {
@@ -224,7 +231,7 @@ export const gitCommit: Tool<GitCommitParams, { hash: string }> = {
     if (message.includes('\n') || message.includes('\r')) {
       throw new Error('Commit message cannot contain newlines');
     }
-    
+
     // Validate files if provided
     if (files) {
       if (!Array.isArray(files)) {
@@ -238,7 +245,7 @@ export const gitCommit: Tool<GitCommitParams, { hash: string }> = {
         validatePath(file);
       }
     }
-    
+
     if (files?.length) {
       // Verwende execFileAsync für git add mit einzelnen Dateien
       // Da files ein Array ist, müssen wir es als separate Argumente übergeben
@@ -250,18 +257,25 @@ export const gitCommit: Tool<GitCommitParams, { hash: string }> = {
     const { stdout } = await execFileAsync('git', ['commit', '-m', message]);
     const hashMatch = stdout.match(/\[.+ ([a-f0-9]+)\]/);
     return { hash: hashMatch?.[1] || 'unknown' };
-  }
+  },
 };
 
 // Tool Registry
 const tools: Tool[] = [
-  fileRead, fileWrite, filePatch, fileDelete, directoryList,
-  shellExec, gitStatus, gitDiff, gitCommit
+  fileRead,
+  fileWrite,
+  filePatch,
+  fileDelete,
+  directoryList,
+  shellExec,
+  gitStatus,
+  gitDiff,
+  gitCommit,
 ];
 
 export const getTools = () => tools;
 
-export const getTool = (name: string) => tools.find(t => t.name === name);
+export const getTool = (name: string) => tools.find((t) => t.name === name);
 
 export const executeTool = async <P = any, R = any>(name: string, params: P): Promise<R> => {
   const tool = getTool(name);

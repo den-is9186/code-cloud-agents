@@ -33,7 +33,7 @@ export class CodeAgent implements Agent {
     const feedbackContext = input.feedback
       ? `\n\nReview Feedback (bitte beheben):\n${input.feedback.mustFix.map((i: any) => `- ${i.message}`).join('\n')}` +
         (input.feedback.summary ? `\n\nSummary: ${input.feedback.summary}` : '') +
-        (input.feedback.suggestions && input.feedback.suggestions.length > 0 
+        (input.feedback.suggestions && input.feedback.suggestions.length > 0
           ? `\n\nSuggestions:\n${input.feedback.suggestions.map((i: any) => `- ${i.message}`).join('\n')}`
           : '')
       : '';
@@ -53,22 +53,24 @@ Antworte NUR mit validem JSON:
     }
   ],
   "explanation": "Was wurde gemacht"
-}`
+}`,
       },
       {
         role: 'user',
-        content: `Aufgabe: ${input.task.description}\n\nBestehender Code:${existingCode}${feedbackContext}`
-      }
+        content: `Aufgabe: ${input.task.description}\n\nBestehender Code:${existingCode}${feedbackContext}`,
+      },
     ]);
 
     try {
       const CodeAgentResponseSchema = z.object({
-        filesChanged: z.array(z.object({
-          path: z.string(),
-          action: z.enum(['create', 'modify']),
-          content: z.string()
-        })),
-        explanation: z.string()
+        filesChanged: z.array(
+          z.object({
+            path: z.string(),
+            action: z.enum(['create', 'modify']),
+            content: z.string(),
+          })
+        ),
+        explanation: z.string(),
       });
       const parsed = safeJsonParse(response.content, CodeAgentResponseSchema);
 
@@ -82,7 +84,7 @@ Antworte NUR mit validem JSON:
       return {
         filesChanged: parsed.filesChanged,
         explanation: parsed.explanation,
-        needsReview: true
+        needsReview: true,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -90,7 +92,7 @@ Antworte NUR mit validem JSON:
       return {
         filesChanged: [],
         explanation: `Error: ${errorMessage}`,
-        needsReview: false
+        needsReview: false,
       };
     }
   }

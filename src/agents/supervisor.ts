@@ -1,4 +1,18 @@
-import { Agent, AgentRole, AgentStatus, BuildResult, SubTask, ReviewResult, FileChange, TestFile, TestResult, Step, Dependency, Issue, TestFailure } from './types';
+import {
+  Agent,
+  AgentRole,
+  AgentStatus,
+  BuildResult,
+  SubTask,
+  ReviewResult,
+  FileChange,
+  TestFile,
+  TestResult,
+  Step,
+  Dependency,
+  Issue,
+  TestFailure,
+} from './types';
 import { llmClient } from '../llm/client';
 import { SUPERVISOR_CONFIG } from '../config/constants';
 import { sanitizeLogMessage } from '../utils/security';
@@ -36,24 +50,34 @@ export class SupervisorAgent implements Agent {
       docsUpdated: [],
       totalCost: 0,
       totalTokens: 0,
-      duration: 0
+      duration: 0,
     };
 
     try {
       // Step 1: Architect creates runbook
       console.log('📐 Architect analyzing task...');
       const architect = this.getAgent('architect');
-      const { runbook } = await (architect as Agent<{ task: string; projectPath: string }, { runbook: Step[]; estimatedComplexity: string }>).execute(input);
+      const { runbook } = await (
+        architect as Agent<
+          { task: string; projectPath: string },
+          { runbook: Step[]; estimatedComplexity: string }
+        >
+      ).execute(input);
 
       // Step 2: Coach creates subtasks
       console.log('🎯 Coach planning tasks...');
       const coach = this.getAgent('coach');
-      const { tasks, executionOrder } = await (coach as Agent<{ runbook: Step[]; context: unknown }, { tasks: SubTask[]; executionOrder: string[][]; dependencies: Dependency[] }>).execute({ runbook, context: input });
+      const { tasks, executionOrder } = await (
+        coach as Agent<
+          { runbook: Step[]; context: unknown },
+          { tasks: SubTask[]; executionOrder: string[][]; dependencies: Dependency[] }
+        >
+      ).execute({ runbook, context: input });
 
       // Step 3: Execute tasks
       // Create a Map for O(1) task lookups instead of O(n) find() in nested loops
       const taskMap = new Map(tasks.map((t: SubTask) => [t.id, t]));
-      
+
       for (const taskBatch of executionOrder) {
         // Execute tasks in the same batch in parallel
         const batchResults = await Promise.all(
@@ -63,7 +87,7 @@ export class SupervisorAgent implements Agent {
               console.warn(`Task ${taskId} not found in task list`);
               return null;
             }
-            
+
             // Collect changes from this task
             const taskChanges: {
               filesChanged: FileChange[];
@@ -74,9 +98,9 @@ export class SupervisorAgent implements Agent {
               filesChanged: [],
               testsWritten: [],
               testResults: undefined,
-              errors: []
+              errors: [],
             };
-            
+
             try {
               await this.executeTaskWithResult(task, taskChanges);
               return taskChanges;
@@ -88,20 +112,20 @@ export class SupervisorAgent implements Agent {
             }
           })
         );
-        
+
         // Merge all batch results into the main result
         for (const batchResult of batchResults) {
           if (!batchResult) continue;
-          
+
           result.filesChanged.push(...batchResult.filesChanged);
           result.testsWritten.push(...batchResult.testsWritten);
-          
+
           // For test results, we might want to combine them
           // For simplicity, use the last non-undefined result
           if (batchResult.testResults) {
             result.testResults = batchResult.testResults;
           }
-          
+
           // Collect errors
           if (batchResult.errors && batchResult.errors.length > 0) {
             if (!result.errors) result.errors = [];
@@ -114,9 +138,14 @@ export class SupervisorAgent implements Agent {
       console.log('📝 Docs agent documenting...');
       const docs = this.agents.get('docs');
       if (docs) {
-        const { docsUpdated } = await (docs as Agent<{ filesChanged: FileChange[]; task: { description: string } }, { docsUpdated: FileChange[]; changelogEntry?: string }>).execute({
+        const { docsUpdated } = await (
+          docs as Agent<
+            { filesChanged: FileChange[]; task: { description: string } },
+            { docsUpdated: FileChange[]; changelogEntry?: string }
+          >
+        ).execute({
           filesChanged: result.filesChanged,
-          task: { description: input.task }
+          task: { description: input.task },
         });
         result.docsUpdated = docsUpdated;
       }
@@ -140,11 +169,12 @@ export class SupervisorAgent implements Agent {
   private getAgent(name: AgentRole): Agent {
     const agent = this.agents.get(name);
     if (!agent) {
-      throw new Error(`Agent '${name}' not registered. Available: ${[...this.agents.keys()].join(', ')}`);
+      throw new Error(
+        `Agent '${name}' not registered. Available: ${[...this.agents.keys()].join(', ')}`
+      );
     }
     return agent;
   }
-
 
   private async executeTaskWithResult(
     task: SubTask,
@@ -162,21 +192,37 @@ export class SupervisorAgent implements Agent {
       if (task.assignedAgent === 'code') {
         let iteration = 0;
         let approved = false;
-        
+
         // Sammle alle Dateiänderungen in einem lokalen Array
         const taskFilesChanged: FileChange[] = [];
 
         while (!approved && iteration < this.maxIterations) {
           // Code writes
-          const codeResult = await (agent as Agent<{ task: SubTask; feedback?: ReviewResult }, { filesChanged: FileChange[]; explanation: string; needsReview: boolean }>).execute({ task, feedback: undefined });
+          const codeResult = await (
+            agent as Agent<
+              { task: SubTask; feedback?: ReviewResult },
+              { filesChanged: FileChange[]; explanation: string; needsReview: boolean }
+            >
+          ).execute({ task, feedback: undefined });
           taskFilesChanged.push(...codeResult.filesChanged);
 
           // Review checks
           const review = this.agents.get('review');
           if (review) {
-            const reviewResult = await (review as Agent<{ filesChanged: FileChange[]; originalTask: SubTask }, { approved: boolean; issues: Issue[]; summary: string; mustFix: Issue[]; suggestions: Issue[] }>).execute({
+            const reviewResult = await (
+              review as Agent<
+                { filesChanged: FileChange[]; originalTask: SubTask },
+                {
+                  approved: boolean;
+                  issues: Issue[];
+                  summary: string;
+                  mustFix: Issue[];
+                  suggestions: Issue[];
+                }
+              >
+            ).execute({
               filesChanged: codeResult.filesChanged,
-              originalTask: task
+              originalTask: task,
             });
 
             if (reviewResult.approved) {
@@ -199,9 +245,14 @@ export class SupervisorAgent implements Agent {
         // Test writes tests
         const test = this.agents.get('test');
         if (test) {
-          const testResult = await (test as Agent<{ filesChanged: FileChange[]; task: SubTask }, { testsWritten: TestFile[]; testResults: TestResult; failures?: TestFailure[] }>).execute({
+          const testResult = await (
+            test as Agent<
+              { filesChanged: FileChange[]; task: SubTask },
+              { testsWritten: TestFile[]; testResults: TestResult; failures?: TestFailure[] }
+            >
+          ).execute({
             filesChanged: taskFilesChanged,
-            task
+            task,
           });
           taskChanges.testsWritten.push(...testResult.testsWritten);
           taskChanges.testResults = testResult.testResults;
@@ -210,7 +261,11 @@ export class SupervisorAgent implements Agent {
     } catch (error: unknown) {
       // Wenn der Agent nicht existiert, loggen wir einen Fehler und fahren mit der nächsten Task fort
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(sanitizeLogMessage(`❌ Agent '${task.assignedAgent}' not found for task ${task.id}: ${errorMessage}`));
+      console.error(
+        sanitizeLogMessage(
+          `❌ Agent '${task.assignedAgent}' not found for task ${task.id}: ${errorMessage}`
+        )
+      );
       // Store error in taskChanges
       if (!taskChanges.errors) taskChanges.errors = [];
       taskChanges.errors.push(`Task ${task.id} failed: ${errorMessage}`);

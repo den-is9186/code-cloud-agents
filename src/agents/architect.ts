@@ -14,19 +14,23 @@ export class ArchitectAgent implements Agent {
     this.model = model;
   }
 
-  async execute(input: { task: string; projectPath: string }): Promise<{ runbook: Step[]; estimatedComplexity: string }> {
+  async execute(input: {
+    task: string;
+    projectPath: string;
+  }): Promise<{ runbook: Step[]; estimatedComplexity: string }> {
     // Get project context
     const { files } = await executeTool('directory_list', {
       path: input.projectPath,
-      recursive: true
+      recursive: true,
     });
 
     // Read key files for context in parallel
-    const keyFiles = files.filter((f: string) =>
-      f.endsWith('package.json') ||
-      f.endsWith('tsconfig.json') ||
-      f.includes('README')
-    ).slice(0, 10); // Increased limit for better context
+    const keyFiles = files
+      .filter(
+        (f: string) =>
+          f.endsWith('package.json') || f.endsWith('tsconfig.json') || f.includes('README')
+      )
+      .slice(0, 10); // Increased limit for better context
 
     // Read files in parallel using Promise.all
     const fileReadPromises = keyFiles.map(async (file: string) => {
@@ -34,7 +38,11 @@ export class ArchitectAgent implements Agent {
         const { content } = await executeTool('file_read', { path: file });
         return `\n--- ${file} ---\n${content.slice(0, 1000)}\n`;
       } catch (error) {
-        console.warn(sanitizeLogMessage(`[Architect] Failed to read ${file}: ${error instanceof Error ? error.message : String(error)}`));
+        console.warn(
+          sanitizeLogMessage(
+            `[Architect] Failed to read ${file}: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
         return ''; // Return empty string for failed reads
       }
     });
@@ -59,38 +67,42 @@ Antworte NUR mit validem JSON in diesem Format:
     }
   ],
   "estimatedComplexity": "low" | "medium" | "high"
-}`
+}`,
       },
       {
         role: 'user',
-        content: `Projekt-Struktur:\n${files.slice(0, 50).join('\n')}\n\nKontext:\n${context}\n\nAufgabe: ${input.task}`
-      }
+        content: `Projekt-Struktur:\n${files.slice(0, 50).join('\n')}\n\nKontext:\n${context}\n\nAufgabe: ${input.task}`,
+      },
     ]);
 
     try {
       const ArchitectResponseSchema = z.object({
-        runbook: z.array(z.object({
-          id: z.string(),
-          description: z.string(),
-          files: z.array(z.string()),
-          expectedOutcome: z.string(),
-          estimatedTokens: z.number()
-        })),
-        estimatedComplexity: z.enum(['low', 'medium', 'high'])
+        runbook: z.array(
+          z.object({
+            id: z.string(),
+            description: z.string(),
+            files: z.array(z.string()),
+            expectedOutcome: z.string(),
+            estimatedTokens: z.number(),
+          })
+        ),
+        estimatedComplexity: z.enum(['low', 'medium', 'high']),
       });
       const parsed = safeJsonParse(response.content, ArchitectResponseSchema);
       return parsed;
     } catch {
       // Fallback: Simple single-step runbook
       return {
-        runbook: [{
-          id: 'step-1',
-          description: input.task,
-          files: [],
-          expectedOutcome: 'Task completed',
-          estimatedTokens: 2000
-        }],
-        estimatedComplexity: 'medium' as const
+        runbook: [
+          {
+            id: 'step-1',
+            description: input.task,
+            files: [],
+            expectedOutcome: 'Task completed',
+            estimatedTokens: 2000,
+          },
+        ],
+        estimatedComplexity: 'medium' as const,
       };
     }
   }

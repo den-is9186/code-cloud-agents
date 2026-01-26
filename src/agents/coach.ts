@@ -21,7 +21,7 @@ export class CoachAgent implements Agent {
     return {
       tasks: [],
       executionOrder: [],
-      dependencies: []
+      dependencies: [],
     };
   }
 
@@ -52,30 +52,34 @@ Antworte NUR mit validem JSON:
   ],
   "executionOrder": [["task-1"], ["task-2", "task-3"]],
   "dependencies": [{"taskId": "task-2", "dependsOn": ["task-1"]}]
-}`
+}`,
         },
         {
           role: 'user',
-          content: `Runbook:\n${JSON.stringify(input.runbook, null, 2)}`
-        }
+          content: `Runbook:\n${JSON.stringify(input.runbook, null, 2)}`,
+        },
       ]);
 
       try {
         const CoachResponseSchema = z.object({
-          tasks: z.array(z.object({
-            id: z.string(),
-            stepId: z.string(),
-            assignedAgent: z.enum(['code', 'test', 'review', 'docs']),
-            description: z.string(),
-            input: z.any(),
-            expectedOutput: z.string(),
-            status: z.enum(['pending', 'in_progress', 'completed', 'failed'])
-          })),
+          tasks: z.array(
+            z.object({
+              id: z.string(),
+              stepId: z.string(),
+              assignedAgent: z.enum(['code', 'test', 'review', 'docs']),
+              description: z.string(),
+              input: z.any(),
+              expectedOutput: z.string(),
+              status: z.enum(['pending', 'in_progress', 'completed', 'failed']),
+            })
+          ),
           executionOrder: z.array(z.array(z.string())),
-          dependencies: z.array(z.object({
-            taskId: z.string(),
-            dependsOn: z.array(z.string())
-          }))
+          dependencies: z.array(
+            z.object({
+              taskId: z.string(),
+              dependsOn: z.array(z.string()),
+            })
+          ),
         });
         const result = safeJsonParse(response.content, CoachResponseSchema);
         this.status = 'completed';
@@ -89,14 +93,14 @@ Antworte NUR mit validem JSON:
           description: step.description,
           input: { files: step.files },
           expectedOutput: step.expectedOutcome,
-          status: 'pending' as const
+          status: 'pending' as const,
         }));
 
         this.status = 'completed';
         return {
           tasks,
-          executionOrder: [tasks.map(t => t.id)],
-          dependencies: []
+          executionOrder: [tasks.map((t) => t.id)],
+          dependencies: [],
         };
       }
     } catch (error: unknown) {

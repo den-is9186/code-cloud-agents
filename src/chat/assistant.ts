@@ -8,7 +8,7 @@ const PRESET_INFO = {
   C: { name: 'Premium', cost: 130, quality: 92, description: 'Höchste Qualität, teuer' },
   D: { name: 'Smart', cost: 45, quality: 88, description: 'Claude für Code, DeepSeek für Rest' },
   LOCAL: { name: 'Local', cost: 6, quality: 85, description: 'Scout lokal für Docs/Vision' },
-  V: { name: 'Vision', cost: 15, quality: 82, description: 'Mit Screenshot-Analyse' }
+  V: { name: 'Vision', cost: 15, quality: 82, description: 'Mit Screenshot-Analyse' },
 };
 
 export class ChatAssistant {
@@ -16,8 +16,8 @@ export class ChatAssistant {
   private pendingSuggestion: TeamSuggestion | null = null;
 
   // Hybrid model selection
-  private defaultModel = 'llama-4-scout-local';  // Free
-  private complexModel = 'deepseek-r1';           // For complex planning
+  private defaultModel = 'llama-4-scout-local'; // Free
+  private complexModel = 'deepseek-r1'; // For complex planning
 
   // Maximum number of messages to keep in history to prevent memory leak
   private readonly MAX_HISTORY_LENGTH = 50;
@@ -64,19 +64,44 @@ export class ChatAssistant {
     }
   }
 
-  private detectMessageType(message: string): 'execute' | 'adjust' | 'question' | 'task' | 'general' {
+  private detectMessageType(
+    message: string
+  ): 'execute' | 'adjust' | 'question' | 'task' | 'general' {
     const lower = message.toLowerCase();
 
-    if (lower.includes('starten') || lower.includes('ausführen') || lower.includes('ja, ') || lower.includes('start')) {
+    if (
+      lower.includes('starten') ||
+      lower.includes('ausführen') ||
+      lower.includes('ja, ') ||
+      lower.includes('start')
+    ) {
       return 'execute';
     }
-    if (lower.includes('günstiger') || lower.includes('billiger') || lower.includes('besser') || lower.includes('ändern')) {
+    if (
+      lower.includes('günstiger') ||
+      lower.includes('billiger') ||
+      lower.includes('besser') ||
+      lower.includes('ändern')
+    ) {
       return 'adjust';
     }
-    if (lower.includes('was ist') || lower.includes('wie ') || lower.includes('welche') || lower.includes('erkläre') || message.endsWith('?')) {
+    if (
+      lower.includes('was ist') ||
+      lower.includes('wie ') ||
+      lower.includes('welche') ||
+      lower.includes('erkläre') ||
+      message.endsWith('?')
+    ) {
       return 'question';
     }
-    if (lower.includes('refactor') || lower.includes('erstelle') || lower.includes('füge') || lower.includes('add') || lower.includes('create') || lower.includes('build')) {
+    if (
+      lower.includes('refactor') ||
+      lower.includes('erstelle') ||
+      lower.includes('füge') ||
+      lower.includes('add') ||
+      lower.includes('create') ||
+      lower.includes('build')
+    ) {
       return 'task';
     }
     return 'general';
@@ -85,11 +110,20 @@ export class ChatAssistant {
   private detectComplexity(message: string): 'low' | 'medium' | 'high' {
     const lower = message.toLowerCase();
 
-    const highIndicators = ['refactor', 'migration', 'architektur', 'mehrere', 'repos', 'monorepo', 'komplette', 'gesamte'];
+    const highIndicators = [
+      'refactor',
+      'migration',
+      'architektur',
+      'mehrere',
+      'repos',
+      'monorepo',
+      'komplette',
+      'gesamte',
+    ];
     const lowIndicators = ['was', 'wie', 'welche', 'erkläre', 'hilfe', 'kosten', 'einfach'];
 
-    if (highIndicators.some(i => lower.includes(i))) return 'high';
-    if (lowIndicators.some(i => lower.includes(i))) return 'low';
+    if (highIndicators.some((i) => lower.includes(i))) return 'high';
+    if (lowIndicators.some((i) => lower.includes(i))) return 'low';
     return 'medium';
   }
 
@@ -120,9 +154,9 @@ export class ChatAssistant {
   "estimatedCost": 0.50,
   "estimatedTimeSeconds": 120,
   "description": "Kurze Beschreibung"
-}`
+}`,
       },
-      { role: 'user', content: message }
+      { role: 'user', content: message },
     ]);
 
     try {
@@ -135,9 +169,9 @@ export class ChatAssistant {
       complexity: 'medium',
       repos: ['.'],
       estimatedTokens: 50000,
-      estimatedCost: 0.50,
+      estimatedCost: 0.5,
       estimatedTimeSeconds: 120,
-      description: message
+      description: message,
     };
   }
 
@@ -159,15 +193,19 @@ export class ChatAssistant {
       agents: [
         { role: 'supervisor', model: 'deepseek-r1', reason: 'Orchestrierung' },
         { role: 'architect', model: 'deepseek-r1', reason: 'Planung' },
-        { role: 'code', model: preset === 'D' ? 'claude-sonnet-4' : 'deepseek-v3', reason: 'Implementierung' },
+        {
+          role: 'code',
+          model: preset === 'D' ? 'claude-sonnet-4' : 'deepseek-v3',
+          reason: 'Implementierung',
+        },
         { role: 'review', model: 'deepseek-r1', reason: 'Code-Prüfung' },
         { role: 'test', model: 'deepseek-v3', reason: 'Tests' },
-        { role: 'docs', model: 'scout-local', reason: 'Dokumentation (kostenlos)' }
+        { role: 'docs', model: 'scout-local', reason: 'Dokumentation (kostenlos)' },
       ],
       totalCost: info.cost * (analysis.estimatedTokens / 100000),
       estimatedTime: `${Math.ceil(analysis.estimatedTimeSeconds / 60)} Min`,
       canOptimize: preset !== 'A',
-      optimizationTip: preset !== 'A' ? 'Sage "günstiger" für Budget-Version' : undefined
+      optimizationTip: preset !== 'A' ? 'Sage "günstiger" für Budget-Version' : undefined,
     };
   }
 
@@ -181,7 +219,7 @@ Komplexität: ${analysis.complexity.toUpperCase()}
 Geschätzte Zeit: ${suggestion.estimatedTime}
 
 🤖 **Team-Vorschlag (${info.name}):**
-${suggestion.agents.map(a => `  • ${a.role}: ${a.model} - ${a.reason}`).join('\n')}
+${suggestion.agents.map((a) => `  • ${a.role}: ${a.model} - ${a.reason}`).join('\n')}
 
 💰 **Geschätzte Kosten:** $${suggestion.totalCost.toFixed(2)}
 
@@ -203,9 +241,9 @@ ${suggestion.optimizationTip ? `💡 Tipp: ${suggestion.optimizationTip}\n` : ''
 
     try {
       const result = await run({
-        task: this.conversationHistory.find(m => m.role === 'user')?.content || 'Unknown task',
+        task: this.conversationHistory.find((m) => m.role === 'user')?.content || 'Unknown task',
         projectPath: '.',
-        preset: suggestion.preset as RunConfig['preset']
+        preset: suggestion.preset as RunConfig['preset'],
       });
 
       if (result.success) {
@@ -242,7 +280,11 @@ Möchtest du es nochmal versuchen oder den Task anpassen?`;
 
     if (lower.includes('günstiger') || lower.includes('billiger') || lower.includes('budget')) {
       newPreset = 'A';
-    } else if (lower.includes('besser') || lower.includes('premium') || lower.includes('qualität')) {
+    } else if (
+      lower.includes('besser') ||
+      lower.includes('premium') ||
+      lower.includes('qualität')
+    ) {
       newPreset = 'C';
     } else if (lower.includes('smart') || lower.includes('claude')) {
       newPreset = 'D';
@@ -253,7 +295,7 @@ Möchtest du es nochmal versuchen oder den Task anpassen?`;
     this.pendingSuggestion = {
       ...this.pendingSuggestion,
       preset: newPreset,
-      totalCost: info.cost * 0.5 // Rough estimate
+      totalCost: info.cost * 0.5, // Rough estimate
     };
 
     return `
@@ -275,7 +317,11 @@ Sage "Starten" zum Ausführen oder frage weiter.`;
         content: `Du bist der Assistent für "Code Cloud Agents", ein Multi-Agent System.
 
 Verfügbare Presets:
-${Object.entries(PRESET_INFO).map(([k, v]) => `- ${k} (${v.name}): $${v.cost}/Build, Qualität ${v.quality}/100 - ${v.description}`).join('\n')}
+${Object.entries(PRESET_INFO)
+  .map(
+    ([k, v]) => `- ${k} (${v.name}): $${v.cost}/Build, Qualität ${v.quality}/100 - ${v.description}`
+  )
+  .join('\n')}
 
 Modelle:
 - DeepSeek R1: Beste Reasoning, $0.55/$2.19 per Mt
@@ -283,9 +329,9 @@ Modelle:
 - Claude Sonnet 4: Premium, $3/$15 per Mt
 - Scout Local: Kostenlos, für Docs/Vision
 
-Beantworte Fragen kurz und hilfreich.`
+Beantworte Fragen kurz und hilfreich.`,
       },
-      { role: 'user', content: message }
+      { role: 'user', content: message },
     ]);
 
     return response.content;

@@ -1,8 +1,23 @@
 // Agent Roles
-export type AgentRole = "supervisor" | "architect" | "coach" | "code" | "review" | "test" | "docs" | "vision";
+export type AgentRole =
+  | 'supervisor'
+  | 'architect'
+  | 'coach'
+  | 'code'
+  | 'review'
+  | 'test'
+  | 'docs'
+  | 'vision';
 
 // Agent Status
-export type AgentStatus = "idle" | "working" | "waiting" | "error" | "done" | "completed" | "failed";
+export type AgentStatus =
+  | 'idle'
+  | 'working'
+  | 'waiting'
+  | 'error'
+  | 'done'
+  | 'completed'
+  | 'failed';
 
 // Base Agent Interface
 export interface Agent<TInput = unknown, TOutput = unknown> {
@@ -33,7 +48,7 @@ export interface SubTask {
   description: string;
   input: TaskInput;
   expectedOutput: string;
-  status: "pending" | "in_progress" | "completed" | "failed";
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
 }
 
 export interface Dependency {
@@ -44,14 +59,14 @@ export interface Dependency {
 // File Types
 export interface FileChange {
   path: string;
-  action: "create" | "modify" | "delete";
+  action: 'create' | 'modify' | 'delete';
   content?: string;
   diff?: string;
 }
 
 // Review Types
 export interface Issue {
-  severity: "error" | "warning" | "info";
+  severity: 'error' | 'warning' | 'info';
   file: string;
   line?: number;
   message: string;
@@ -97,7 +112,7 @@ export interface TestFailure {
 
 // LLM Types
 export interface Message {
-  role: "system" | "user" | "assistant";
+  role: 'system' | 'user' | 'assistant';
   content: string;
 }
 
@@ -150,8 +165,8 @@ export interface BuildResult {
 
 // Chat Types
 export interface TaskAnalysis {
-  taskType: "refactor" | "feature" | "fix" | "docs" | "test" | "question" | "unknown";
-  complexity: "low" | "medium" | "high";
+  taskType: 'refactor' | 'feature' | 'fix' | 'docs' | 'test' | 'question' | 'unknown';
+  complexity: 'low' | 'medium' | 'high';
   repos: string[];
   estimatedTokens: number;
   estimatedCost: number;
