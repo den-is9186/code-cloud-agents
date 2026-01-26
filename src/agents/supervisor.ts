@@ -48,10 +48,16 @@ export class SupervisorAgent implements Agent {
       const { tasks, executionOrder } = await coach.execute({ runbook, context: input });
 
       // Step 3: Execute tasks
+      // Create a Map for O(1) task lookups instead of O(n) find() in nested loops
+      const taskMap = new Map(tasks.map((t: SubTask) => [t.id, t]));
+      
       for (const taskBatch of executionOrder) {
         for (const taskId of taskBatch) {
-          const task = tasks.find((t: SubTask) => t.id === taskId);
-          if (!task) continue;
+          const task = taskMap.get(taskId);
+          if (!task) {
+            console.warn(`Task ${taskId} not found in task list`);
+            continue;
+          }
 
           await this.executeTask(task, result);
         }
