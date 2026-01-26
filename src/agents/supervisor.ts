@@ -145,6 +145,9 @@ export class SupervisorAgent implements Agent {
       // Wenn der Agent nicht existiert, loggen wir einen Fehler und fahren mit der nächsten Task fort
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`❌ Agent '${task.assignedAgent}' not found for task ${task.id}:`, errorMessage);
+      // Store error in result for better error handling
+      if (!result.errors) result.errors = [];
+      result.errors.push(`Task ${task.id} failed: ${errorMessage}`);
     }
   }
 }
