@@ -11,6 +11,13 @@ const {
   NotificationType,
   getTeamNotificationChannels,
 } = require('./services/notification-service');
+const {
+  ExportFormat,
+  exportBuildReport,
+  exportCostReport,
+  exportAgentPerformanceReport,
+  exportBudgetReport,
+} = require('./services/export-service');
 
 const app = express();
 
@@ -1953,6 +1960,250 @@ app.get('/api/builds/:buildId/logs/stream', async (req, res) => {
     streamEmitter.off(StreamEventType.TEST_RUN, onTestRun);
     streamEmitter.off(StreamEventType.TASK_PROGRESS, onTaskProgress);
   });
+});
+
+// ===================================================================
+// EXPORT & REPORTS API
+// ===================================================================
+
+/**
+ * Export build report
+ * GET /api/v1/export/builds
+ *
+ * Query params:
+ * - buildId: Specific build ID (optional)
+ * - teamId: Filter by team (optional)
+ * - startDate: Start date filter (ISO format, optional)
+ * - endDate: End date filter (ISO format, optional)
+ * - format: json or csv (default: json)
+ */
+app.get('/api/v1/export/builds', async (req, res) => {
+  try {
+    const { buildId, teamId, startDate, endDate, format = 'json' } = req.query;
+
+    // Validate format
+    if (!['json', 'csv'].includes(format)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_FORMAT',
+          message: 'Format must be json or csv',
+        },
+      });
+    }
+
+    // Parse dates if provided
+    const options = {
+      buildId,
+      teamId,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      format,
+    };
+
+    const result = await exportBuildReport(redis, options);
+
+    // Set content type based on format
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="builds-${Date.now()}.csv"`);
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+    }
+
+    res.send(result);
+  } catch (error) {
+    console.error('Export builds error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'EXPORT_FAILED',
+        message: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * Export cost report
+ * GET /api/v1/export/costs
+ *
+ * Query params:
+ * - teamId: Team ID (required)
+ * - period: month, quarter, year (default: month)
+ * - startDate: Start date (ISO format, optional)
+ * - endDate: End date (ISO format, optional)
+ * - format: json or csv (default: json)
+ */
+app.get('/api/v1/export/costs', async (req, res) => {
+  try {
+    const { teamId, period = 'month', startDate, endDate, format = 'json' } = req.query;
+
+    // Validate required fields
+    if (!teamId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_TEAM_ID',
+          message: 'teamId is required',
+        },
+      });
+    }
+
+    // Validate format
+    if (!['json', 'csv'].includes(format)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_FORMAT',
+          message: 'Format must be json or csv',
+        },
+      });
+    }
+
+    // Validate period
+    if (!['month', 'quarter', 'year'].includes(period)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_PERIOD',
+          message: 'Period must be month, quarter, or year',
+        },
+      });
+    }
+
+    const options = {
+      teamId,
+      period,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      format,
+    };
+
+    const result = await exportCostReport(redis, options);
+
+    // Set content type based on format
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="costs-${teamId}-${Date.now()}.csv"`);
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+    }
+
+    res.send(result);
+  } catch (error) {
+    console.error('Export costs error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'EXPORT_FAILED',
+        message: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * Export agent performance report
+ * GET /api/v1/export/agents
+ *
+ * Query params:
+ * - teamId: Filter by team (optional)
+ * - agentName: Filter by agent name (optional)
+ * - startDate: Start date filter (ISO format, optional)
+ * - endDate: End date filter (ISO format, optional)
+ * - format: json or csv (default: json)
+ */
+app.get('/api/v1/export/agents', async (req, res) => {
+  try {
+    const { teamId, agentName, startDate, endDate, format = 'json' } = req.query;
+
+    // Validate format
+    if (!['json', 'csv'].includes(format)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_FORMAT',
+          message: 'Format must be json or csv',
+        },
+      });
+    }
+
+    const options = {
+      teamId,
+      agentName,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      format,
+    };
+
+    const result = await exportAgentPerformanceReport(redis, options);
+
+    // Set content type based on format
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="agents-${Date.now()}.csv"`);
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+    }
+
+    res.send(result);
+  } catch (error) {
+    console.error('Export agents error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'EXPORT_FAILED',
+        message: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * Export budget report
+ * GET /api/v1/export/budget/:teamId
+ *
+ * Query params:
+ * - format: json or csv (default: json)
+ */
+app.get('/api/v1/export/budget/:teamId', async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const { format = 'json' } = req.query;
+
+    // Validate format
+    if (!['json', 'csv'].includes(format)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_FORMAT',
+          message: 'Format must be json or csv',
+        },
+      });
+    }
+
+    const result = await exportBudgetReport(redis, teamId, format);
+
+    // Set content type based on format
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="budget-${teamId}-${Date.now()}.csv"`);
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+    }
+
+    res.send(result);
+  } catch (error) {
+    console.error('Export budget error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'EXPORT_FAILED',
+        message: error.message,
+      },
+    });
+  }
 });
 
 // Declare server at module level for graceful shutdown
