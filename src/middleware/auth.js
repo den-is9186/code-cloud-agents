@@ -109,7 +109,7 @@ function authenticate(options = {}) {
       }
 
       // Optional auth - continue without auth
-      next();
+      return next();
     } catch (error) {
       return res.status(500).json({
         error: {
@@ -156,7 +156,7 @@ function requireRole(requiredRole) {
       });
     }
 
-    next();
+    return next();
   };
 }
 
@@ -220,7 +220,7 @@ function requireTeamOwnership(teamIdParam = 'id') {
         });
       }
 
-      next();
+      return next();
     } catch (error) {
       return res.status(500).json({
         error: {
@@ -304,7 +304,7 @@ function rateLimit(options = {}) {
       }
     }
 
-    next();
+    return next();
   };
 }
 

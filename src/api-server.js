@@ -1684,7 +1684,7 @@ async function saveTeamWithStateMachine(teamKey, teamData, stateMachine, metadat
 app.post('/api/v1/teams/:id/approve', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, reason } = req.body;
+    const { userId, reason } = req.body || {};
 
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1776,7 +1776,7 @@ app.post('/api/v1/teams/:id/approve', authenticate(), requireRole(Roles.MANAGER)
 app.post('/api/v1/teams/:id/reject', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, reason } = req.body;
+    const { userId, reason } = req.body || {};
 
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1879,7 +1879,7 @@ app.post('/api/v1/teams/:id/reject', authenticate(), requireRole(Roles.MANAGER),
 app.post('/api/v1/teams/:id/skip-premium', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, reason } = req.body;
+    const { userId, reason } = req.body || {};
 
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
