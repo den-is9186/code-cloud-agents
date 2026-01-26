@@ -19,8 +19,12 @@ export class ChatAssistant {
   private defaultModel = 'llama-4-scout-local';  // Free
   private complexModel = 'deepseek-r1';           // For complex planning
 
+  // Maximum number of messages to keep in history to prevent memory leak
+  private readonly MAX_HISTORY_LENGTH = 50;
+
   async process(message: string): Promise<string> {
     this.conversationHistory.push({ role: 'user', content: message });
+    this.pruneHistory();
 
     // Detect message type
     const messageType = this.detectMessageType(message);
@@ -45,7 +49,16 @@ export class ChatAssistant {
     }
 
     this.conversationHistory.push({ role: 'assistant', content: response });
+    this.pruneHistory();
     return response;
+  }
+
+  private pruneHistory(): void {
+    if (this.conversationHistory.length > this.MAX_HISTORY_LENGTH) {
+      // Keep only the most recent messages up to MAX_HISTORY_LENGTH
+      // Since we don't have system messages in this history, just slice
+      this.conversationHistory = this.conversationHistory.slice(-this.MAX_HISTORY_LENGTH);
+    }
   }
 
   private detectMessageType(message: string): 'execute' | 'adjust' | 'question' | 'task' | 'general' {
