@@ -1,9 +1,10 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface Tool {
   name: string;
@@ -99,7 +100,7 @@ export const gitStatus: Tool = {
   description: 'Get git status',
   parameters: {},
   execute: async () => {
-    const { stdout } = await execAsync('git status --porcelain');
+    const { stdout } = await execFileAsync('git', ['status', '--porcelain']);
     const lines = stdout.trim().split('\n').filter(Boolean);
     const modified = lines.filter(l => l.startsWith(' M')).map(l => l.slice(3));
     const staged = lines.filter(l => l.startsWith('M ')).map(l => l.slice(3));
@@ -113,8 +114,11 @@ export const gitDiff: Tool = {
   description: 'Get git diff',
   parameters: { file: { type: 'string' } },
   execute: async ({ file }) => {
-    const cmd = file ? `git diff ${file}` : 'git diff';
-    const { stdout } = await execAsync(cmd);
+    const args = ['diff'];
+    if (file) {
+      args.push(file);
+    }
+    const { stdout } = await execFileAsync('git', args);
     return { diff: stdout };
   }
 };
@@ -125,11 +129,14 @@ export const gitCommit: Tool = {
   parameters: { message: { type: 'string' }, files: { type: 'array' } },
   execute: async ({ message, files }) => {
     if (files?.length) {
-      await execAsync(`git add ${files.join(' ')}`);
+      // Verwende execFileAsync für git add mit einzelnen Dateien
+      // Da files ein Array ist, müssen wir es als separate Argumente übergeben
+      await execFileAsync('git', ['add', ...files]);
     } else {
-      await execAsync('git add -A');
+      await execFileAsync('git', ['add', '-A']);
     }
-    const { stdout } = await execAsync(`git commit -m "${message}"`);
+    // Verwende execFileAsync für git commit mit -m und message als separate Argumente
+    const { stdout } = await execFileAsync('git', ['commit', '-m', message]);
     const hashMatch = stdout.match(/\[.+ ([a-f0-9]+)\]/);
     return { hash: hashMatch?.[1] || 'unknown' };
   }
