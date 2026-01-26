@@ -202,7 +202,7 @@ export class LLMClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Local LLM API error: ${response.status} ${response.statusText}`);
+        throw new Error(`Local LLM API error: ${response.status}`);
       }
 
       const data = await response.json() as NovitaResponse;
