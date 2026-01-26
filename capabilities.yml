@@ -405,6 +405,36 @@ original_features:
         name: "exception_monitor"
         description: "Monitor exceptions before crash for metrics"
 
+  - id: "rate-limiting"
+    name: "Distributed Rate Limiting"
+    description: "Redis-backed rate limiting for multi-instance deployments with tiered limits"
+    status: "implemented"
+    tests_required:
+      - type: "unit"
+        name: "createRateLimiter"
+        description: "Create Redis-backed rate limiter with configurable window and max requests"
+      - type: "unit"
+        name: "createGlobalRateLimiter"
+        description: "Create tiered global rate limiter (10/100/1000 req/min based on auth)"
+      - type: "unit"
+        name: "createTeamRateLimiter"
+        description: "Create per-team rate limiter (1000 req/hour per team)"
+      - type: "unit"
+        name: "createStrictRateLimiter"
+        description: "Create strict rate limiter for auth endpoints (5 req/15min)"
+      - type: "unit"
+        name: "createBuildRateLimiter"
+        description: "Create build creation rate limiter (100 builds/hour per team)"
+      - type: "integration"
+        name: "rate_limit_tiered_auth"
+        description: "Test tiered rate limiting based on authentication level"
+      - type: "integration"
+        name: "rate_limit_redis_distributed"
+        description: "Test rate limiting works across multiple instances via Redis"
+      - type: "integration"
+        name: "rate_limit_headers"
+        description: "Test standard rate limit headers are returned"
+
 # ═══════════════════════════════════════════════════════════════
 # TESTING COVERAGE REQUIREMENTS
 # ═══════════════════════════════════════════════════════════════
