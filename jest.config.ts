@@ -25,9 +25,6 @@ const config: Config = {
   // Module paths
   moduleDirectories: ['node_modules', 'src'],
 
-  // Transform configuration for TypeScript
-  preset: undefined,
-
   // Clear mocks between tests
   clearMocks: true,
 
