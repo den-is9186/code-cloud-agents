@@ -1,121 +1,78 @@
-# Data Contract - Code Cloud Agents
+# DATA_CONTRACT
 
-> **Contract-First:** Diese Datei definiert ALLE Datenstrukturen.
-> Änderungen hier MÜSSEN vor Code-Implementierung dokumentiert werden.
-
-**Version:** 1.0.0
-**Letzte Änderung:** 2026-01-25
-
----
-
-## Database
-
-**Typ:** SQLite (MVP) / PostgreSQL (Production)
-**Migrations:** TBD (Prisma/Knex/Raw SQL)
+## Zweck
+Dieses Dokument definiert die Datenobjekte und Persistenz als Vertrag zwischen:
+- Backend API
+- Workflow/Agent Orchestrator
+- Storage (Redis, optional PostgreSQL)
 
 ---
 
-## Tables (Phase 2)
-
-### builds
-
-Speichert Build-History
-
-```sql
-CREATE TABLE builds (
-  id VARCHAR(36) PRIMARY KEY,
-  task TEXT NOT NULL,
-  status VARCHAR(20) NOT NULL, -- queued, running, completed, failed
-  priority VARCHAR(20) DEFAULT 'normal',
-
-  started_at TIMESTAMP,
-  completed_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-  result_summary TEXT,
-  error_message TEXT,
-
-  metadata JSON -- Additional data
-);
-
-CREATE INDEX idx_builds_status ON builds(status);
-CREATE INDEX idx_builds_created_at ON builds(created_at);
-```
+## 1) Identifiers
+- `team_id`: string (z.B. `team_123`)
+- `build_id`: string (z.B. `build_456`)
+- `agent_run_id`: string (z.B. `run_789`)
 
 ---
 
-### commits
+## 2) Core Entities
 
-Tracking von generierten Commits
+### 2.1 Team
+- id: string
+- name: string
+- repo: string
+- preset: string
+- workflow:
+  - phase: string
+  - iteration: number
+  - created_at: string (ISO)
+  - updated_at: string (ISO)
 
-```sql
-CREATE TABLE commits (
-  id VARCHAR(36) PRIMARY KEY,
-  build_id VARCHAR(36) REFERENCES builds(id),
+### 2.2 Build
+- id: string
+- team_id: string
+- preset: string
+- status: queued | running | succeeded | failed | cancelled
+- started_at: string (ISO)
+- finished_at?: string (ISO)
 
-  commit_hash VARCHAR(40) NOT NULL,
-  commit_message TEXT NOT NULL,
-  files_changed INTEGER DEFAULT 0,
-
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_commits_build_id ON commits(build_id);
-```
-
----
-
-### agents (Future - Multi-Agent System)
-
-```sql
-CREATE TABLE agents (
-  id VARCHAR(36) PRIMARY KEY,
-  name VARCHAR(100) NOT NULL, -- Coach, Architect, Developer, QA
-  type VARCHAR(50) NOT NULL,
-  status VARCHAR(20) DEFAULT 'idle',
-
-  config JSON,
-
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+### 2.3 AgentRun
+- id: string
+- build_id: string
+- agent: supervisor | architect | coach | code | review | test | docs | vision
+- model: string
+- status: queued | running | succeeded | failed
+- started_at: string (ISO)
+- finished_at?: string (ISO)
+- usage:
+  - input_tokens: number
+  - output_tokens: number
+  - total_tokens: number
+  - cost_usd: number
 
 ---
 
-## Data Retention
+## 3) Redis Schema (Minimum)
 
-- **builds:** 90 Tage (dann archivieren)
-- **commits:** 365 Tage
-- **logs:** 30 Tage
+### 3.1 Keys
+- `team:{team_id}` → Team JSON
+- `team:{team_id}:builds` → list/set build_ids
+- `build:{build_id}` → Build JSON
+- `build:{build_id}:runs` → list/set agent_run_ids
+- `run:{agent_run_id}` → AgentRun JSON
+
+### 3.2 Indizes (optional)
+- `teams` → set team_ids
+- `builds` → set build_ids
 
 ---
 
-## Backups
-
-- **Frequency:** Täglich (Production)
-- **Retention:** 7 Tage
+## 4) Consistency Rules
+- Team.phase darf nur über State Machine Übergänge geändert werden.
+- Ein Build gehört genau zu einem Team.
+- AgentRuns gehören genau zu einem Build.
 
 ---
 
-## Enums
-
-### build_status
-- `queued`
-- `running`
-- `completed`
-- `failed`
-- `cancelled`
-
-### build_priority
-- `low`
-- `normal`
-- `high`
-- `urgent`
-
-### agent_type
-- `coach`
-- `architect`
-- `developer`
-- `qa`
-- `reviewer`
+## 5) API Mapping Hinweise
+Siehe `config/api_contract.md` für Response-Envelope und Statuscodes.

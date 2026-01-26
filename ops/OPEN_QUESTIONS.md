@@ -58,87 +58,65 @@ User bestätigte: "ja logishc und phase 5 auch ja"
 
 ---
 
-## ❓ OFFEN (NEU)
+## ✅ BEANTWORTET (NEU) - 2026-01-26 Update
 
 ### Frage 5: User Management - Welche Auth-Methode?
 **Datum:** 2026-01-26
 **Priorität:** 🔴 KRITISCH (blockiert Phase 1)
-**Kontext:** User Management ist entschieden, aber welche Auth?
+**Status:** ✅ **ENTSCHIEDEN: Option 3 (Hybrid)**
+**User-Antwort:** "hybrid"
 
-**Optionen:**
-1. **Email + Password (Simple)**
-   - ✅ Schnell zu implementieren
-   - ✅ Keine externen Dependencies
-   - ❌ User muss Account erstellen
-   - Zeit: ~3h
+**Gewählte Lösung:**
+- Email + Password Login
+- OAuth GitHub Integration
+- OAuth Google Integration (optional)
+- Zeit: ~7h
 
-2. **OAuth (GitHub/Google)**
-   - ✅ Bessere UX (kein neues Passwort)
-   - ✅ Passt zu Developer-Tool
-   - ❌ OAuth Setup nötig
-   - Zeit: ~5h
-
-3. **Hybrid (Email + OAuth)**
-   - ✅ Beste UX
-   - ❌ Mehr Komplexität
-   - Zeit: ~7h
-
-**Empfehlung:** Option 2 (OAuth via GitHub) - passt perfekt zu Developer-Tool
-
-**Benötigt:** User-Entscheidung
+**Nächste Schritte:**
+- OAuth App bei GitHub erstellen
+- GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET als Secrets
+- OAuth Callback Route implementieren
 
 ---
 
 ### Frage 6: Security Fixes - Wann implementieren?
 **Datum:** 2026-01-26
 **Priorität:** 🔴 KRITISCH
-**Kontext:** SEC-001 (Path Traversal) + SEC-002 (Command Injection) gefunden
+**Status:** ✅ **ENTSCHIEDEN: Option 1 (SOFORT)**
+**User-Antwort:** "ja"
 
-**Optionen:**
-1. **SOFORT (vor allen anderen Tasks)**
-   - ✅ Verhindert Security Issues
-   - ❌ Verzögert Dashboard um ~3h
+**Gewählte Lösung:**
+- Security Fixes VOR allen anderen Features
+- Phase 0: Security Fixes (3h) startet JETZT
+- Dann erst Phase 1: Backend Foundation
 
-2. **Parallel zu Phase 1**
-   - ✅ Kein Delay
-   - ❌ Security Risk bleibt temporär
-
-3. **Nach MVP**
-   - ❌ Gefährlich!
-   - ❌ Nicht empfohlen
-
-**Empfehlung:** Option 1 (SOFORT) - Security geht vor Features
-
-**Benötigt:** User-Bestätigung
+**Tasks:**
+- SEC-001: Path Traversal Fix
+- SEC-002: Command Injection Fix
+- BUG-001 bis BUG-005
 
 ---
 
 ### Frage 7: Scout Local Setup - Welche Methode?
 **Datum:** 2026-01-26
 **Priorität:** 🟡 HOCH (für Preset IQ notwendig)
-**Kontext:** IQ Preset braucht Scout Local für Docs/Vision
+**Status:** ✅ **ENTSCHIEDEN: Drittanbieter API**
+**User-Antwort:** "ichc hoste auf dritt serverv und gebe dir eine api du erstelllst agenten profil"
 
-**Optionen:**
-1. **Ollama (Einfach)**
-   - ✅ Einfachste Installation
-   - ✅ Gute Performance
-   - ❌ Weniger Konfiguration
-   - Zeit: ~30min
+**Gewählte Lösung:**
+- User hostet auf Drittanbieter-Server (z.B. Replicate, RunPod, etc.)
+- User stellt API Endpoint bereit
+- Ich erstelle Custom Agent Profil für diese API
 
-2. **vLLM (Production)**
-   - ✅ Beste Performance
-   - ✅ Skalierbar
-   - ❌ Komplexere Setup
-   - Zeit: ~2h
+**Benötigt:**
+- API Endpoint URL
+- API Key (falls nötig)
+- Model Name
+- API Format (OpenAI-compatible? Custom?)
 
-3. **llama.cpp (Lightweight)**
-   - ✅ Minimal Dependencies
-   - ❌ Weniger Features
-   - Zeit: ~1h
+---
 
-**Empfehlung:** Option 1 (Ollama) für Entwicklung, später Option 2 für Production
-
-**Benötigt:** User-Entscheidung + Server-Info (24GB+ VRAM?)
+## ❓ OFFEN (KLÄRUNG BENÖTIGT)
 
 ---
 
@@ -168,47 +146,44 @@ User bestätigte: "ja logishc und phase 5 auch ja"
 ### Frage 9: Database - Nur Redis oder auch PostgreSQL?
 **Datum:** 2026-01-26
 **Priorität:** 🟡 HOCH (blockiert Schema Design)
-**Kontext:** MASTER_RUNBOOK erwähnt "optional PostgreSQL"
+**Status:** ✅ **ENTSCHIEDEN: Redis + PostgreSQL (Hybrid)**
+**User-Antwort:** "optimalere"
 
-**Optionen:**
-1. **Nur Redis**
-   - ✅ Einfacher
-   - ✅ Schneller für Prototyp
-   - ❌ Keine komplexe Queries
-   - ❌ Keine Relations
+**Gewählte Lösung:**
+- **Redis:** Real-time State, Sessions, Cache, Pub/Sub
+- **PostgreSQL:** Users, Teams (persistent), Builds (history), Cost Analytics
 
-2. **Redis + PostgreSQL**
-   - ✅ Best of both (Speed + Relations)
-   - ✅ Skalierbar
-   - ❌ Mehr Setup
-   - ❌ 2 DBs managen
+**Responsibility Split:**
+- Redis: Team State (current phase), Build State (running), Sessions
+- PostgreSQL: Users, Teams, Builds (history), Agent Runs, Cost History, Audit Logs
 
-3. **Nur PostgreSQL**
-   - ✅ Einfaches Schema
-   - ✅ Relations
-   - ❌ Langsamer für State
+**Sync Strategy:**
+- Write-Behind: Redis → PostgreSQL (when Build finishes)
+- Read-Through Cache: PostgreSQL → Redis (for frequent queries)
 
-**Empfehlung:** Option 1 (nur Redis) für MVP, später Option 2 wenn nötig
+**Dokumentation:** `DATABASE_ARCHITECTURE.md`
 
-**Benötigt:** User-Entscheidung
+**Kosten:** ~€25/Monat (Redis €8 + PostgreSQL €16)
 
 ---
 
 ### Frage 10: CI/CD - Secrets Management
 **Datum:** 2026-01-26
 **Priorität:** 🟡 HOCH (für Queue Processor)
-**Kontext:** Queue Processor braucht HF_API_KEY, NOVITA_API_KEY, etc.
+**Status:** ✅ **ENTSCHIEDEN: Später**
+**User-Antwort:** "mach ich später"
 
-**Secrets benötigt:**
+**Secrets benötigt (wenn Queue Processor aktiviert wird):**
 - `ANTHROPIC_API_KEY` (optional)
 - `NOVITA_API_KEY` (required)
 - `HF_API_KEY` (required für IQ Preset)
 - `LOCAL_LLM_ENDPOINT` (optional)
 - `IQUEST_ENDPOINT` (optional)
+- `GITHUB_CLIENT_ID` (für OAuth)
+- `GITHUB_CLIENT_SECRET` (für OAuth)
 
-**Frage:** Sind diese Secrets bereits als GitHub Secrets hinterlegt?
-
-**Benötigt:** User-Info + ggf. Setup
+**Action:**
+User richtet Secrets ein bevor Queue Processor aktiviert wird
 
 ---
 
