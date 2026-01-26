@@ -4,9 +4,11 @@
  * Implements Cross-Origin Resource Sharing with configurable whitelist
  */
 
+import { Request, Response, NextFunction } from 'express';
+
 // Allowed origins from environment or defaults
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+const ALLOWED_ORIGINS: string[] = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
   : [
       'http://localhost:3000',
       'http://localhost:3001',
@@ -15,12 +17,26 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
     ];
 
 // Allow all origins in development (not recommended for production)
-const ALLOW_ALL_ORIGINS = process.env.CORS_ALLOW_ALL === 'true';
+const ALLOW_ALL_ORIGINS: boolean = process.env.CORS_ALLOW_ALL === 'true';
+
+/**
+ * CORS middleware configuration options
+ */
+interface CorsOptions {
+  allowedOrigins?: string[];
+  allowCredentials?: boolean;
+  allowedMethods?: string[];
+  allowedHeaders?: string[];
+  exposedHeaders?: string[];
+  maxAge?: number;
+}
 
 /**
  * CORS middleware with whitelist validation
  */
-function cors(options = {}) {
+function cors(
+  options: CorsOptions = {}
+): (req: Request, res: Response, next: NextFunction) => void | Response {
   const {
     allowedOrigins = ALLOWED_ORIGINS,
     allowCredentials = true,
@@ -36,7 +52,7 @@ function cors(options = {}) {
     maxAge = 86400, // 24 hours
   } = options;
 
-  return (req, res, next) => {
+  return (req: Request, res: Response, next: NextFunction): void | Response => {
     const origin = req.headers.origin;
 
     // Handle preflight OPTIONS request
@@ -98,15 +114,12 @@ function cors(options = {}) {
 /**
  * Check if origin is allowed
  */
-function isOriginAllowed(origin) {
+function isOriginAllowed(origin: string): boolean {
   if (ALLOW_ALL_ORIGINS) {
     return true;
   }
   return ALLOWED_ORIGINS.includes(origin);
 }
 
-module.exports = {
-  cors,
-  isOriginAllowed,
-  ALLOWED_ORIGINS,
-};
+export { cors, isOriginAllowed, ALLOWED_ORIGINS };
+export type { CorsOptions };

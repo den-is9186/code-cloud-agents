@@ -4,18 +4,48 @@
  * Implements Cross-Site Request Forgery protection using Double Submit Cookie pattern
  */
 
-const crypto = require('crypto');
+import { Request, Response, NextFunction, CookieOptions } from 'express';
+import * as crypto from 'crypto';
 
 // CSRF token expiry (1 hour)
 const CSRF_TOKEN_EXPIRY = 60 * 60 * 1000;
 
 // Store for CSRF tokens (in production, use Redis)
-const csrfTokenStore = new Map();
+const csrfTokenStore = new Map<string, number>();
+
+/**
+ * Extended Request interface with csrfToken method
+ */
+interface CsrfRequest extends Request {
+  csrfToken?: () => string;
+}
+
+/**
+ * CSRF protection middleware options
+ */
+interface CsrfProtectionOptions {
+  ignoreMethods?: string[];
+  cookieName?: string;
+  headerName?: string;
+  cookieOptions?: CookieOptions;
+}
+
+/**
+ * Secure cookie options configuration
+ */
+interface SecureCookieOptions {
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: boolean | 'strict' | 'lax' | 'none';
+  maxAge?: number;
+  path?: string;
+  domain?: string;
+}
 
 /**
  * Generate a secure CSRF token
  */
-function generateCsrfToken() {
+function generateCsrfToken(): string {
   const token = crypto.randomBytes(32).toString('hex');
   const expiry = Date.now() + CSRF_TOKEN_EXPIRY;
 
@@ -33,7 +63,7 @@ function generateCsrfToken() {
 /**
  * Cleanup expired tokens
  */
-function cleanupExpiredTokens() {
+function cleanupExpiredTokens(): void {
   const now = Date.now();
   for (const [token, expiry] of csrfTokenStore.entries()) {
     if (expiry < now) {
@@ -45,7 +75,7 @@ function cleanupExpiredTokens() {
 /**
  * Verify CSRF token
  */
-function verifyCsrfToken(token) {
+function verifyCsrfToken(token: string | undefined): boolean {
   if (!token) {
     return false;
   }
@@ -71,7 +101,9 @@ function verifyCsrfToken(token) {
  * - cookieName: Name of the CSRF cookie (default: 'XSRF-TOKEN')
  * - headerName: Name of the CSRF header (default: 'X-CSRF-Token')
  */
-function csrfProtection(options = {}) {
+function csrfProtection(
+  options: CsrfProtectionOptions = {}
+): (req: CsrfRequest, res: Response, next: NextFunction) => void | Response {
   const {
     ignoreMethods = ['GET', 'HEAD', 'OPTIONS'],
     cookieName = 'XSRF-TOKEN',
@@ -84,7 +116,7 @@ function csrfProtection(options = {}) {
     },
   } = options;
 
-  return (req, res, next) => {
+  return (req: CsrfRequest, res: Response, next: NextFunction): void | Response => {
     // Skip CSRF check for safe methods
     if (ignoreMethods.includes(req.method)) {
       // Generate and set token for GET requests (for forms)
@@ -105,9 +137,9 @@ function csrfProtection(options = {}) {
     }
 
     // For state-changing methods, verify token
-    const tokenFromHeader = req.headers[headerName.toLowerCase()];
+    const tokenFromHeader = req.headers[headerName.toLowerCase()] as string | undefined;
     const tokenFromBody = req.body && req.body._csrf;
-    const tokenFromQuery = req.query && req.query._csrf;
+    const tokenFromQuery = req.query && (req.query._csrf as string | undefined);
 
     const submittedToken = tokenFromHeader || tokenFromBody || tokenFromQuery;
 
@@ -137,7 +169,7 @@ function csrfProtection(options = {}) {
  * Get CSRF token endpoint
  * GET /api/csrf-token
  */
-function getCsrfTokenEndpoint(req, res) {
+function getCsrfTokenEndpoint(_req: Request, res: Response): void {
   const token = generateCsrfToken();
 
   // Set cookie
@@ -157,7 +189,7 @@ function getCsrfTokenEndpoint(req, res) {
 /**
  * Secure cookie configuration helper
  */
-function getSecureCookieOptions(options = {}) {
+function getSecureCookieOptions(options: SecureCookieOptions = {}): CookieOptions {
   return {
     httpOnly: options.httpOnly !== false, // Default true
     secure: process.env.NODE_ENV === 'production', // HTTPS only in production
@@ -168,10 +200,11 @@ function getSecureCookieOptions(options = {}) {
   };
 }
 
-module.exports = {
+export {
   csrfProtection,
   getCsrfTokenEndpoint,
   generateCsrfToken,
   verifyCsrfToken,
   getSecureCookieOptions,
 };
+export type { CsrfProtectionOptions, CsrfRequest, SecureCookieOptions };

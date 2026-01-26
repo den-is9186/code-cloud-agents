@@ -31,15 +31,15 @@ const {
   authenticate,
   requireRole,
   requireTeamOwnership,
-} = require('./middleware/auth');
-const { cors } = require('./middleware/cors');
-const { csrfProtection, getCsrfTokenEndpoint } = require('./middleware/csrf');
+} = require('../dist/middleware/auth');
+const { cors } = require('../dist/middleware/cors');
+const { csrfProtection, getCsrfTokenEndpoint } = require('../dist/middleware/csrf');
 const {
   createGlobalRateLimiter,
   createTeamRateLimiter,
   createStrictRateLimiter,
   createBuildRateLimiter,
-} = require('./middleware/rate-limit');
+} = require('../dist/middleware/rate-limit');
 
 const app = express();
 

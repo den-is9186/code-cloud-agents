@@ -4,12 +4,41 @@
  * Provides authentication and authorization middleware for Express routes
  */
 
-const { verifyToken, verifyApiKey, hasRole, Roles } = require('../services/auth-service');
+import { Request, Response, NextFunction } from 'express';
+import { Redis } from 'ioredis';
+import { verifyToken, verifyApiKey, hasRole, Roles } from '../../src/services/auth-service';
+
+/**
+ * Authentication data attached to request
+ */
+interface AuthData {
+  type: 'apikey' | 'jwt';
+  role: string;
+  userId?: string;
+  email?: string;
+  teamId?: string;
+  permissions?: string[];
+  name?: string;
+}
+
+/**
+ * Extended Request interface with auth property
+ */
+export interface AuthenticatedRequest extends Request {
+  auth?: AuthData;
+}
+
+/**
+ * Authentication middleware options
+ */
+interface AuthenticateOptions {
+  optional?: boolean;
+}
 
 /**
  * Extract token from Authorization header
  */
-function extractToken(req) {
+function extractToken(req: Request): string | null {
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
@@ -18,7 +47,7 @@ function extractToken(req) {
 
   // Support both "Bearer <token>" and "Bearer: <token>" formats
   const match = authHeader.match(/^Bearer:?\s+(.+)$/i);
-  if (!match) {
+  if (!match || !match[1]) {
     return null;
   }
 
@@ -28,19 +57,26 @@ function extractToken(req) {
 /**
  * Extract API key from header
  */
-function extractApiKey(req) {
-  return req.headers['x-api-key'];
+function extractApiKey(req: Request): string | null {
+  const apiKey = req.headers['x-api-key'] as string | undefined;
+  return apiKey || null;
 }
 
 /**
  * Authentication middleware
  * Verifies JWT token or API key and attaches user/service info to request
  *
- * @param {Object} options - Configuration options
- * @param {boolean} options.optional - If true, don't fail if no auth provided
+ * @param options - Configuration options
+ * @param options.optional - If true, don't fail if no auth provided
  */
-function authenticate(options = {}) {
-  return async (req, res, next) => {
+function authenticate(
+  options: AuthenticateOptions = {}
+): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Promise<void | Response> {
+  return async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void | Response> => {
     const { optional = false } = options;
 
     try {
@@ -48,7 +84,7 @@ function authenticate(options = {}) {
       const apiKey = extractApiKey(req);
       if (apiKey) {
         try {
-          const redis = req.app.locals.redis || require('../api-server').redis;
+          const redis: Redis = req.app.locals.redis || require('../api-server').redis;
           const apiKeyData = await verifyApiKey(redis, apiKey);
 
           req.auth = {
@@ -65,7 +101,7 @@ function authenticate(options = {}) {
             return res.status(401).json({
               error: {
                 code: 'INVALID_API_KEY',
-                message: error.message,
+                message: error instanceof Error ? error.message : 'Unknown error',
               },
             });
           }
@@ -91,7 +127,7 @@ function authenticate(options = {}) {
             return res.status(401).json({
               error: {
                 code: 'INVALID_TOKEN',
-                message: error.message,
+                message: error instanceof Error ? error.message : 'Unknown error',
               },
             });
           }
@@ -103,7 +139,8 @@ function authenticate(options = {}) {
         return res.status(401).json({
           error: {
             code: 'MISSING_AUTHENTICATION',
-            message: 'Authentication required. Provide either Authorization header with JWT token or X-API-Key header.',
+            message:
+              'Authentication required. Provide either Authorization header with JWT token or X-API-Key header.',
           },
         });
       }
@@ -115,7 +152,7 @@ function authenticate(options = {}) {
         error: {
           code: 'AUTH_ERROR',
           message: 'Authentication failed',
-          details: error.message,
+          details: error instanceof Error ? error.message : 'Unknown error',
         },
       });
     }
@@ -126,12 +163,14 @@ function authenticate(options = {}) {
  * Authorization middleware
  * Checks if authenticated user has required role
  *
- * @param {string|string[]} requiredRole - Required role(s)
+ * @param requiredRole - Required role(s)
  */
-function requireRole(requiredRole) {
+function requireRole(
+  requiredRole: string | string[]
+): (req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response {
   const requiredRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
 
-  return (req, res, next) => {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void | Response => {
     if (!req.auth) {
       return res.status(401).json({
         error: {
@@ -164,8 +203,14 @@ function requireRole(requiredRole) {
  * Team ownership middleware
  * Checks if user owns the team or is an admin/manager
  */
-function requireTeamOwnership(teamIdParam = 'id') {
-  return async (req, res, next) => {
+function requireTeamOwnership(
+  teamIdParam = 'id'
+): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Promise<void | Response> {
+  return async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void | Response> => {
     if (!req.auth) {
       return res.status(401).json({
         error: {
@@ -197,7 +242,7 @@ function requireTeamOwnership(teamIdParam = 'id') {
 
     // Check team ownership
     try {
-      const redis = req.app.locals.redis || require('../api-server').redis;
+      const redis: Redis = req.app.locals.redis || require('../api-server').redis;
       const teamKey = `team:${teamId}`;
       const teamData = await redis.hgetall(teamKey);
 
@@ -226,16 +271,12 @@ function requireTeamOwnership(teamIdParam = 'id') {
         error: {
           code: 'AUTH_ERROR',
           message: 'Authorization check failed',
-          details: error.message,
+          details: error instanceof Error ? error.message : 'Unknown error',
         },
       });
     }
   };
 }
 
-module.exports = {
-  authenticate,
-  requireRole,
-  requireTeamOwnership,
-  Roles,
-};
+export { authenticate, requireRole, requireTeamOwnership, Roles };
+export type { AuthData, AuthenticateOptions };

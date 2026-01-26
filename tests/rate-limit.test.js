@@ -20,7 +20,7 @@ const {
   createRateLimiter,
   createGlobalRateLimiter,
   createStrictRateLimiter,
-} = require('../src/middleware/rate-limit');
+} = require('../dist/middleware/rate-limit');
 
 // Mock Redis
 jest.mock('ioredis');
