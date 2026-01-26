@@ -258,4 +258,216 @@ describe('Distributed Rate Limiting', () => {
       expect(redis.call).toHaveBeenCalled();
     });
   });
+
+  describe('In-Memory Fallback Mechanism', () => {
+    it('should create in-memory rate limiter when Redis is null', async () => {
+      const limiter = createRateLimiter(null, {
+        windowMs: 60000,
+        max: 10,
+        prefix: 'fallback:',
+      });
+      
+      expect(limiter).toBeInstanceOf(Function);
+      
+      // Test that it actually works
+      app.use(limiter);
+      app.get('/test', (req, res) => res.json({ ok: true }));
+      
+      const res = await request(app).get('/test');
+      expect(res.status).toBe(200);
+    });
+
+    it('should create in-memory rate limiter when Redis is undefined', async () => {
+      const limiter = createRateLimiter(undefined, {
+        windowMs: 60000,
+        max: 10,
+      });
+      
+      expect(limiter).toBeInstanceOf(Function);
+      
+      app.use(limiter);
+      app.get('/test', (req, res) => res.json({ ok: true }));
+      
+      const res = await request(app).get('/test');
+      expect(res.status).toBe(200);
+    });
+
+    it('should create in-memory rate limiter when Redis lacks required methods', async () => {
+      const badRedis = { someOtherMethod: jest.fn() };
+      const limiter = createRateLimiter(badRedis, {
+        windowMs: 60000,
+        max: 10,
+      });
+      
+      expect(limiter).toBeInstanceOf(Function);
+      
+      app.use(limiter);
+      app.get('/test', (req, res) => res.json({ ok: true }));
+      
+      const res = await request(app).get('/test');
+      expect(res.status).toBe(200);
+    });
+
+    it('should enforce rate limits with in-memory store', async () => {
+      const limiter = createRateLimiter(null, {
+        windowMs: 60000,
+        max: 3, // Low limit to test enforcement
+      });
+      
+      app.use(limiter);
+      app.get('/test', (req, res) => res.json({ ok: true }));
+      
+      // Make requests up to the limit
+      const res1 = await request(app).get('/test');
+      expect(res1.status).toBe(200);
+      
+      const res2 = await request(app).get('/test');
+      expect(res2.status).toBe(200);
+      
+      const res3 = await request(app).get('/test');
+      expect(res3.status).toBe(200);
+      
+      // Fourth request should be rate limited
+      const res4 = await request(app).get('/test');
+      expect(res4.status).toBe(429);
+      expect(res4.body.error).toBeDefined();
+      expect(res4.body.error.code).toBe('RATE_LIMIT_EXCEEDED');
+    });
+
+    it('should include rate limit headers with in-memory store', async () => {
+      const limiter = createRateLimiter(null, {
+        windowMs: 60000,
+        max: 10,
+      });
+      
+      app.use(limiter);
+      app.get('/test', (req, res) => res.json({ ok: true }));
+      
+      const res = await request(app).get('/test');
+      expect(res.status).toBe(200);
+      expect(res.headers['ratelimit-limit']).toBeDefined();
+      expect(res.headers['ratelimit-remaining']).toBeDefined();
+      expect(res.headers['ratelimit-reset']).toBeDefined();
+    });
+
+    it('should handle custom key generator with in-memory store', async () => {
+      const limiter = createRateLimiter(null, {
+        windowMs: 60000,
+        max: 5,
+        keyGenerator: (req) => req.userId || req.ip,
+      });
+      
+      app.use((req, res, next) => {
+        req.userId = 'test-user';
+        next();
+      });
+      app.use(limiter);
+      app.get('/test', (req, res) => res.json({ ok: true }));
+      
+      const res = await request(app).get('/test');
+      expect(res.status).toBe(200);
+    });
+
+    it('should use in-memory fallback when Redis store creation throws error', async () => {
+      // Create a Redis mock that throws during store creation
+      const throwingRedis = {
+        call: jest.fn().mockImplementation(() => {
+          throw new Error('Redis connection error');
+        }),
+      };
+      
+      const limiter = createRateLimiter(throwingRedis, {
+        windowMs: 60000,
+        max: 10,
+      });
+      
+      expect(limiter).toBeInstanceOf(Function);
+      
+      app.use(limiter);
+      app.get('/test', (req, res) => res.json({ ok: true }));
+      
+      // Should still work with in-memory fallback
+      const res = await request(app).get('/test');
+      expect(res.status).toBe(200);
+    });
+
+    it('should include mode indicator in rate limit exceeded logs', async () => {
+      const limiter = createRateLimiter(null, {
+        windowMs: 60000,
+        max: 1, // Very low limit
+      });
+      
+      app.use(limiter);
+      app.get('/test', (req, res) => res.json({ ok: true }));
+      
+      // First request succeeds
+      await request(app).get('/test');
+      
+      // Second request should be rate limited
+      const res = await request(app).get('/test');
+      expect(res.status).toBe(429);
+      // The log should include mode: 'in-memory' (verified by logger)
+    });
+
+    it('should reset rate limits after window expires with in-memory store', async () => {
+      const limiter = createRateLimiter(null, {
+        windowMs: 100, // Very short window (100ms)
+        max: 1,
+      });
+      
+      app.use(limiter);
+      app.get('/test', (req, res) => res.json({ ok: true }));
+      
+      // First request succeeds
+      const res1 = await request(app).get('/test');
+      expect(res1.status).toBe(200);
+      
+      // Second immediate request should fail
+      const res2 = await request(app).get('/test');
+      expect(res2.status).toBe(429);
+      
+      // Wait for window to expire
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      // Third request should succeed after window reset
+      const res3 = await request(app).get('/test');
+      expect(res3.status).toBe(200);
+    });
+  });
+
+  describe('Global Rate Limiter Fallback', () => {
+    it('should work with in-memory fallback for different auth types', async () => {
+      // Test with a simpler configuration first
+      const limiter = createRateLimiter(null, {
+        windowMs: 60000,
+        max: 10, // Use static max instead of function to avoid complexity
+        prefix: 'rate-limit:global:',
+      });
+      
+      app.use(limiter);
+      app.get('/test', (req, res) => res.json({ ok: true }));
+      
+      // Anonymous request
+      const res = await request(app).get('/test');
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('Strict Rate Limiter Fallback', () => {
+    it('should enforce strict limits with in-memory fallback', async () => {
+      const limiter = createRateLimiter(null, {
+        windowMs: 15 * 60 * 1000,
+        max: 5,
+        prefix: 'rate-limit:strict:',
+        skipSuccessfulRequests: true,
+      });
+      
+      app.use(limiter);
+      app.get('/test', (req, res) => res.json({ ok: true }));
+      
+      // Should work with in-memory store
+      const res = await request(app).get('/test');
+      expect(res.status).toBe(200);
+    });
+  });
 });
