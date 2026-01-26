@@ -96,11 +96,14 @@ export class SupervisorAgent implements Agent {
       if (task.assignedAgent === 'code') {
         let iteration = 0;
         let approved = false;
+        
+        // Sammle alle Dateiänderungen in einem lokalen Array
+        const taskFilesChanged: any[] = [];
 
         while (!approved && iteration < this.maxIterations) {
           // Code writes
           const codeResult = await agent.execute({ task, feedback: undefined });
-          result.filesChanged.push(...codeResult.filesChanged);
+          taskFilesChanged.push(...codeResult.filesChanged);
 
           // Review checks
           const review = this.agents.get('review');
@@ -122,11 +125,14 @@ export class SupervisorAgent implements Agent {
           iteration++;
         }
 
+        // Füge alle gesammelten Dateiänderungen am Ende hinzu
+        result.filesChanged.push(...taskFilesChanged);
+
         // Test writes tests
         const test = this.agents.get('test');
         if (test) {
           const testResult = await test.execute({
-            filesChanged: result.filesChanged,
+            filesChanged: taskFilesChanged,
             task
           });
           result.testsWritten.push(...testResult.testsWritten);
