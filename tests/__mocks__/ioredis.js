@@ -105,6 +105,11 @@ class RedisMock {
     return Promise.resolve(mockRedisStore.get(key) || null);
   }
 
+  set(key, value) {
+    mockRedisStore.set(key, value);
+    return Promise.resolve('OK');
+  }
+
   setex(key, ttl, value) {
     mockRedisStore.set(key, value);
     return Promise.resolve('OK');

@@ -20,6 +20,12 @@ const {
 
 const { getPreset, getPresetModels } = require('../config/presets');
 
+const {
+  sendNotification,
+  NotificationType,
+  getTeamNotificationChannels,
+} = require('./notification-service');
+
 // Try to import streamEmitter, but provide a fallback if not available
 let streamEmitter;
 try {
@@ -82,6 +88,22 @@ async function orchestrateBuild(redis, options) {
   // Emit build start event
   streamEmitter.emitBuildStart({ buildId });
 
+  // Send build started notification
+  try {
+    const channels = await getTeamNotificationChannels(redis, teamId);
+    if (channels.length > 0) {
+      await sendNotification(redis, {
+        type: NotificationType.BUILD_STARTED,
+        teamId,
+        buildId,
+        status: 'started',
+        message: `Build ${buildId} has started for preset ${preset}`,
+      }, channels);
+    }
+  } catch (notifError) {
+    console.error('Failed to send build start notification:', notifError);
+  }
+
   try {
     // Mark build as running
     await markBuildRunning(redis, buildId, 'supervisor');
@@ -113,6 +135,22 @@ async function orchestrateBuild(redis, options) {
       errors: result.errors || [],
     });
 
+    // Send build completed notification
+    try {
+      const channels = await getTeamNotificationChannels(redis, teamId);
+      if (channels.length > 0) {
+        await sendNotification(redis, {
+          type: NotificationType.BUILD_COMPLETED,
+          teamId,
+          buildId,
+          status: 'completed',
+          message: `Build ${buildId} completed successfully (${completedBuild.cost.totalCost.toFixed(2)} USD, ${Math.round(completedBuild.build.duration / 1000)}s)`,
+        }, channels);
+      }
+    } catch (notifError) {
+      console.error('Failed to send build completion notification:', notifError);
+    }
+
     console.log(`✅ Build ${buildId} completed successfully`);
 
     return {
@@ -138,6 +176,22 @@ async function orchestrateBuild(redis, options) {
       success: false,
       errors: [error.message],
     });
+
+    // Send build failed notification
+    try {
+      const channels = await getTeamNotificationChannels(redis, teamId);
+      if (channels.length > 0) {
+        await sendNotification(redis, {
+          type: NotificationType.BUILD_FAILED,
+          teamId,
+          buildId,
+          status: 'failed',
+          message: `Build ${buildId} failed: ${error.message}`,
+        }, channels);
+      }
+    } catch (notifError) {
+      console.error('Failed to send build failure notification:', notifError);
+    }
 
     throw error;
   }

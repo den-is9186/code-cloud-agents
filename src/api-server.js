@@ -6,6 +6,11 @@ const { z } = require('zod');
 const crypto = require('crypto');
 const { WorkflowStateMachine, States, Events } = require('./workflow/state-machine');
 const { streamEmitter, StreamEventType } = require('../dist/utils/events');
+const {
+  sendNotification,
+  NotificationType,
+  getTeamNotificationChannels,
+} = require('./services/notification-service');
 
 const app = express();
 
@@ -1475,6 +1480,29 @@ app.post('/api/v1/teams/:id/approve', async (req, res) => {
       status: 'approved',
     });
 
+    // Send approval notification
+    try {
+      const channels = await getTeamNotificationChannels(redis, id);
+      if (channels.length > 0) {
+        await sendNotification(
+          redis,
+          {
+            type: NotificationType.APPROVAL_APPROVED,
+            teamId: id,
+            teamName: updatedTeam.name,
+            buildId: updatedTeam.currentBuildId,
+            status: 'approved',
+            message: `Prototype for team "${updatedTeam.name}" has been approved by ${userId || 'anonymous'}`,
+            reason: reason || 'Prototype approved',
+          },
+          channels
+        );
+      }
+    } catch (notifError) {
+      console.error('Failed to send approval notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json({
       team: updatedTeam,
       transition: transitionResult,
@@ -1554,6 +1582,29 @@ app.post('/api/v1/teams/:id/reject', async (req, res) => {
       status: 'rejected',
       rejectionReason: reason.trim(),
     });
+
+    // Send rejection notification
+    try {
+      const channels = await getTeamNotificationChannels(redis, id);
+      if (channels.length > 0) {
+        await sendNotification(
+          redis,
+          {
+            type: NotificationType.APPROVAL_REJECTED,
+            teamId: id,
+            teamName: updatedTeam.name,
+            buildId: updatedTeam.currentBuildId,
+            status: 'rejected',
+            message: `Prototype for team "${updatedTeam.name}" has been rejected by ${userId || 'anonymous'}: ${reason}`,
+            reason: reason.trim(),
+          },
+          channels
+        );
+      }
+    } catch (notifError) {
+      console.error('Failed to send rejection notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     res.json({
       team: updatedTeam,
