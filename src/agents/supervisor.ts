@@ -90,7 +90,7 @@ export class SupervisorAgent implements Agent {
 
   private async executeTask(task: SubTask, result: BuildResult) {
     try {
-      const agent = this.getAgent(task.assignedAgent);
+      const agent = this.getAgent(task.assignedAgent as string);
       console.log(`⚡ ${task.assignedAgent}: ${task.description}`);
 
       if (task.assignedAgent === 'code') {
@@ -139,9 +139,10 @@ export class SupervisorAgent implements Agent {
           result.testResults = testResult.testResults;
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       // Wenn der Agent nicht existiert, loggen wir einen Fehler und fahren mit der nächsten Task fort
-      console.error(`❌ Agent '${task.assignedAgent}' not found for task ${task.id}:`, error.message);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Agent '${task.assignedAgent}' not found for task ${task.id}:`, errorMessage);
     }
   }
 }
