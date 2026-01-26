@@ -233,8 +233,66 @@ function requireTeamOwnership(teamIdParam = 'id') {
   };
 }
 
+/**
+ * Extract authentication info without enforcing it
+ * Populates req.auth if valid credentials are present, but doesn't fail if not
+ * Used for tiered rate limiting based on authentication level
+ */
+function extractAuth() {
+  return async (req, res, next) => {
+    try {
+      // Try API key first
+      const apiKey = extractApiKey(req);
+      if (apiKey) {
+        try {
+          const redis = req.app.locals.redis || require('../api-server').redis;
+          const apiKeyData = await verifyApiKey(redis, apiKey);
+
+          req.auth = {
+            type: 'apikey',
+            role: apiKeyData.role,
+            teamId: apiKeyData.teamId,
+            permissions: apiKeyData.permissions,
+            name: apiKeyData.name,
+          };
+
+          return next();
+        } catch (error) {
+          // Silently continue without auth
+        }
+      }
+
+      // Try JWT token
+      const token = extractToken(req);
+      if (token) {
+        try {
+          const decoded = verifyToken(token);
+
+          req.auth = {
+            type: 'jwt',
+            userId: decoded.userId,
+            email: decoded.email,
+            role: decoded.role,
+          };
+
+          return next();
+        } catch (error) {
+          // Silently continue without auth
+        }
+      }
+
+      // No valid authentication found - continue without auth
+      return next();
+    } catch (error) {
+      // On any error, just continue without auth
+      return next();
+    }
+  };
+}
+
 module.exports = {
   authenticate,
+  extractAuth,
   requireRole,
   requireTeamOwnership,
   Roles,

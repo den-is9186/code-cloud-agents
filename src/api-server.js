@@ -29,6 +29,7 @@ const {
 } = require('./services/auth-service');
 const {
   authenticate,
+  extractAuth,
   requireRole,
   requireTeamOwnership,
 } = require('./middleware/auth');
@@ -72,6 +73,10 @@ app.use(express.json({ limit: '10mb' }));
 
 // Make Redis available to middleware
 app.locals.redis = redis;
+
+// Extract auth info for rate limiting (optional, doesn't require auth)
+// This must run before the rate limiter so req.auth is populated for tiered limits
+app.use(extractAuth());
 
 // Global rate limiting (tiered: 10/100/1000 req/min based on auth)
 const globalRateLimiter = createGlobalRateLimiter(redis);
@@ -1354,8 +1359,8 @@ function validateTeamData(data, isUpdate = false) {
   }
 }
 
-// Create a new team
-app.post('/api/v1/teams', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
+// Create a new team (this triggers a build, so apply build rate limiter)
+app.post('/api/v1/teams', authenticate(), requireRole(Roles.DEVELOPER), buildRateLimiter, async (req, res) => {
   try {
     const validatedData = validateTeamData(req.body);
 
@@ -1481,7 +1486,7 @@ app.get('/api/v1/teams', authenticate(), requireRole(Roles.VIEWER), async (req, 
 });
 
 // Get team by ID
-app.get('/api/v1/teams/:id', authenticate(), requireRole(Roles.VIEWER), async (req, res) => {
+app.get('/api/v1/teams/:id', authenticate(), requireRole(Roles.VIEWER), teamRateLimiter, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1525,7 +1530,7 @@ app.get('/api/v1/teams/:id', authenticate(), requireRole(Roles.VIEWER), async (r
 });
 
 // Update team
-app.put('/api/v1/teams/:id', authenticate(), requireTeamOwnership('id'), async (req, res) => {
+app.put('/api/v1/teams/:id', authenticate(), requireTeamOwnership('id'), teamRateLimiter, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1581,7 +1586,7 @@ app.put('/api/v1/teams/:id', authenticate(), requireTeamOwnership('id'), async (
 });
 
 // Delete team
-app.delete('/api/v1/teams/:id', authenticate(), requireRole(Roles.ADMIN), async (req, res) => {
+app.delete('/api/v1/teams/:id', authenticate(), requireRole(Roles.ADMIN), teamRateLimiter, async (req, res) => {
   try {
     const { id } = req.params;
 
