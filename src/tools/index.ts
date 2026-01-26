@@ -1,10 +1,9 @@
-import { exec, execFile } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { FILE_CONFIG } from '../config/constants';
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 const BASE_DIR = path.resolve(process.cwd());
@@ -170,19 +169,40 @@ export const shellExec: Tool<
   { stdout: string; stderr: string; exitCode: number }
 > = {
   name: 'shell_exec',
-  description: 'Execute shell command',
-  parameters: { command: { type: 'string' }, cwd: { type: 'string' } },
-  execute: async ({ command, cwd }: ShellExecParams) => {
+  description: 'Execute shell command with arguments (safe from command injection)',
+  parameters: {
+    command: { type: 'string' },
+    args: { type: 'array' },
+    cwd: { type: 'string' },
+  },
+  execute: async ({ command, args = [], cwd }: ShellExecParams) => {
+    // SEC-002: Use execFileAsync instead of execAsync to prevent command injection
+    // This executes the command directly without shell interpolation
+
     // Input validation
     if (!command || typeof command !== 'string') {
       throw new Error('Invalid command: must be non-empty string');
     }
-    if (command.includes(';') || command.includes('&&') || command.includes('|')) {
-      throw new Error('Invalid command: contains forbidden characters');
+
+    // Validate args array
+    if (!Array.isArray(args)) {
+      throw new Error('Invalid args: must be an array');
+    }
+
+    // Validate all args are strings
+    for (const arg of args) {
+      if (typeof arg !== 'string') {
+        throw new Error('Invalid argument: all args must be strings');
+      }
+    }
+
+    // Validate cwd if provided
+    if (cwd) {
+      cwd = validatePath(cwd);
     }
 
     try {
-      const { stdout, stderr } = await execAsync(command, { cwd });
+      const { stdout, stderr } = await execFileAsync(command, args, { cwd });
       return { stdout, stderr, exitCode: 0 };
     } catch (error: any) {
       return { stdout: '', stderr: error.message, exitCode: error.code || 1 };
