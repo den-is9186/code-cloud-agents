@@ -1,4 +1,6 @@
 import { Message, LLMResponse, TokenUsage } from '../agents/types';
+import { RATE_LIMIT_CONFIG } from '../config/constants';
+import { sanitizeLogMessage } from '../utils/security';
 
 interface ModelConfig {
   provider: 'novita' | 'anthropic' | 'local';
@@ -24,12 +26,44 @@ interface RetryConfig {
   timeout: number;
 }
 
+class TokenBucket {
+  private tokens: number;
+  private lastRefill: number;
+  constructor(private maxTokens: number, private refillRate: number) {
+    this.tokens = maxTokens;
+    this.lastRefill = Date.now();
+  }
+  check(): boolean {
+    this.refill();
+    if (this.tokens > 0) {
+      this.tokens--;
+      return true;
+    }
+    return false;
+  }
+  private refill() {
+    const now = Date.now();
+    const elapsed = now - this.lastRefill;
+    const tokensToAdd = Math.floor(elapsed / 1000) * this.refillRate;
+    if (tokensToAdd > 0) {
+      this.tokens = Math.min(this.maxTokens, this.tokens + tokensToAdd);
+      this.lastRefill = now;
+    }
+  }
+}
+
 const DEFAULT_RETRY_CONFIG: RetryConfig = {
   maxRetries: 3,
   baseDelay: 1000,
   maxDelay: 10000,
   timeout: 60000
 };
+
+// Global rate limiter for LLM API calls
+const llmRateLimiter = new TokenBucket(
+  RATE_LIMIT_CONFIG.TOKEN_BUCKET_MAX_TOKENS,
+  RATE_LIMIT_CONFIG.TOKEN_BUCKET_REFILL_RATE / 60 // Convert to tokens per second
+);
 
 async function withRetry<T>(
   fn: () => Promise<T>,
@@ -57,7 +91,7 @@ async function withRetry<T>(
           config.baseDelay * Math.pow(2, attempt),
           config.maxDelay
         );
-        console.log(`Retry ${attempt + 1}/${config.maxRetries} after ${delay}ms...`);
+        console.log(sanitizeLogMessage(`Retry ${attempt + 1}/${config.maxRetries} after ${delay}ms...`));
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -97,6 +131,11 @@ export class LLMClient {
   private totalTokens = 0;
 
   async chat(model: string, messages: Message[], tools?: any[]): Promise<LLMResponse> {
+    // Check rate limit before making API call
+    if (!llmRateLimiter.check()) {
+      throw new Error('Rate limit exceeded');
+    }
+    
     const config = this.getConfig(model);
 
     if (config.provider === 'local') {

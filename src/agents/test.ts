@@ -4,6 +4,7 @@ import { executeTool } from '../tools';
 import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
 import { validatePath } from '../tools/index';
+import { sanitizeLogMessage } from '../utils/security';
 
 export class TestAgent implements Agent {
   role: AgentRole = 'test';

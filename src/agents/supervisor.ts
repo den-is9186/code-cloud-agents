@@ -1,6 +1,7 @@
 import { Agent, AgentRole, AgentStatus, BuildResult, SubTask, ReviewResult, FileChange, TestFile, TestResult, Step, Dependency, Issue, TestFailure } from './types';
 import { llmClient } from '../llm/client';
 import { SUPERVISOR_CONFIG } from '../config/constants';
+import { sanitizeLogMessage } from '../utils/security';
 
 interface SupervisorConfig {
   model: string;
@@ -81,7 +82,7 @@ export class SupervisorAgent implements Agent {
               return taskChanges;
             } catch (error: unknown) {
               const errorMessage = error instanceof Error ? error.message : String(error);
-              console.error(`❌ Task ${taskId} failed:`, errorMessage);
+              console.error(sanitizeLogMessage(`❌ Task ${taskId} failed: ${errorMessage}`));
               taskChanges.errors = [errorMessage];
               return taskChanges;
             }
@@ -124,7 +125,7 @@ export class SupervisorAgent implements Agent {
       this.status = 'completed';
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[${this.role}] Error:`, errorMessage);
+      console.error(sanitizeLogMessage(`[${this.role}] Error: ${errorMessage}`));
       result.errors = [errorMessage];
       this.status = 'failed';
     }
@@ -209,7 +210,7 @@ export class SupervisorAgent implements Agent {
     } catch (error: unknown) {
       // Wenn der Agent nicht existiert, loggen wir einen Fehler und fahren mit der nächsten Task fort
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`❌ Agent '${task.assignedAgent}' not found for task ${task.id}:`, errorMessage);
+      console.error(sanitizeLogMessage(`❌ Agent '${task.assignedAgent}' not found for task ${task.id}: ${errorMessage}`));
       // Store error in taskChanges
       if (!taskChanges.errors) taskChanges.errors = [];
       taskChanges.errors.push(`Task ${task.id} failed: ${errorMessage}`);

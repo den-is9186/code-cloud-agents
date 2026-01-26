@@ -3,6 +3,7 @@ import { llmClient } from '../llm/client';
 import { executeTool } from '../tools';
 import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
+import { sanitizeLogMessage } from '../utils/security';
 
 export class ArchitectAgent implements Agent {
   role: AgentRole = 'architect';
@@ -33,7 +34,7 @@ export class ArchitectAgent implements Agent {
         const { content } = await executeTool('file_read', { path: file });
         return `\n--- ${file} ---\n${content.slice(0, 1000)}\n`;
       } catch (error) {
-        console.warn(`[Architect] Failed to read ${file}:`, error instanceof Error ? error.message : String(error));
+        console.warn(sanitizeLogMessage(`[Architect] Failed to read ${file}: ${error instanceof Error ? error.message : String(error)}`));
         return ''; // Return empty string for failed reads
       }
     });

@@ -2,6 +2,7 @@ import { Agent, AgentRole, AgentStatus, Step, SubTask, Dependency } from './type
 import { llmClient } from '../llm/client';
 import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
+import { sanitizeLogMessage } from '../utils/security';
 
 export class CoachAgent implements Agent {
   role: AgentRole = 'coach';
@@ -100,7 +101,7 @@ Antworte NUR mit validem JSON:
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[${this.role}] Error:`, errorMessage);
+      console.error(sanitizeLogMessage(`[${this.role}] Error: ${errorMessage}`));
       this.status = 'failed';
       return this.getEmptyResult();
     }

@@ -13,6 +13,13 @@ export const LLM_CONFIG = {
   MAX_REQUESTS_PER_MINUTE: 60,
 } as const;
 
+export const RATE_LIMIT_CONFIG = {
+  MAX_REQUESTS_PER_MINUTE: 60,
+  RATE_LIMIT_WINDOW_MS: 60000, // 1 minute
+  TOKEN_BUCKET_MAX_TOKENS: 60,
+  TOKEN_BUCKET_REFILL_RATE: 60, // tokens per minute
+} as const;
+
 export const CHAT_CONFIG = {
   MAX_HISTORY_LENGTH: 50,
 } as const;
