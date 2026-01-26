@@ -29,19 +29,19 @@ describe('GET /health', () => {
 });
 
 describe('GET /', () => {
-  test('should return Hello World message', async () => {
+  test('should serve dashboard HTML', async () => {
     const response = await request(app).get('/');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      message: 'Hello World'
-    });
+    expect(response.headers['content-type']).toMatch(/html/);
+    expect(response.text).toContain('Multi-Agent Dashboard');
   });
 
-  test('should return JSON content type', async () => {
-    const response = await request(app).get('/');
+  test('should serve static CSS files', async () => {
+    const response = await request(app).get('/css/dashboard.css');
 
-    expect(response.headers['content-type']).toMatch(/json/);
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/css/);
   });
 });
 
