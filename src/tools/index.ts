@@ -9,10 +9,22 @@ const execFileAsync = promisify(execFile);
 const BASE_DIR = process.cwd();
 
 function validatePath(filePath: string): string {
+  // Normalize and resolve path
   const resolved = path.resolve(BASE_DIR, filePath);
-  if (!resolved.startsWith(BASE_DIR)) {
+  
+  // Check for path traversal using path.relative
+  const relative = path.relative(BASE_DIR, resolved);
+  
+  // If relative path starts with '..' or is an absolute path, it's outside BASE_DIR
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error(`Path traversal detected: ${filePath}`);
   }
+  
+  // Additional check for null bytes and other malicious patterns
+  if (filePath.includes('\0')) {
+    throw new Error(`Null byte detected in path: ${filePath}`);
+  }
+  
   return resolved;
 }
 

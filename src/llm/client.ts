@@ -136,7 +136,8 @@ export class LLMClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Novita API error: ${response.status} ${response.statusText}`);
+        // Don't expose API keys or sensitive information in error messages
+        throw new Error(`Novita API error: ${response.status}`);
       }
 
       const data = await response.json() as NovitaResponse;
@@ -170,7 +171,8 @@ export class LLMClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Anthropic API error: ${response.status} ${response.statusText}`);
+        // Don't expose API keys or sensitive information in error messages
+        throw new Error(`Anthropic API error: ${response.status}`);
       }
 
       const data = await response.json() as AnthropicResponse;

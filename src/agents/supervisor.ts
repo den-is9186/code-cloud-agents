@@ -117,10 +117,12 @@ export class SupervisorAgent implements Agent {
               approved = true;
             } else {
               console.log(`🔄 Review found issues, iteration ${iteration + 1}`);
-              task.input.feedback = reviewResult;
+              // Safe assignment with proper typing
+              task.input = { ...task.input, feedback: reviewResult };
             }
           } else {
             approved = true;
+            break; // Exit loop if no review agent
           }
           iteration++;
         }
