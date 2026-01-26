@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 const BASE_DIR = path.resolve(process.cwd());
 const MAX_FILE_SIZE_BYTES = FILE_CONFIG.MAX_FILE_SIZE_BYTES;
 
-function validatePath(filePath: string): string {
+export function validatePath(filePath: string): string {
   // Check for null bytes and other malicious patterns first
   if (filePath.includes('\0')) {
     throw new Error(`Null byte detected in path: ${filePath}`);

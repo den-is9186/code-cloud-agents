@@ -1,6 +1,6 @@
 import { Agent, AgentRole, SubTask, FileChange, ReviewFeedback } from './types';
 import { llmClient } from '../llm/client';
-import { executeTool } from '../tools';
+import { executeTool, validatePath } from '../tools';
 import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
 
@@ -22,7 +22,9 @@ export class CodeAgent implements Agent {
     let existingCode = '';
     for (const file of input.task.input.files || []) {
       try {
-        const { content } = await executeTool('file_read', { path: file });
+        // Validate path before reading to prevent path traversal
+        const safePath = validatePath(file);
+        const { content } = await executeTool('file_read', { path: safePath });
         existingCode += `\n--- ${file} ---\n${content}\n`;
       } catch {}
     }
