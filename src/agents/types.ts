@@ -2,7 +2,7 @@
 export type AgentRole = "supervisor" | "architect" | "coach" | "code" | "review" | "test" | "docs" | "vision";
 
 // Agent Status
-export type AgentStatus = "idle" | "working" | "waiting" | "error" | "done";
+export type AgentStatus = "idle" | "working" | "waiting" | "error" | "done" | "completed" | "failed";
 
 // Base Agent Interface
 export interface Agent<TInput = unknown, TOutput = unknown> {
