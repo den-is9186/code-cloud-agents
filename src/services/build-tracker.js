@@ -6,6 +6,7 @@
  */
 
 const crypto = require('crypto');
+const { logger } = require('../../dist/utils/logger');
 const {
   createBuild,
   getBuild,
@@ -206,7 +207,13 @@ async function completeAgentRun(
       });
       cost = costCalc.totalCost;
     } catch (error) {
-      console.error(`Failed to calculate cost for agent run ${runId}:`, error.message);
+      logger.error('Failed to calculate cost for agent run', {
+        runId,
+        error: error.message,
+        model: agentRun.model,
+        inputTokens,
+        outputTokens,
+      });
     }
   }
 
@@ -292,7 +299,11 @@ async function getBuildStatus(redis, buildId) {
     try {
       cost = await calculateBuildCost(redis, buildId);
     } catch (error) {
-      console.error(`Failed to calculate build cost: ${error.message}`);
+      logger.error('Failed to calculate build cost', {
+        buildId,
+        error: error.message,
+        buildStatus: build.status,
+      });
     }
   }
 

@@ -9,6 +9,7 @@
 
 const axios = require('axios');
 const { URL } = require('url');
+const { logger } = require('../../dist/utils/logger');
 
 /**
  * Notification types
@@ -150,7 +151,12 @@ async function sendWebhook(webhookUrl, payload) {
       data: response.data,
     };
   } catch (error) {
-    console.error('Webhook delivery failed:', error.message);
+    logger.error('Webhook delivery failed', {
+      webhookUrl: webhookUrl.replace(/([?&]token=)[^&]*/, '$1***'),
+      error: error.message,
+      status: error.response?.status || null,
+      statusText: error.response?.statusText,
+    });
     return {
       success: false,
       error: error.message,
@@ -276,10 +282,11 @@ async function sendDiscordNotification(webhookUrl, notification) {
 async function sendEmailNotification(to, notification) {
   // Email sending would require nodemailer or similar service
   // For now, return a placeholder response
-  console.log('Email notification:', {
+  logger.info('Email notification (placeholder)', {
     to,
     subject: getNotificationTitle(notification.type),
-    message: notification.message,
+    type: notification.type,
+    teamId: notification.teamId,
   });
 
   return {
@@ -342,7 +349,12 @@ async function sendNotification(redis, notification, channels = []) {
     } catch (error) {
       // Sanitize channel type to prevent log injection
       const sanitizedType = sanitizeChannelType(channel.type);
-      console.error(`Failed to send notification via ${sanitizedType}:`, error);
+      logger.error('Failed to send notification', {
+        channelType: sanitizedType,
+        notificationType: notification.type,
+        teamId: notification.teamId,
+        error: error.message,
+      });
       results.push({
         channel: channel.type,
         success: false,
