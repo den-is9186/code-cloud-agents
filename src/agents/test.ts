@@ -72,12 +72,33 @@ Antworte NUR mit validem JSON:
         duration: 0
       };
 
-      // Parse test output if possible
+      // Parse test output with Zod validation
+      const TestOutputSchema = z.object({
+        numPassedTests: z.number().optional(),
+        numFailedTests: z.number().optional(),
+        numSkippedTests: z.number().optional(),
+        testResults: z.array(z.object({
+          duration: z.number().optional()
+        })).optional()
+      });
+
       try {
-        const results = JSON.parse(stdout);
+        const results = safeJsonParse(stdout, TestOutputSchema, {
+          numPassedTests: 0,
+          numFailedTests: 0,
+          numSkippedTests: 0
+        });
+        
         testResults.passed = results.numPassedTests || 0;
         testResults.failed = results.numFailedTests || 0;
+        testResults.skipped = results.numSkippedTests || 0;
+        
+        // Calculate duration if available
+        if (results.testResults && Array.isArray(results.testResults)) {
+          testResults.duration = results.testResults.reduce((sum, test) => sum + (test.duration || 0), 0);
+        }
       } catch {
+        // Fallback to counting tests if parsing fails
         testResults.passed = exitCode === 0 ? parsed.testsWritten.reduce((a: number, t: any) => a + t.testCount, 0) : 0;
       }
 
