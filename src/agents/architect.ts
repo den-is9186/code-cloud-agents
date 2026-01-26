@@ -2,6 +2,7 @@ import { Agent, AgentRole, Step } from './types';
 import { llmClient } from '../llm/client';
 import { executeTool } from '../tools';
 import { RunbookSchema, safeJsonParse } from '../utils/schemas';
+import { z } from 'zod';
 
 export class ArchitectAgent implements Agent {
   role: AgentRole = 'architect';
@@ -60,9 +61,17 @@ Antworte NUR mit validem JSON in diesem Format:
     ]);
 
     try {
-      const parsed = safeJsonParse(response.content, RunbookSchema.extend({
+      const ArchitectResponseSchema = z.object({
+        runbook: z.array(z.object({
+          id: z.string(),
+          description: z.string(),
+          files: z.array(z.string()),
+          expectedOutcome: z.string(),
+          estimatedTokens: z.number()
+        })),
         estimatedComplexity: z.enum(['low', 'medium', 'high'])
-      }));
+      });
+      const parsed = safeJsonParse(response.content, ArchitectResponseSchema);
       return parsed;
     } catch {
       // Fallback: Simple single-step runbook

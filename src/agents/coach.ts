@@ -62,13 +62,14 @@ Antworte NUR mit validem JSON:
           dependsOn: z.array(z.string())
         }))
       });
-      return safeJsonParse(response.content, CoachResponseSchema);
+      const result = safeJsonParse(response.content, CoachResponseSchema);
+      return result;
     } catch {
       // Fallback: One task per step
       const tasks: SubTask[] = input.runbook.map((step, i) => ({
         id: `task-${i + 1}`,
         stepId: step.id,
-        assignedAgent: 'code' as AgentRole,
+        assignedAgent: 'code' as const,
         description: step.description,
         input: { files: step.files },
         expectedOutput: step.expectedOutcome,

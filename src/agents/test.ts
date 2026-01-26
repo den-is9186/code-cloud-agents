@@ -1,7 +1,7 @@
 import { Agent, AgentRole, SubTask, FileChange, TestFile, TestResult, TestFailure } from './types';
 import { llmClient } from '../llm/client';
 import { executeTool } from '../tools';
-import { TestResponseSchema, safeJsonParse } from '../utils/schemas';
+import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
 
 export class TestAgent implements Agent {
@@ -46,13 +46,14 @@ Antworte NUR mit validem JSON:
     ]);
 
     try {
-      const parsed = safeJsonParse(response.content, TestResponseSchema.extend({
+      const TestAgentResponseSchema = z.object({
         testsWritten: z.array(z.object({
           path: z.string(),
           testCount: z.number(),
           content: z.string()
         }))
-      }));
+      });
+      const parsed = safeJsonParse(response.content, TestAgentResponseSchema);
 
       // Write test files
       for (const test of parsed.testsWritten) {
@@ -77,7 +78,7 @@ Antworte NUR mit validem JSON:
         testResults.passed = results.numPassedTests || 0;
         testResults.failed = results.numFailedTests || 0;
       } catch {
-        testResults.passed = exitCode === 0 ? parsed.testsWritten.reduce((a: number, t: TestFile) => a + t.testCount, 0) : 0;
+        testResults.passed = exitCode === 0 ? parsed.testsWritten.reduce((a: number, t: any) => a + t.testCount, 0) : 0;
       }
 
       return {

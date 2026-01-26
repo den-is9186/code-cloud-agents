@@ -2,6 +2,7 @@ import { Agent, AgentRole, SubTask, FileChange, ReviewFeedback } from './types';
 import { llmClient } from '../llm/client';
 import { executeTool } from '../tools';
 import { CodeResponseSchema, safeJsonParse } from '../utils/schemas';
+import { z } from 'zod';
 
 export class CodeAgent implements Agent {
   role: AgentRole = 'code';
@@ -54,9 +55,15 @@ Antworte NUR mit validem JSON:
     ]);
 
     try {
-      const parsed = safeJsonParse(response.content, CodeResponseSchema.extend({
+      const CodeAgentResponseSchema = z.object({
+        filesChanged: z.array(z.object({
+          path: z.string(),
+          action: z.enum(['create', 'modify']),
+          content: z.string()
+        })),
         explanation: z.string()
-      }));
+      });
+      const parsed = safeJsonParse(response.content, CodeAgentResponseSchema);
 
       // Write files
       for (const file of parsed.filesChanged) {
