@@ -6,6 +6,28 @@ jest.mock('ioredis');
 
 const app = require('../src/api-server');
 const { States } = require('../src/workflow/state-machine');
+const { generateToken, Roles } = require('../src/services/auth-service');
+
+// Helper to generate test auth token
+function getTestToken(role = Roles.MANAGER) {
+  return generateToken({
+    userId: 'test-user',
+    email: 'test@example.com',
+    role,
+  }, '1h');
+}
+
+// Extend request with authentication helper
+const authRequest = {
+  get: (url, role = Roles.MANAGER) =>
+    request(app).get(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+  post: (url, role = Roles.MANAGER) =>
+    request(app).post(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+  put: (url, role = Roles.MANAGER) =>
+    request(app).put(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+  delete: (url, role = Roles.ADMIN) =>
+    request(app).delete(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+};
 
 describe('Integration Tests - Team Approval/Reject API', () => {
   beforeEach(() => {
@@ -16,7 +38,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
   // Helper to create a team in AWAITING_APPROVAL state
   async function createTeamAwaitingApproval() {
     // Create team
-    const createResponse = await request(app).post('/api/v1/teams').send({
+    const createResponse = await authRequest.post('/api/v1/teams').send({
       name: 'Test Team',
       repo: 'github.com/test/repo',
       preset: 'IQ',
@@ -64,7 +86,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
     test('should approve team prototype', async () => {
       const teamId = await createTeamAwaitingApproval();
 
-      const response = await request(app).post(`/api/v1/teams/${teamId}/approve`).send({
+      const response = await authRequest.post(`/api/v1/teams/${teamId}/approve`).send({
         userId: 'test-user-123',
         reason: 'Looks good',
       });
@@ -83,7 +105,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
     test('should include metadata in transition history', async () => {
       const teamId = await createTeamAwaitingApproval();
 
-      const response = await request(app).post(`/api/v1/teams/${teamId}/approve`).send({
+      const response = await authRequest.post(`/api/v1/teams/${teamId}/approve`).send({
         userId: 'test-user-456',
         reason: 'Excellent prototype',
       });
@@ -97,14 +119,14 @@ describe('Integration Tests - Team Approval/Reject API', () => {
 
     test('should return 404 for non-existent team', async () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
-      const response = await request(app).post(`/api/v1/teams/${fakeId}/approve`).send();
+      const response = await authRequest.post(`/api/v1/teams/${fakeId}/approve`).send();
 
       expect(response.status).toBe(404);
       expect(response.body.error).toHaveProperty('code', 'TEAM_NOT_FOUND');
     });
 
     test('should return 400 for invalid UUID format', async () => {
-      const response = await request(app).post('/api/v1/teams/invalid-id/approve').send();
+      const response = await authRequest.post('/api/v1/teams/invalid-id/approve').send();
 
       expect(response.status).toBe(400);
       expect(response.body.error).toHaveProperty('code', 'INVALID_INPUT');
@@ -113,7 +135,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
 
     test('should return 400 when team not in AWAITING_APPROVAL state', async () => {
       // Create team (will be in TEAM_CREATED state)
-      const createResponse = await request(app).post('/api/v1/teams').send({
+      const createResponse = await authRequest.post('/api/v1/teams').send({
         name: 'Test Team',
         repo: 'github.com/test/repo',
         preset: 'A',
@@ -121,7 +143,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
       });
       const teamId = createResponse.body.team.id;
 
-      const response = await request(app).post(`/api/v1/teams/${teamId}/approve`).send();
+      const response = await authRequest.post(`/api/v1/teams/${teamId}/approve`).send();
 
       expect(response.status).toBe(400);
       expect(response.body.error).toHaveProperty('code', 'INVALID_STATE_TRANSITION');
@@ -135,7 +157,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
     test('should reject team prototype', async () => {
       const teamId = await createTeamAwaitingApproval();
 
-      const response = await request(app).post(`/api/v1/teams/${teamId}/reject`).send({
+      const response = await authRequest.post(`/api/v1/teams/${teamId}/reject`).send({
         userId: 'test-user-789',
         reason: 'Does not meet requirements',
       });
@@ -152,7 +174,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
     test('should require reason for rejection', async () => {
       const teamId = await createTeamAwaitingApproval();
 
-      const response = await request(app).post(`/api/v1/teams/${teamId}/reject`).send({
+      const response = await authRequest.post(`/api/v1/teams/${teamId}/reject`).send({
         userId: 'test-user',
       });
 
@@ -164,7 +186,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
     test('should not accept empty reason', async () => {
       const teamId = await createTeamAwaitingApproval();
 
-      const response = await request(app).post(`/api/v1/teams/${teamId}/reject`).send({
+      const response = await authRequest.post(`/api/v1/teams/${teamId}/reject`).send({
         userId: 'test-user',
         reason: '   ',
       });
@@ -176,8 +198,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
 
     test('should return 404 for non-existent team', async () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
-      const response = await request(app)
-        .post(`/api/v1/teams/${fakeId}/reject`)
+      const response = await authRequest.post(`/api/v1/teams/${fakeId}/reject`)
         .send({ reason: 'Test' });
 
       expect(response.status).toBe(404);
@@ -185,7 +206,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
     });
 
     test('should return 400 when team not in AWAITING_APPROVAL state', async () => {
-      const createResponse = await request(app).post('/api/v1/teams').send({
+      const createResponse = await authRequest.post('/api/v1/teams').send({
         name: 'Test Team',
         repo: 'github.com/test/repo',
         preset: 'B',
@@ -193,8 +214,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
       });
       const teamId = createResponse.body.team.id;
 
-      const response = await request(app)
-        .post(`/api/v1/teams/${teamId}/reject`)
+      const response = await authRequest.post(`/api/v1/teams/${teamId}/reject`)
         .send({ reason: 'Not ready' });
 
       expect(response.status).toBe(400);
@@ -207,7 +227,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
     test('should skip premium phase', async () => {
       const teamId = await createTeamAwaitingApproval();
 
-      const response = await request(app).post(`/api/v1/teams/${teamId}/skip-premium`).send({
+      const response = await authRequest.post(`/api/v1/teams/${teamId}/skip-premium`).send({
         userId: 'test-user-999',
         reason: 'Prototype is sufficient',
       });
@@ -224,7 +244,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
     test('should use default reason if not provided', async () => {
       const teamId = await createTeamAwaitingApproval();
 
-      const response = await request(app).post(`/api/v1/teams/${teamId}/skip-premium`).send({
+      const response = await authRequest.post(`/api/v1/teams/${teamId}/skip-premium`).send({
         userId: 'test-user',
       });
 
@@ -236,21 +256,21 @@ describe('Integration Tests - Team Approval/Reject API', () => {
 
     test('should return 404 for non-existent team', async () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
-      const response = await request(app).post(`/api/v1/teams/${fakeId}/skip-premium`).send();
+      const response = await authRequest.post(`/api/v1/teams/${fakeId}/skip-premium`).send();
 
       expect(response.status).toBe(404);
       expect(response.body.error).toHaveProperty('code', 'TEAM_NOT_FOUND');
     });
 
     test('should return 400 for invalid UUID format', async () => {
-      const response = await request(app).post('/api/v1/teams/invalid-id/skip-premium').send();
+      const response = await authRequest.post('/api/v1/teams/invalid-id/skip-premium').send();
 
       expect(response.status).toBe(400);
       expect(response.body.error).toHaveProperty('code', 'INVALID_INPUT');
     });
 
     test('should return 400 when team not in AWAITING_APPROVAL state', async () => {
-      const createResponse = await request(app).post('/api/v1/teams').send({
+      const createResponse = await authRequest.post('/api/v1/teams').send({
         name: 'Test Team',
         repo: 'github.com/test/repo',
         preset: 'C',
@@ -258,7 +278,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
       });
       const teamId = createResponse.body.team.id;
 
-      const response = await request(app).post(`/api/v1/teams/${teamId}/skip-premium`).send();
+      const response = await authRequest.post(`/api/v1/teams/${teamId}/skip-premium`).send();
 
       expect(response.status).toBe(400);
       expect(response.body.error).toHaveProperty('code', 'INVALID_STATE_TRANSITION');
@@ -271,15 +291,14 @@ describe('Integration Tests - Team Approval/Reject API', () => {
       const teamId = await createTeamAwaitingApproval();
 
       // 1. Approve
-      const approveResponse = await request(app)
-        .post(`/api/v1/teams/${teamId}/approve`)
+      const approveResponse = await authRequest.post(`/api/v1/teams/${teamId}/approve`)
         .send({ userId: 'user-1', reason: 'Good work' });
 
       expect(approveResponse.status).toBe(200);
       expect(approveResponse.body.team.workflowState).toBe(States.APPROVED);
 
       // 2. Get team to verify state
-      const getResponse = await request(app).get(`/api/v1/teams/${teamId}`);
+      const getResponse = await authRequest.get(`/api/v1/teams/${teamId}`);
       expect(getResponse.status).toBe(200);
       expect(getResponse.body.team.workflowState).toBe(States.APPROVED);
       expect(getResponse.body.team.status).toBe('approved');
@@ -289,16 +308,14 @@ describe('Integration Tests - Team Approval/Reject API', () => {
       const teamId = await createTeamAwaitingApproval();
 
       // 1. Reject
-      const rejectResponse = await request(app)
-        .post(`/api/v1/teams/${teamId}/reject`)
+      const rejectResponse = await authRequest.post(`/api/v1/teams/${teamId}/reject`)
         .send({ userId: 'user-2', reason: 'Not good enough' });
 
       expect(rejectResponse.status).toBe(200);
       expect(rejectResponse.body.team.workflowState).toBe(States.REJECTED);
 
       // 2. Try to approve (should fail - terminal state)
-      const approveResponse = await request(app)
-        .post(`/api/v1/teams/${teamId}/approve`)
+      const approveResponse = await authRequest.post(`/api/v1/teams/${teamId}/approve`)
         .send();
 
       expect(approveResponse.status).toBe(400);
@@ -309,16 +326,14 @@ describe('Integration Tests - Team Approval/Reject API', () => {
       const teamId = await createTeamAwaitingApproval();
 
       // 1. Skip premium
-      const skipResponse = await request(app)
-        .post(`/api/v1/teams/${teamId}/skip-premium`)
+      const skipResponse = await authRequest.post(`/api/v1/teams/${teamId}/skip-premium`)
         .send({ userId: 'user-3', reason: 'Prototype sufficient' });
 
       expect(skipResponse.status).toBe(200);
       expect(skipResponse.body.team.workflowState).toBe(States.PARTIAL);
 
       // 2. Verify terminal state - cannot approve after skip
-      const approveResponse = await request(app)
-        .post(`/api/v1/teams/${teamId}/approve`)
+      const approveResponse = await authRequest.post(`/api/v1/teams/${teamId}/approve`)
         .send();
 
       expect(approveResponse.status).toBe(400);
@@ -328,8 +343,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
     test('should track complete workflow history', async () => {
       const teamId = await createTeamAwaitingApproval();
 
-      const approveResponse = await request(app)
-        .post(`/api/v1/teams/${teamId}/approve`)
+      const approveResponse = await authRequest.post(`/api/v1/teams/${teamId}/approve`)
         .send({ userId: 'user-final', reason: 'Approved for premium' });
 
       const history = JSON.parse(approveResponse.body.team.workflowHistory);

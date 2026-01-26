@@ -5,6 +5,28 @@ const Redis = require('ioredis');
 jest.mock('ioredis');
 
 const app = require('../src/api-server');
+const { generateToken, Roles } = require('../src/services/auth-service');
+
+// Helper to generate test auth token
+function getTestToken(role = Roles.DEVELOPER) {
+  return generateToken({
+    userId: 'test-user',
+    email: 'test@example.com',
+    role,
+  }, '1h');
+}
+
+// Extend request with authentication helper
+const authRequest = {
+  get: (url, role = Roles.VIEWER) =>
+    request(app).get(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+  post: (url, role = Roles.DEVELOPER) =>
+    request(app).post(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+  put: (url, role = Roles.MANAGER) =>
+    request(app).put(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+  delete: (url, role = Roles.ADMIN) =>
+    request(app).delete(url).set('Authorization', `Bearer ${getTestToken(role)}`),
+};
 
 describe('Integration Tests - Team Management API', () => {
   beforeEach(() => {
@@ -14,8 +36,7 @@ describe('Integration Tests - Team Management API', () => {
 
   describe('POST /api/v1/teams - Create team', () => {
     test('should create a new team', async () => {
-      const response = await request(app)
-        .post('/api/v1/teams')
+      const response = await authRequest.post('/api/v1/teams')
         .send({
           name: 'Test Team',
           repo: 'github.com/test-user/test-repo',
@@ -41,8 +62,7 @@ describe('Integration Tests - Team Management API', () => {
 
     test('should create team with ownerId', async () => {
       const ownerId = '123e4567-e89b-12d3-a456-426614174000';
-      const response = await request(app)
-        .post('/api/v1/teams')
+      const response = await authRequest.post('/api/v1/teams')
         .send({
           name: 'Owned Team',
           repo: 'github.com/owner/repo',
@@ -56,8 +76,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should return 400 for missing name', async () => {
-      const response = await request(app)
-        .post('/api/v1/teams')
+      const response = await authRequest.post('/api/v1/teams')
         .send({
           repo: 'github.com/test/repo',
           preset: 'B',
@@ -70,8 +89,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should return 400 for invalid repo format', async () => {
-      const response = await request(app)
-        .post('/api/v1/teams')
+      const response = await authRequest.post('/api/v1/teams')
         .send({
           name: 'Team',
           repo: 'invalid-repo-format',
@@ -85,8 +103,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should return 400 for invalid preset', async () => {
-      const response = await request(app)
-        .post('/api/v1/teams')
+      const response = await authRequest.post('/api/v1/teams')
         .send({
           name: 'Team',
           repo: 'github.com/user/repo',
@@ -100,8 +117,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should return 400 for task too short', async () => {
-      const response = await request(app)
-        .post('/api/v1/teams')
+      const response = await authRequest.post('/api/v1/teams')
         .send({
           name: 'Team',
           repo: 'github.com/user/repo',
@@ -115,8 +131,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should return 400 for invalid ownerId format', async () => {
-      const response = await request(app)
-        .post('/api/v1/teams')
+      const response = await authRequest.post('/api/v1/teams')
         .send({
           name: 'Team',
           repo: 'github.com/user/repo',
@@ -134,19 +149,19 @@ describe('Integration Tests - Team Management API', () => {
   describe('GET /api/v1/teams - List teams', () => {
     beforeEach(async () => {
       // Create test teams
-      await request(app).post('/api/v1/teams').send({
+      await authRequest.post('/api/v1/teams').send({
         name: 'Team 1',
         repo: 'github.com/user/repo1',
         preset: 'A',
         task: 'Task description one',
       });
-      await request(app).post('/api/v1/teams').send({
+      await authRequest.post('/api/v1/teams').send({
         name: 'Team 2',
         repo: 'github.com/user/repo2',
         preset: 'B',
         task: 'Task description two',
       });
-      await request(app).post('/api/v1/teams').send({
+      await authRequest.post('/api/v1/teams').send({
         name: 'Team 3',
         repo: 'github.com/user/repo3',
         preset: 'IQ',
@@ -155,7 +170,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should list all teams', async () => {
-      const response = await request(app).get('/api/v1/teams');
+      const response = await authRequest.get('/api/v1/teams');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('teams');
@@ -166,7 +181,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should support pagination', async () => {
-      const response = await request(app).get('/api/v1/teams').query({ limit: 2, offset: 1 });
+      const response = await authRequest.get('/api/v1/teams').query({ limit: 2, offset: 1 });
 
       expect(response.status).toBe(200);
       expect(response.body.teams.length).toBe(2);
@@ -176,8 +191,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should filter by status', async () => {
-      const response = await request(app)
-        .get('/api/v1/teams')
+      const response = await authRequest.get('/api/v1/teams')
         .query({ status: 'pending' });
 
       expect(response.status).toBe(200);
@@ -188,7 +202,7 @@ describe('Integration Tests - Team Management API', () => {
     test('should return empty array when no teams exist', async () => {
       Redis.mockStore.clear();
 
-      const response = await request(app).get('/api/v1/teams');
+      const response = await authRequest.get('/api/v1/teams');
 
       expect(response.status).toBe(200);
       expect(response.body.teams).toEqual([]);
@@ -197,7 +211,7 @@ describe('Integration Tests - Team Management API', () => {
 
     test('should filter by ownerId', async () => {
       const ownerId = '123e4567-e89b-12d3-a456-426614174001';
-      await request(app).post('/api/v1/teams').send({
+      await authRequest.post('/api/v1/teams').send({
         name: 'Owned Team',
         repo: 'github.com/owner/owned-repo',
         preset: 'C',
@@ -205,8 +219,7 @@ describe('Integration Tests - Team Management API', () => {
         ownerId: ownerId,
       });
 
-      const response = await request(app)
-        .get('/api/v1/teams')
+      const response = await authRequest.get('/api/v1/teams')
         .query({ ownerId: ownerId });
 
       expect(response.status).toBe(200);
@@ -219,7 +232,7 @@ describe('Integration Tests - Team Management API', () => {
     let teamId;
 
     beforeEach(async () => {
-      const createResponse = await request(app).post('/api/v1/teams').send({
+      const createResponse = await authRequest.post('/api/v1/teams').send({
         name: 'Test Team',
         repo: 'github.com/test/repo',
         preset: 'A',
@@ -229,7 +242,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should get team by ID', async () => {
-      const response = await request(app).get(`/api/v1/teams/${teamId}`);
+      const response = await authRequest.get(`/api/v1/teams/${teamId}`);
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('team');
@@ -239,14 +252,14 @@ describe('Integration Tests - Team Management API', () => {
 
     test('should return 404 for non-existent team', async () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
-      const response = await request(app).get(`/api/v1/teams/${fakeId}`);
+      const response = await authRequest.get(`/api/v1/teams/${fakeId}`);
 
       expect(response.status).toBe(404);
       expect(response.body.error).toHaveProperty('code', 'TEAM_NOT_FOUND');
     });
 
     test('should return 400 for invalid UUID format', async () => {
-      const response = await request(app).get('/api/v1/teams/invalid-id');
+      const response = await authRequest.get('/api/v1/teams/invalid-id');
 
       expect(response.status).toBe(400);
       expect(response.body.error).toHaveProperty('code', 'INVALID_INPUT');
@@ -258,7 +271,7 @@ describe('Integration Tests - Team Management API', () => {
     let teamId;
 
     beforeEach(async () => {
-      const createResponse = await request(app).post('/api/v1/teams').send({
+      const createResponse = await authRequest.post('/api/v1/teams').send({
         name: 'Original Team',
         repo: 'github.com/original/repo',
         preset: 'A',
@@ -268,7 +281,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should update team name', async () => {
-      const response = await request(app).put(`/api/v1/teams/${teamId}`).send({
+      const response = await authRequest.put(`/api/v1/teams/${teamId}`).send({
         name: 'Updated Team Name',
       });
 
@@ -279,7 +292,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should update multiple fields', async () => {
-      const response = await request(app).put(`/api/v1/teams/${teamId}`).send({
+      const response = await authRequest.put(`/api/v1/teams/${teamId}`).send({
         name: 'New Name',
         preset: 'IQ',
         task: 'Updated task description here',
@@ -293,7 +306,7 @@ describe('Integration Tests - Team Management API', () => {
 
     test('should return 404 for non-existent team', async () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
-      const response = await request(app).put(`/api/v1/teams/${fakeId}`).send({
+      const response = await authRequest.put(`/api/v1/teams/${fakeId}`).send({
         name: 'Updated',
       });
 
@@ -302,7 +315,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should return 400 for invalid data', async () => {
-      const response = await request(app).put(`/api/v1/teams/${teamId}`).send({
+      const response = await authRequest.put(`/api/v1/teams/${teamId}`).send({
         preset: 'INVALID_PRESET',
       });
 
@@ -311,7 +324,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should return 400 for invalid UUID format', async () => {
-      const response = await request(app).put('/api/v1/teams/invalid-id').send({
+      const response = await authRequest.put('/api/v1/teams/invalid-id').send({
         name: 'Updated',
       });
 
@@ -325,7 +338,7 @@ describe('Integration Tests - Team Management API', () => {
     let teamId;
 
     beforeEach(async () => {
-      const createResponse = await request(app).post('/api/v1/teams').send({
+      const createResponse = await authRequest.post('/api/v1/teams').send({
         name: 'Team to Delete',
         repo: 'github.com/delete/repo',
         preset: 'B',
@@ -335,7 +348,7 @@ describe('Integration Tests - Team Management API', () => {
     });
 
     test('should delete team', async () => {
-      const response = await request(app).delete(`/api/v1/teams/${teamId}`);
+      const response = await authRequest.delete(`/api/v1/teams/${teamId}`);
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('teamId', teamId);
@@ -343,20 +356,20 @@ describe('Integration Tests - Team Management API', () => {
       expect(response.body).toHaveProperty('message', 'Team deleted successfully');
 
       // Verify team is deleted
-      const getResponse = await request(app).get(`/api/v1/teams/${teamId}`);
+      const getResponse = await authRequest.get(`/api/v1/teams/${teamId}`);
       expect(getResponse.status).toBe(404);
     });
 
     test('should return 404 for non-existent team', async () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
-      const response = await request(app).delete(`/api/v1/teams/${fakeId}`);
+      const response = await authRequest.delete(`/api/v1/teams/${fakeId}`);
 
       expect(response.status).toBe(404);
       expect(response.body.error).toHaveProperty('code', 'TEAM_NOT_FOUND');
     });
 
     test('should return 400 for invalid UUID format', async () => {
-      const response = await request(app).delete('/api/v1/teams/invalid-id');
+      const response = await authRequest.delete('/api/v1/teams/invalid-id');
 
       expect(response.status).toBe(400);
       expect(response.body.error).toHaveProperty('code', 'INVALID_INPUT');
@@ -367,7 +380,7 @@ describe('Integration Tests - Team Management API', () => {
   describe('End-to-end Team workflow', () => {
     test('should complete full CRUD workflow', async () => {
       // 1. Create team
-      const createResponse = await request(app).post('/api/v1/teams').send({
+      const createResponse = await authRequest.post('/api/v1/teams').send({
         name: 'Workflow Team',
         repo: 'github.com/workflow/test-repo',
         preset: 'IQ',
@@ -377,12 +390,12 @@ describe('Integration Tests - Team Management API', () => {
       const teamId = createResponse.body.team.id;
 
       // 2. Get team
-      const getResponse = await request(app).get(`/api/v1/teams/${teamId}`);
+      const getResponse = await authRequest.get(`/api/v1/teams/${teamId}`);
       expect(getResponse.status).toBe(200);
       expect(getResponse.body.team.name).toBe('Workflow Team');
 
       // 3. Update team
-      const updateResponse = await request(app).put(`/api/v1/teams/${teamId}`).send({
+      const updateResponse = await authRequest.put(`/api/v1/teams/${teamId}`).send({
         name: 'Updated Workflow Team',
         preset: 'A',
       });
@@ -391,18 +404,18 @@ describe('Integration Tests - Team Management API', () => {
       expect(updateResponse.body.team.preset).toBe('A');
 
       // 4. List teams to verify it's there
-      const listResponse = await request(app).get('/api/v1/teams');
+      const listResponse = await authRequest.get('/api/v1/teams');
       expect(listResponse.status).toBe(200);
       const teamIds = listResponse.body.teams.map((t) => t.id);
       expect(teamIds).toContain(teamId);
 
       // 5. Delete team
-      const deleteResponse = await request(app).delete(`/api/v1/teams/${teamId}`);
+      const deleteResponse = await authRequest.delete(`/api/v1/teams/${teamId}`);
       expect(deleteResponse.status).toBe(200);
       expect(deleteResponse.body.deleted).toBe(true);
 
       // 6. Verify team is deleted
-      const getDeletedResponse = await request(app).get(`/api/v1/teams/${teamId}`);
+      const getDeletedResponse = await authRequest.get(`/api/v1/teams/${teamId}`);
       expect(getDeletedResponse.status).toBe(404);
     });
 
@@ -410,7 +423,7 @@ describe('Integration Tests - Team Management API', () => {
       const ownerId = '123e4567-e89b-12d3-a456-426614174000';
 
       // 1. Create team with owner
-      const createResponse = await request(app).post('/api/v1/teams').send({
+      const createResponse = await authRequest.post('/api/v1/teams').send({
         name: 'Owner Team',
         repo: 'github.com/owner/lifecycle-repo',
         preset: 'C',
@@ -421,19 +434,17 @@ describe('Integration Tests - Team Management API', () => {
       const teamId = createResponse.body.team.id;
 
       // 2. List teams by owner
-      const listByOwnerResponse = await request(app)
-        .get('/api/v1/teams')
+      const listByOwnerResponse = await authRequest.get('/api/v1/teams')
         .query({ ownerId: ownerId });
       expect(listByOwnerResponse.status).toBe(200);
       expect(listByOwnerResponse.body.teams.length).toBe(1);
       expect(listByOwnerResponse.body.teams[0].id).toBe(teamId);
 
       // 3. Delete team
-      await request(app).delete(`/api/v1/teams/${teamId}`);
+      await authRequest.delete(`/api/v1/teams/${teamId}`);
 
       // 4. Verify team removed from owner's list
-      const listAfterDeleteResponse = await request(app)
-        .get('/api/v1/teams')
+      const listAfterDeleteResponse = await authRequest.get('/api/v1/teams')
         .query({ ownerId: ownerId });
       expect(listAfterDeleteResponse.body.teams.length).toBe(0);
     });
