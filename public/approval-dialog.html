@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prototyp Freigabe - Multi-Agent Dashboard</title>
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <link rel="stylesheet" href="/css/approval-dialog.css">
+</head>
+<body>
+  <div class="approval-container">
+    <!-- Header -->
+    <header class="approval-header">
+      <div class="header-content">
+        <div class="header-left">
+          <a href="/index.html" class="back-link">
+            <span>←</span> Zurück zum Dashboard
+          </a>
+          <h1 class="header-title">🎯 Prototyp Freigabe</h1>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="approval-main">
+      <!-- Team Info Card -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Team Information</h2>
+          <span class="status-badge status-warning" id="teamStatus">Wartet auf Freigabe</span>
+        </div>
+        <div class="card-body">
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Team Name</span>
+              <span class="info-value" id="teamName">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Repository</span>
+              <span class="info-value" id="teamRepo">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Preset</span>
+              <span class="info-value" id="teamPreset">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Phase</span>
+              <span class="info-value" id="teamPhase">Prototype</span>
+            </div>
+          </div>
+          <div class="info-item" style="margin-top: 1rem;">
+            <span class="info-label">Task</span>
+            <p class="info-value" id="teamTask">-</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Prototype Results Card -->
+      <section class="card">
+        <div class="card-header">
+          <h2>📦 Prototyp Ergebnisse</h2>
+          <span class="card-badge" id="buildDuration">-</span>
+        </div>
+        <div class="card-body">
+          <div class="results-grid">
+            <div class="result-stat">
+              <div class="result-icon success">📁</div>
+              <div class="result-info">
+                <span class="result-label">Dateien geändert</span>
+                <span class="result-value" id="filesChanged">0</span>
+              </div>
+            </div>
+            <div class="result-stat">
+              <div class="result-icon success">🧪</div>
+              <div class="result-info">
+                <span class="result-label">Tests geschrieben</span>
+                <span class="result-value" id="testsWritten">0</span>
+              </div>
+            </div>
+            <div class="result-stat">
+              <div class="result-icon success">📝</div>
+              <div class="result-info">
+                <span class="result-label">Dokumentation</span>
+                <span class="result-value" id="docsUpdated">0</span>
+              </div>
+            </div>
+            <div class="result-stat">
+              <div class="result-icon warning">💰</div>
+              <div class="result-info">
+                <span class="result-label">Kosten</span>
+                <span class="result-value" id="buildCost">$0.00</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Build Summary -->
+          <div class="build-summary">
+            <h3>Build Zusammenfassung</h3>
+            <p id="buildSummary">Lade Prototyp-Ergebnisse...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Agent Execution Summary -->
+      <section class="card">
+        <div class="card-header">
+          <h2>🤖 Agent Ausführung</h2>
+        </div>
+        <div class="card-body">
+          <div id="agentExecutionList" class="agent-execution-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </section>
+
+      <!-- File Changes Card -->
+      <section class="card">
+        <div class="card-header">
+          <h2>📝 Dateiänderungen</h2>
+          <span class="card-badge" id="fileChangesCount">0 Dateien</span>
+        </div>
+        <div class="card-body">
+          <div id="fileChangesList" class="file-changes-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Decision Card -->
+      <section class="card decision-card">
+        <div class="card-header">
+          <h2>✅ Entscheidung treffen</h2>
+        </div>
+        <div class="card-body">
+          <p class="card-description">
+            Bitte prüfe die Prototyp-Ergebnisse und treffe eine Entscheidung.
+            Du kannst den Prototyp freigeben, ablehnen, teilweise freigeben, oder überspringen.
+          </p>
+
+          <!-- Comment Field -->
+          <div class="form-group">
+            <label for="decisionComment" class="form-label">
+              Kommentar / Begründung
+              <span class="optional">(optional)</span>
+            </label>
+            <textarea
+              id="decisionComment"
+              class="form-textarea"
+              placeholder="Gib hier deine Begründung oder Anmerkungen ein..."
+              rows="4"
+            ></textarea>
+            <span class="form-help">Dieser Kommentar wird in der Workflow-Historie gespeichert.</span>
+          </div>
+
+          <!-- Modifications List (for Partial Approval) -->
+          <div id="modificationsSection" class="modifications-section" style="display: none;">
+            <h3>Änderungen anfordern</h3>
+            <p class="section-description">
+              Gib an, welche Dateien oder Bereiche überarbeitet werden sollen:
+            </p>
+            <div id="modificationsList" class="modifications-list">
+              <!-- Dynamically populated checkboxes for files -->
+            </div>
+            <div class="form-group">
+              <label for="modificationsText" class="form-label">Zusätzliche Änderungswünsche</label>
+              <textarea
+                id="modificationsText"
+                class="form-textarea"
+                placeholder="Beschreibe hier, was geändert werden soll..."
+                rows="3"
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="action-buttons">
+            <button
+              id="approveBtn"
+              class="btn btn-success btn-large"
+              data-action="approve"
+            >
+              <span class="btn-icon">✅</span>
+              <span class="btn-text">
+                <strong>Freigeben</strong>
+                <small>Prototyp akzeptieren und Premium-Phase starten</small>
+              </span>
+            </button>
+
+            <button
+              id="partialBtn"
+              class="btn btn-warning btn-large"
+              data-action="partial"
+            >
+              <span class="btn-icon">⚠️</span>
+              <span class="btn-text">
+                <strong>Teilweise freigeben</strong>
+                <small>Mit Änderungswünschen freigeben</small>
+              </span>
+            </button>
+
+            <button
+              id="rejectBtn"
+              class="btn btn-danger btn-large"
+              data-action="reject"
+            >
+              <span class="btn-icon">❌</span>
+              <span class="btn-text">
+                <strong>Ablehnen</strong>
+                <small>Prototyp ablehnen und Workflow beenden</small>
+              </span>
+            </button>
+
+            <button
+              id="skipBtn"
+              class="btn btn-secondary btn-large"
+              data-action="skip"
+            >
+              <span class="btn-icon">⏭️</span>
+              <span class="btn-text">
+                <strong>Überspringen</strong>
+                <small>Später entscheiden</small>
+              </span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+    <div class="spinner-large"></div>
+    <p>Lade Daten...</p>
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div id="confirmModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="confirmTitle">Bestätigung</h3>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage">Bist du sicher?</p>
+      </div>
+      <div class="modal-footer">
+        <button id="confirmCancelBtn" class="btn btn-secondary">Abbrechen</button>
+        <button id="confirmOkBtn" class="btn btn-primary">Bestätigen</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/approval-dialog.js"></script>
+</body>
+</html>
