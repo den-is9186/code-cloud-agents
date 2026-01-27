@@ -1,28 +1,30 @@
 # 🎯 PR Reihenfolge - Zusammenfassung
 
-**Antwort auf:** "welche pr als nächste, bitte geben, in reihenfolge"
+**Antwort auf:** "erstelle reihenfolge der pr fertig stellung"
+**Aktualisiert:** 2026-01-27 10:20 UTC
 
 ---
 
 ## ✅ Schnellantwort
 
-Du hast **8 offene PRs**. Hier ist die Reihenfolge:
+Du hast **5 offene PRs** (plus 2 WIP PRs #40, #41). Hier ist die Reihenfolge:
 
-### 🔴 SOFORT (Heute):
-1. **PR #35** - package-lock.json Konflikt beheben ⏱️ 15 min
-2. **PR #34** - pre-push hook Konflikt beheben ⏱️ 20 min
-3. **PR #31** - Husky v9 Kompatibilität ⏱️ 30 min
+### ✅ BEREITS ERLEDIGT:
+- ✅ **PR #31** - Husky v9 Kompatibilität (CLOSED/MERGED)
+- ✅ **PR #34** - pre-push hook Konflikt (CLOSED/MERGED)
+- ✅ **PR #35** - package-lock.json Konflikt (CLOSED/MERGED)
 
-### 🟠 DIESE WOCHE (Hoch):
-4. **PR #27** - TypeScript Migration ⏱️ 2-3 Stunden
-5. **PR #24** - MultiRepoAgent JSON Fix ⏱️ 1-2 Stunden
+### 🔴 JETZT (Diese Woche):
+1. **PR #27** - TypeScript Migration ⏱️ 2-3 Stunden (HÖCHSTE PRIORITÄT!)
+2. **PR #24** - MultiRepoAgent JSON Fix ⏱️ 1-2 Stunden (koordiniere mit #41)
 
 ### 🟡 NÄCHSTE WOCHE (Mittel):
-6. **PR #28** - Path Separators ⏱️ 1 Stunde
-7. **PR #26** - Jest 30 Update ⏱️ 2-3 Stunden (evaluieren!)
+3. **PR #28** - Path Separators ⏱️ 1 Stunde
+4. **PR #26** - Jest 30 Update ⏱️ 2-3 Stunden (evaluieren zuerst!)
 
-### 🔵 SPÄTER:
-8. **PR #38** - Dieses Dokument (schließen nach Merge)
+### 🔵 SPÄTER (Niedrig):
+5. **PR #41** - Fixes für PR #24 (koordiniere mit #24)
+6. **PR #40** - Diese Doku (schließen nach Update)
 
 ---
 
@@ -57,10 +59,11 @@ gh pr close PR_NUMBER  # wenn nötig
 
 ## 📊 Gesamt-Zeitaufwand
 
-- **Kritisch:** ~1 Stunde (PRs #35, #34, #31)
-- **Hoch:** ~4 Stunden (PRs #27, #24)
-- **Mittel:** ~3 Stunden (PRs #28, #26)
-- **TOTAL:** ~8 Stunden
+- **✅ Erledigt:** PRs #31, #34, #35 bereits closed/merged (~1 Stunde gespart!)
+- **Hoch (Diese Woche):** ~4 Stunden (PRs #27, #24)
+- **Mittel (Nächste Woche):** ~3 Stunden (PRs #28, #26 - optional)
+- **Niedrig:** Nach Bedarf (PRs #41, #40)
+- **TOTAL verbleibend:** ~4-7 Stunden
 
 ---
 
@@ -74,4 +77,6 @@ gh pr close PR_NUMBER  # wenn nötig
 ---
 
 **Erstellt:** 2026-01-27
+**Aktualisiert:** 2026-01-27 10:20 UTC
 **Vollständige Details:** `PR_PRIORITY_ORDER.md`
+**Status:** PRs #31, #34, #35 bereits erledigt ✅
