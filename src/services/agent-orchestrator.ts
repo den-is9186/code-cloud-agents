@@ -529,6 +529,7 @@ async function executeAgentSequence(
  * @throws Error if agent name is unknown
  */
 // @ts-expect-error - Will be used in Step 2 (executeAgent refactor)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function createAgentInstance(agentName: string, model: string, preset?: string): Agent {
   switch (agentName) {
     case 'supervisor':

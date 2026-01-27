@@ -262,9 +262,7 @@ export class SupervisorAgent implements Agent {
         complexity: parsed.complexity,
         risks,
         domain: parsed.domain,
-        recommendedAgents: parsed.recommendedAgents.filter((a) =>
-          availableAgents.includes(a)
-        ),
+        recommendedAgents: parsed.recommendedAgents.filter((a) => availableAgents.includes(a)),
       };
     } catch (error) {
       logger.warn('Analysis stage failed, using fallback', {
@@ -461,10 +459,7 @@ export class SupervisorAgent implements Agent {
   /**
    * Save checkpoint
    */
-  private saveCheckpoint(
-    state: SupervisorState,
-    checkpointState: CheckpointInfo['state']
-  ): void {
+  private saveCheckpoint(state: SupervisorState, checkpointState: CheckpointInfo['state']): void {
     const checkpoint: CheckpointInfo = {
       id: crypto.randomUUID(),
       timestamp: Date.now(),
