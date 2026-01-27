@@ -1,6 +1,6 @@
 /**
  * Type declarations for Preset Configuration Loader
- * 
+ *
  * Provides TypeScript type definitions for preset and model configurations.
  */
 

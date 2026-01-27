@@ -4,6 +4,8 @@
  * This file defines the complete Redis data model for the Multi-Agent Dashboard system.
  */
 
+const { logger } = require('../../dist/utils/logger');
+
 // ===================================================================
 // KEY PREFIXES
 // ===================================================================
@@ -399,7 +401,7 @@ async function getBuild(redis, buildId) {
       build.completedAgents = JSON.parse(build.completedAgents);
     } catch (error) {
       // If parsing fails, log warning and use empty array
-      console.warn('Failed to parse completedAgents, using empty array', {
+      logger.warn('Failed to parse completedAgents, using empty array', {
         buildId,
         completedAgents: build.completedAgents,
         error: error.message,

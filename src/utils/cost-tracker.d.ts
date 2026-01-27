@@ -1,6 +1,6 @@
 /**
  * Type declarations for Cost Tracker Utility
- * 
+ *
  * Provides TypeScript type definitions for cost calculation and budget monitoring.
  */
 
@@ -52,7 +52,10 @@ export function calculateAgentCost(agentRun: {
 /**
  * Calculate total cost for a build by summing all agent runs
  */
-export function calculateBuildCost(redis: Redis, buildId: string): Promise<{
+export function calculateBuildCost(
+  redis: Redis,
+  buildId: string
+): Promise<{
   buildId: string;
   teamId: string;
   preset: string;
@@ -82,7 +85,10 @@ export function calculateBuildCost(redis: Redis, buildId: string): Promise<{
 /**
  * Check if a build is approaching or exceeding its budget
  */
-export function checkBudget(buildCost: number, budgetLimit: number): {
+export function checkBudget(
+  buildCost: number,
+  budgetLimit: number
+): {
   status: string;
   utilizationPercent: number;
   spent: number;
@@ -156,7 +162,10 @@ export function comparePresetCosts(
 /**
  * Generate a detailed cost report for a build
  */
-export function generateBuildCostReport(redis: Redis, buildId: string): Promise<{
+export function generateBuildCostReport(
+  redis: Redis,
+  buildId: string
+): Promise<{
   build: {
     id: string;
     teamId: string;
