@@ -1,6 +1,7 @@
 # 📋 PR Priority Order - Code Cloud Agents
 
 **Erstellt:** 2026-01-27
+**Aktualisiert:** 2026-01-27 10:20 UTC
 **Status:** Development Phase
 **Branch Strategy:** Siehe `ops/POLICY.md`
 
@@ -8,78 +9,39 @@
 
 ## 🎯 Übersicht: Aktuelle PRs
 
-**Anzahl offener PRs:** 8
-**Anzahl offener Issues:** 3
+**Anzahl offener PRs:** 5 (excluding this PR #40)
+**Anzahl offener Issues:** Mehrere (siehe GitHub Issues)
 
 ---
 
-## 🚨 KRITISCHE PRs (SOFORT)
+## ✅ ERLEDIGTE PRs (CLOSED/MERGED)
 
-### 1️⃣ **PR #35** - Resolve package-lock.json merge conflict
-**Priorität:** 🔴 KRITISCH
-**Grund:** Blockiert andere Merges und CI/CD
-**Status:** Open
-**Aktion:** 
-- Merge-Konflikt in `package-lock.json` auflösen
-- Keep both `ci-info` AND `strip-ansi` dependencies
-- Verify `npm install` works
-- Merge to develop
-
-**Zeit:** ~15 Minuten
-**Branch Strategy:** Squash to develop (per POLICY.md)
+Die folgenden PRs wurden bereits geschlossen/gemerged:
+- ✅ **PR #31** - Fix Git hooks for Husky v9 compatibility (CLOSED)
+- ✅ **PR #34** - Fix pre-push hook merge conflict (CLOSED)
+- ✅ **PR #35** - Resolve package-lock.json merge conflict (CLOSED)
 
 ---
 
-### 2️⃣ **PR #34** - Fix pre-push hook merge conflict
-**Priorität:** 🔴 KRITISCH
-**Grund:** Git Hooks sind blockiert (verhindert pushes)
-**Status:** Open
-**Aktion:**
-- Resolve pre-push hook conflict
-- Run full test suite on feature branches
-- Test hook functionality
-- Merge to develop
+## 🔴 HOHE PRIORITÄT (DIESE WOCHE)
 
-**Zeit:** ~20 Minuten
-**Branch Strategy:** Squash to develop
-
----
-
-### 3️⃣ **PR #31** - Fix Git hooks for Husky v9 compatibility
-**Priorität:** 🔴 KRITISCH
-**Grund:** Husky v9 Breaking Changes
-**Status:** Open
-**Aktion:**
-- Update Husky configuration for v9
-- Fix `.husky/` scripts
-- Test pre-commit and pre-push hooks
-- Merge to develop
-
-**Zeit:** ~30 Minuten
-**Branch Strategy:** Squash to develop
-
-**⚠️ NOTE:** PRs #34 und #31 könnten zusammenhängen - beide betreffen Git Hooks!
-
----
-
-## 🟠 HOHE PRIORITÄT (DIESE WOCHE)
-
-### 4️⃣ **PR #27** - TypeScript Migration with Jest Support
-**Priorität:** 🟠 HOCH
-**Grund:** Technical Debt + Issue #6 + Issue #22
-**Status:** Open
+### 1️⃣ **PR #27** - TypeScript Migration with Jest Support
+**Priorität:** 🔴 HOCH
+**Grund:** Technical Debt + Issue #6 + Issue #22 - Foundation for code quality
+**Status:** Open (NOT WIP)
+**Erstellt:** 2026-01-26
 **Bezug:** 
 - Issue #6: Migrate JavaScript files to TypeScript
 - Issue #22: TODO TypeScript Migration (66% done)
 **Aktion:**
 - Review migration progress (10/15 files done)
 - Fix remaining TypeScript errors
-- Ensure all 717+ tests pass
+- Ensure all tests pass
 - Update imports
-- Merge to develop
+- Merge to main/develop
 
 **Zeit:** ~2-3 Stunden
-**Branch Strategy:** Squash to develop
+**Branch Strategy:** Squash to develop/main (per POLICY.md)
 
 **Files migrated so far:**
 - ✅ cors.ts, csrf.ts, auth.ts, rate-limit.ts (Middleware)
@@ -88,42 +50,47 @@
 
 ---
 
-### 5️⃣ **PR #24** - Fix MultiRepoAgent JSON parsing failures
-**Priorität:** 🟠 HOCH
+### 2️⃣ **PR #24** - Fix MultiRepoAgent JSON parsing failures
+**Priorität:** 🔴 HOCH
 **Grund:** Bug Fix - JSON parsing from Markdown-wrapped LLM responses
-**Status:** Open
+**Status:** Open (NOT WIP)
+**Erstellt:** 2026-01-26
 **Aktion:**
 - Fix JSON extraction from LLM responses
 - Add robust error handling
 - Add tests for edge cases
-- Merge to develop
+- Merge to main/develop
 
 **Zeit:** ~1-2 Stunden
-**Branch Strategy:** Squash to develop
+**Branch Strategy:** Squash to develop/main
+
+**⚠️ NOTE:** PR #41 is working on fixing issues in PR #24, so coordinate these two!
 
 ---
 
 ## 🟡 MITTLERE PRIORITÄT (NÄCHSTE WOCHE)
 
-### 6️⃣ **PR #28** - Normalize path separators in jest-resolver
+### 3️⃣ **PR #28** - Normalize path separators in jest-resolver
 **Priorität:** 🟡 MITTEL
 **Grund:** Cross-platform compatibility (Windows/Linux)
 **Status:** WIP
+**Erstellt:** 2026-01-26
 **Aktion:**
 - Normalize path separators in Jest resolver
 - Test on Windows and Linux
 - Ensure tests pass
-- Merge to develop
+- Merge to main/develop
 
 **Zeit:** ~1 Stunde
-**Branch Strategy:** Squash to develop
+**Branch Strategy:** Squash to develop/main
 
 ---
 
-### 7️⃣ **PR #26** - Update Jest from 29.7.0 to 30.2.0
-**Priorität:** 🟡 MITTEL
+### 4️⃣ **PR #26** - Update Jest from 29.7.0 to 30.2.0
+**Priorität:** 🟡 MITTEL (EVALUATE FIRST!)
 **Grund:** Dependency Update
 **Status:** WIP
+**Erstellt:** 2026-01-26
 **⚠️ Risiko:** Breaking changes in Jest 30
 **Aktion (aus Issue #22):**
 - Check for JSDOM breaking changes
@@ -132,7 +99,7 @@
 - **ENTSCHEIDUNG:** Merge ODER close and stay on Jest 29
 
 **Zeit:** ~2-3 Stunden (if breaking changes)
-**Branch Strategy:** Squash to develop IF merged
+**Branch Strategy:** Squash to develop/main IF merged
 
 **Empfehlung:** Evaluate if Jest 30 is worth the effort. Wenn Jest 29 funktioniert, close PR.
 
@@ -140,43 +107,64 @@
 
 ## 🔵 NIEDRIGE PRIORITÄT (SPÄTER)
 
-### 8️⃣ **PR #38** - [WIP] Add next pull request in order
+### 5️⃣ **PR #41** - [WIP] Fix issues in pull request 24
+**Priorität:** 🔵 NIEDRIG (KOORDINIERT MIT #24)
+**Grund:** Fixes for PR #24
+**Status:** Draft WIP
+**Erstellt:** 2026-01-27
+**Aktion:**
+- Coordinate with PR #24
+- May need to be merged into PR #24 or wait for PR #24 to merge first
+- Test fixes thoroughly
+
+**Zeit:** Depends on PR #24
+**Branch Strategy:** Coordinate with PR #24
+
+---
+
+### 6️⃣ **PR #40** - [WIP] Organize order of pull request completion
 **Priorität:** 🔵 NIEDRIG
-**Grund:** Current PR - Work in Progress
+**Grund:** Documentation PR - This current PR!
 **Status:** Open (This PR!)
+**Erstellt:** 2026-01-27
 **Aktion:**
 - Complete this document
-- Provide clear PR order
+- Update PR priority order
 - Close after documentation complete
 
 **Zeit:** In Progress
-**Branch Strategy:** Squash to develop
+**Branch Strategy:** Squash to main
 
 ---
 
 ## 📊 Empfohlene Reihenfolge
 
 ```
-WOCHE 1 - KRITISCHE FIXES (Git Hooks + Dependencies):
-Day 1: PR #35 (package-lock conflict) ⏱️ 15 min
-Day 1: PR #34 (pre-push hook) ⏱️ 20 min  
-Day 1: PR #31 (Husky v9) ⏱️ 30 min
-       └─ Total: ~1 Stunde
+AKTUALISIERT: 2026-01-27 10:20 UTC
 
-WOCHE 1 - HOHE PRIORITÄT (TypeScript + Bug Fixes):
-Day 2: PR #27 (TypeScript Migration) ⏱️ 2-3 Stunden
-Day 3: PR #24 (MultiRepoAgent JSON fix) ⏱️ 1-2 Stunden
+✅ ERLEDIGT (PRs #31, #34, #35 bereits closed/merged):
+    Git Hooks und Dependencies sind bereit!
+
+DIESE WOCHE - HOHE PRIORITÄT (Technical Debt & Bug Fixes):
+Day 1: PR #27 (TypeScript Migration) ⏱️ 2-3 Stunden
+       └─ WICHTIG: Foundation für Code Quality!
+Day 2: PR #24 (MultiRepoAgent JSON fix) ⏱️ 1-2 Stunden
+       └─ Koordiniere mit PR #41 (fixes for #24)
        └─ Total: ~4 Stunden
 
-WOCHE 2 - MITTLERE PRIORITÄT (Optional):
-Day 4: PR #28 (Path separators) ⏱️ 1 Stunde
-Day 5: PR #26 (Jest 30) - EVALUATE FIRST ⏱️ 2-3 Stunden
+NÄCHSTE WOCHE - MITTLERE PRIORITÄT (Optional):
+Day 3: PR #28 (Path separators) ⏱️ 1 Stunde
+Day 4: PR #26 (Jest 30) - EVALUATE FIRST ⏱️ 2-3 Stunden
        └─ Total: ~3 Stunden (if needed)
 
-AFTER MERGES:
-- Close PR #38 (this PR)
+NIEDRIGE PRIORITÄT:
+- PR #41: Coordinate with PR #24 (may merge into #24)
+- PR #40: This documentation PR (close after update)
+
+AFTER ALL PRs:
 - Clean up merged branches
-- Start Phase 1 of MASTER_RUNBOOK (Backend Foundation)
+- Address remaining Issues from #22 (Rate Limiting, TypeScript Phase 3+4)
+- Start MASTER_RUNBOOK Phase 1 (Backend Foundation)
 ```
 
 ---
@@ -261,27 +249,29 @@ npm run type-check
 
 ## 📞 Nächste Schritte
 
-1. **JETZT:** PRs #35, #34, #31 mergen (Git Hooks + Dependencies)
-2. **HEUTE:** PR #27 (TypeScript) reviewen und mergen
-3. **MORGEN:** PR #24 (JSON parsing) mergen
-4. **NÄCHSTE WOCHE:** PRs #28, #26 evaluieren
-5. **DANACH:** Issue #22 Rate Limiting Fixes
-6. **DANN:** MASTER_RUNBOOK Phase 1 starten
+1. **JETZT:** PRs #27 (TypeScript) reviewen und mergen - HÖCHSTE PRIORITÄT!
+2. **HEUTE/MORGEN:** PR #24 (JSON parsing) reviewen und mergen (koordiniere mit #41)
+3. **NÄCHSTE WOCHE:** PRs #28 (Path separators) evaluieren und entscheiden
+4. **DANACH:** PR #26 (Jest 30) evaluieren - nur mergen wenn klarer Vorteil
+5. **AUFRÄUMEN:** PR #41 (koordiniere mit #24), close PR #40 (diese Doku)
+6. **DANN:** Issue #22 Rate Limiting Fixes + TypeScript Phase 3+4
+7. **SCHLIESSLICH:** MASTER_RUNBOOK Phase 1 starten
 
 ---
 
 ## 📝 Notes
 
-- **Tests Status:** 717/735 passing (98%)
-- **TypeScript Migration:** 66% complete (10/15 files)
+- **Tests Status:** Basis-Tests passing (nach PR #31 Merge)
+- **TypeScript Migration:** 66% complete (10/15 files) - PR #27 ist key!
 - **Coverage Target:** 80% minimum (per capabilities.yml)
 - **Next Major Phase:** Multi-Agent System Implementation (Issue #23)
 
 ---
 
-**Version:** 1.0
-**Letzte Aktualisierung:** 2026-01-27
+**Version:** 1.1
+**Letzte Aktualisierung:** 2026-01-27 10:20 UTC
 **Verantwortlich:** Copilot Agent
+**Status:** Updated - PRs #31, #34, #35 already closed/merged
 
 ---
 
