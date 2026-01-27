@@ -100,7 +100,7 @@ Nach gründlicher Prüfung aller 39 Pull Requests empfehle ich:
 - PR #24 und #26 sollten reviewed und gemerged werden
 - PR #31, #28, #27 sollten fertiggestellt werden
 
-Alle offenen PRs sollten **abgeschlossen werden, nicht geschlossen werden**.
+Alle offenen PRs sollten **abgeschlossen statt geschlossen werden**.
 
 ---
 

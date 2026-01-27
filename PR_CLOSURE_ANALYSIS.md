@@ -281,4 +281,4 @@ The repository has good PR hygiene with 33 closed PRs showing active development
 Original German: "prüfe alle PR ich denke das manche gescxhlssen werden können"  
 Translation: "check all PRs, I think that some can be closed"
 
-**Answer:** Nach der Prüfung aller PRs empfehle ich, **keine PRs zu schließen**. Alle offenen PRs sind aktive, wertvolle Arbeit die abgeschlossen werden sollte, nicht geschlossen werden sollte.
+**Answer:** Nach der Prüfung aller PRs empfehle ich, **keine PRs zu schließen**. Alle offenen PRs sind aktive, wertvolle Arbeit, die abgeschlossen statt geschlossen werden sollte.
