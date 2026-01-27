@@ -1,19 +1,19 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 echo "🧪 Running pre-push checks..."
 
 # Get current branch
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
+# Tests
+echo "🧪 Running tests..."
+
 # Strict mode for main/develop branches
 if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "develop" ]; then
-  echo "ℹ️  On protected branch '$BRANCH' - all tests must pass"
+  echo "ℹ️  On protected branch '$BRANCH' - tests must pass"
   npm test || exit 1
 else
-  # For feature branches, run multi-repo tests (our changes)
-  echo "🧪 Running multi-repo tests on branch '$BRANCH'..."
-  if ! npm test -- tests/multi-repo-agent.test.js; then
+  # Non-blocking for feature branches - run all tests
+  echo "🧪 Running tests on branch '$BRANCH'..."
+  if ! npm test; then
     echo "⚠️  Tests failed, but allowing push to continue on branch '$BRANCH'"
     echo "ℹ️  Please fix tests before merging to main/develop"
     exit 0
