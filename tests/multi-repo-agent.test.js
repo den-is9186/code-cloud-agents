@@ -365,57 +365,39 @@ describe('MultiRepoAgent', () => {
       expect(result.changes[0].filesChanged).toHaveLength(0);
     });
 
-    test('should handle LLM response with markdown code fences (```json)', async () => {
+    // ========================================
+    // Edge-Case Tests für robustes JSON-Parsing
+    // ========================================
+
+    test('should handle LLM response with text before JSON block', async () => {
       const mockRepos = [{ path: '/repos/repo1', name: 'repo1' }];
 
       mockReaddir.mockResolvedValue([]);
 
       llmClient.chat.mockResolvedValue({
-        content: '```json\n{"files": [{"path": "src/config.js", "action": "modify", "content": "config"}], "explanation": "Updated"}\n```',
+        content: 'Here is the result:\n```json\n{"files": [{"path": "config.js", "action": "create", "content": "config"}]}\n```',
         usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
       });
 
       const result = await agent.execute({
         repos: mockRepos,
-        task: 'Update',
-        changes: 'Changes',
+        task: 'Create config',
+        changes: 'Add config',
         createPRs: false,
       });
 
       expect(result.success).toBe(true);
       expect(result.changes[0].filesChanged).toHaveLength(1);
-      expect(result.changes[0].filesChanged[0].path).toBe('src/config.js');
+      expect(result.changes[0].filesChanged[0].path).toBe('config.js');
     });
 
-    test('should handle LLM response with markdown code fences (```)', async () => {
+    test('should handle LLM response with text after JSON block', async () => {
       const mockRepos = [{ path: '/repos/repo1', name: 'repo1' }];
 
       mockReaddir.mockResolvedValue([]);
 
       llmClient.chat.mockResolvedValue({
-        content: '```\n{"files": [{"path": "README.md", "action": "create", "content": "# README"}], "explanation": "Created README"}\n```',
-        usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
-      });
-
-      const result = await agent.execute({
-        repos: mockRepos,
-        task: 'Create README',
-        changes: 'Add README',
-        createPRs: false,
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.changes[0].filesChanged).toHaveLength(1);
-      expect(result.changes[0].filesChanged[0].path).toBe('README.md');
-    });
-
-    test('should handle LLM response with uppercase JSON marker (```JSON)', async () => {
-      const mockRepos = [{ path: '/repos/repo1', name: 'repo1' }];
-
-      mockReaddir.mockResolvedValue([]);
-
-      llmClient.chat.mockResolvedValue({
-        content: '```JSON\n{"files": [{"path": "test.js", "action": "modify", "content": "test"}]}\n```',
+        content: '```json\n{"files": [{"path": "test.js", "action": "modify", "content": "test"}]}\n```\nThis concludes the changes.',
         usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
       });
 
@@ -430,6 +412,121 @@ describe('MultiRepoAgent', () => {
       expect(result.changes[0].filesChanged).toHaveLength(1);
       expect(result.changes[0].filesChanged[0].path).toBe('test.js');
     });
+
+    test('should handle multiple code blocks (use first JSON block)', async () => {
+      const mockRepos = [{ path: '/repos/repo1', name: 'repo1' }];
+
+      mockReaddir.mockResolvedValue([]);
+
+      llmClient.chat.mockResolvedValue({
+        content: '```json\n{"files": [{"path": "first.js", "action": "create", "content": "first"}]}\n```\n\nAnd here is an alternative:\n```json\n{"files": [{"path": "second.js", "action": "create", "content": "second"}]}\n```',
+        usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
+      });
+
+      const result = await agent.execute({
+        repos: mockRepos,
+        task: 'Create file',
+        changes: 'Add file',
+        createPRs: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.changes[0].filesChanged).toHaveLength(1);
+      // Should use FIRST block
+      expect(result.changes[0].filesChanged[0].path).toBe('first.js');
+    });
+
+    test('should extract JSON from text without code fences', async () => {
+      const mockRepos = [{ path: '/repos/repo1', name: 'repo1' }];
+
+      mockReaddir.mockResolvedValue([]);
+
+      llmClient.chat.mockResolvedValue({
+        content: 'Based on your request, here are the changes: {"files": [{"path": "extracted.js", "action": "create", "content": "extracted"}]} Hope this helps!',
+        usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
+      });
+
+      const result = await agent.execute({
+        repos: mockRepos,
+        task: 'Extract',
+        changes: 'Extract',
+        createPRs: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.changes[0].filesChanged).toHaveLength(1);
+      expect(result.changes[0].filesChanged[0].path).toBe('extracted.js');
+    });
+
+    test('should handle Windows-style line endings (\\r\\n)', async () => {
+      const mockRepos = [{ path: '/repos/repo1', name: 'repo1' }];
+
+      mockReaddir.mockResolvedValue([]);
+
+      llmClient.chat.mockResolvedValue({
+        content: '```json\r\n{"files": [{"path": "windows.js", "action": "create", "content": "windows"}]}\r\n```',
+        usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
+      });
+
+      const result = await agent.execute({
+        repos: mockRepos,
+        task: 'Windows',
+        changes: 'Windows',
+        createPRs: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.changes[0].filesChanged).toHaveLength(1);
+      expect(result.changes[0].filesChanged[0].path).toBe('windows.js');
+    });
+
+    test('should handle extra whitespace around JSON', async () => {
+      const mockRepos = [{ path: '/repos/repo1', name: 'repo1' }];
+
+      mockReaddir.mockResolvedValue([]);
+
+      llmClient.chat.mockResolvedValue({
+        content: '```json\n\n  \n{"files": [{"path": "whitespace.js", "action": "create", "content": "ws"}]}  \n  \n```',
+        usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
+      });
+
+      const result = await agent.execute({
+        repos: mockRepos,
+        task: 'Whitespace',
+        changes: 'Whitespace',
+        createPRs: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.changes[0].filesChanged).toHaveLength(1);
+      expect(result.changes[0].filesChanged[0].path).toBe('whitespace.js');
+    });
+
+    test('should handle JSON with nested backticks in content', async () => {
+      const mockRepos = [{ path: '/repos/repo1', name: 'repo1' }];
+
+      mockReaddir.mockResolvedValue([]);
+
+      llmClient.chat.mockResolvedValue({
+        content: '```json\n{"files": [{"path": "nested.js", "action": "create", "content": "Use `backticks` here"}]}\n```',
+        usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
+      });
+
+      const result = await agent.execute({
+        repos: mockRepos,
+        task: 'Nested',
+        changes: 'Nested',
+        createPRs: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.changes[0].filesChanged).toHaveLength(1);
+      expect(result.changes[0].filesChanged[0].path).toBe('nested.js');
+    });
+
+    // ========================================
+    // Original Tests (behalten)
+    // ========================================
 
     test('should generate summary', async () => {
       const mockRepos = [

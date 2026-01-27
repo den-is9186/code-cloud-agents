@@ -2,6 +2,7 @@
  * Distributed Rate Limiting Middleware
  *
  * Implements Redis-backed rate limiting for multi-instance deployments.
+ * Falls back to in-memory rate limiting when Redis is unavailable.
  * Supports different limits for:
  * - Anonymous users (IP-based)
  * - Authenticated users
@@ -13,8 +14,8 @@ const { RedisStore } = require('rate-limit-redis');
 const rateLimit = require('express-rate-limit');
 const { logger } = require('../../dist/utils/logger');
 
-// Import ip helper for IPv6 support
-const { ip: ipKeyGenerator } = require('express-rate-limit');
+// Import ipKeyGenerator helper for IP-based key generation
+const { ipKeyGenerator } = require('express-rate-limit');
 
 /**
  * Create Redis-backed rate limiter
@@ -37,20 +38,45 @@ function createRateLimiter(redis, options = {}) {
     skipFailedRequests = false,
   } = options;
 
-  try {
-    // Check if redis client has the required methods
-    if (!redis || typeof redis.call !== 'function') {
-      logger.warn('Redis client not available or invalid, rate limiting DISABLED - no fallback implemented');
-      return (req, res, next) => next();
-    }
+  let store;
+  let usingFallback = false;
 
-    const store = new RedisStore({
-      // @ts-expect-error - rate-limit-redis types are outdated
-      client: redis,
+  // Check if redis client is valid and functional
+  if (!redis || typeof redis.call !== 'function') {
+    logger.warn('Redis client not available, switching to in-memory rate limiting', {
       prefix,
-      sendCommand: (...args) => redis.call(...args),
+      windowMs,
+      max: typeof max === 'function' ? 'dynamic' : max,
     });
+    usingFallback = true;
+    store = undefined; // Use default in-memory store
+  } else {
+    // Test if redis.call actually works before creating RedisStore
+    try {
+      // Try a simple call to see if Redis is actually functional
+      // This prevents RedisStore from breaking during construction
+      const testResult = redis.call('PING');
+      // If testResult is a promise, it might fail later, but that's okay
+      // If it throws immediately, we'll catch it here
+      
+      store = new RedisStore({
+        // @ts-expect-error - rate-limit-redis types are outdated
+        client: redis,
+        prefix,
+        sendCommand: (...args) => redis.call(...args),
+      });
+    } catch (error) {
+      logger.error('Failed to create Redis store, switching to in-memory fallback', {
+        error: error.message,
+        stack: error.stack,
+        prefix,
+      });
+      usingFallback = true;
+      store = undefined; // Fall back to in-memory store
+    }
+  }
 
+  try {
     const rateLimitConfig = {
       windowMs,
       max,
@@ -68,6 +94,7 @@ function createRateLimiter(redis, options = {}) {
           resetTime,
           ip: req.ip,
           path: req.path,
+          mode: usingFallback ? 'in-memory' : 'redis',
         });
 
         res.status(429).json({
@@ -88,12 +115,47 @@ function createRateLimiter(redis, options = {}) {
 
     return rateLimit(rateLimitConfig);
   } catch (error) {
-    logger.error('Failed to create rate limiter', {
+    logger.error('Failed to create rate limiter, using minimal in-memory fallback', {
       error: error.message,
       stack: error.stack,
+      prefix,
     });
-    // Fallback: allow all requests if Redis store creation fails
-    return (req, res, next) => next();
+    
+    // Fallback: use in-memory rate limiter if rate limit creation fails
+    const fallbackConfig = {
+      windowMs,
+      max,
+      standardHeaders: true,
+      legacyHeaders: false,
+      skipSuccessfulRequests,
+      skipFailedRequests,
+      handler: (req, res) => {
+        const resetTime = new Date(req.rateLimit.resetTime).toISOString();
+        logger.warn('Rate limit exceeded (in-memory mode)', {
+          identifier: keyGenerator ? keyGenerator(req) : req.ip,
+          limit: req.rateLimit.limit,
+          current: req.rateLimit.current,
+          resetTime,
+          ip: req.ip,
+          path: req.path,
+        });
+
+        res.status(429).json({
+          error: {
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: 'Too many requests',
+            limit: req.rateLimit.limit,
+            resetTime,
+          },
+        });
+      },
+    };
+
+    if (keyGenerator) {
+      fallbackConfig.keyGenerator = keyGenerator;
+    }
+
+    return rateLimit(fallbackConfig);
   }
 }
 
