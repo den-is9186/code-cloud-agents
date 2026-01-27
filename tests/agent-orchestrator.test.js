@@ -1,7 +1,21 @@
 const Redis = require('ioredis');
 
-// Mock Redis before requiring modules
+// Mock Redis and LLM client before requiring modules
 jest.mock('ioredis');
+jest.mock('../dist/llm/client', () => ({
+  llmClient: {
+    chat: jest.fn().mockResolvedValue({
+      content: JSON.stringify({
+        output: 'Mock agent output',
+        summary: 'Mock summary',
+        filesChanged: [],
+      }),
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, cost: 0.001 },
+    }),
+    streamChat: jest.fn(),
+  },
+  createLLMClient: jest.fn(),
+}));
 
 const { orchestrateBuild, executeAgentSequence, getBuildProgress } = require('../dist/services/agent-orchestrator');
 
