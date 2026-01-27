@@ -247,34 +247,19 @@ export class MultiRepoAgent implements Agent<MultiRepoInput, MultiRepoResult> {
   }
 
   private getSystemPrompt(): string {
-    return `You are a Multi-Repo Agent that applies consistent changes across multiple repositories.
-
-Your job is to:
-1. Understand the requested change
-2. Generate appropriate file modifications for the current repository
-3. Ensure consistency with the overall task
-4. Handle edge cases specific to each repository
-
-Return your response as JSON with the following structure:
+    return `Sie sind ein Multi-Repo Agent, der Änderungen an mehreren Repositories koordiniert.
+Geben Sie Ihre Antwort **ausschließlich** als gültiges JSON zurück. Verwenden Sie das folgende Format:
 {
   "files": [
     {
-      "path": "relative/path/to/file.ext",
+      "path": "relativer/pfad/zur/datei.ext",
       "action": "create" | "modify" | "delete",
-      "content": "full file content (for create/modify)"
+      "content": "vollständiger Dateiinhalt (falls create oder modify)"
     }
   ],
-  "explanation": "Brief explanation of changes made"
+  "explanation": "Kurze Erklärung der Änderungen"
 }
-
-Guidelines:
-- Respect existing code style and conventions
-- Don't break existing functionality
-- Include proper error handling
-- Add comments where necessary
-- Consider repository-specific differences
-
-Return ONLY valid JSON, no markdown or explanations outside the JSON.`;
+KEINE zusätzlichen Erklärungen, Überschriften oder Markdown. Nur JSON!`;
   }
 
   private buildPrompt(task: string, changes: string, repoContext: any): string {
