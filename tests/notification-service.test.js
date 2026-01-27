@@ -14,6 +14,7 @@ jest.mock('axios', () => ({
   delete: jest.fn(),
   patch: jest.fn(),
   create: jest.fn(),
+  isAxiosError: jest.fn(),
   defaults: {
     headers: {
       common: {},

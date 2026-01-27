@@ -6,6 +6,7 @@ const axios = {
   delete: jest.fn(),
   patch: jest.fn(),
   create: jest.fn(() => axios),
+  isAxiosError: jest.fn(),
   defaults: {
     headers: {
       common: {},
