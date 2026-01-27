@@ -1,3 +1,38 @@
+/**
+ * DEPRECATED - Old Supervisor workflow
+ *
+ * This file used the OLD SupervisorAgent architecture where Supervisor
+ * orchestrated all agents directly.
+ *
+ * NEW Architecture (Post-Refactor):
+ * - SupervisorAgent: Strategic planning only (returns agentSequence + strategy)
+ * - agent-orchestrator.ts: Executes the agent sequence
+ * - Individual Agents: Refactored with new interfaces
+ *
+ * TODO: Update this file after all agents are refactored
+ * For now, use api-server.js as the main entry point
+ */
+
+// Export agent classes for external use
+export { SupervisorAgent } from './agents/supervisor';
+export { ArchitectAgent } from './agents/architect';
+export { CoachAgent } from './agents/coach';
+export { CodeAgent } from './agents/code';
+export { ReviewAgent } from './agents/review';
+export { TestAgent } from './agents/test';
+export { DocsAgent } from './agents/docs';
+export { VisionAgent } from './agents/vision';
+
+// Export types
+export * from './agents/types';
+
+// Export LLM client
+export { llmClient } from './llm/client';
+
+/* ============================================
+   OLD CODE - COMMENTED OUT DURING REFACTOR
+   ============================================
+
 import { SupervisorAgent } from './agents/supervisor';
 import { ArchitectAgent } from './agents/architect';
 import { CoachAgent } from './agents/coach';
@@ -7,6 +42,7 @@ import { TestAgent } from './agents/test';
 import { DocsAgent } from './agents/docs';
 import { VisionAgent } from './agents/vision';
 import { BuildResult } from './agents/types';
+import { logger } from './utils/logger';
 
 interface RunConfig {
   task: string;
@@ -71,10 +107,14 @@ if (require.main === module) {
   const projectPath = process.argv[3] || '.';
   const preset = (process.argv[4] || 'LOCAL') as RunConfig['preset'];
 
-  run({ task, projectPath, preset }).catch(console.error);
+  run({ task, projectPath, preset }).catch((error) => {
+    logger.error('CLI execution failed', {
+      agent: 'cli',
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    console.error(error);
+  });
 }
 
-export { SupervisorAgent, ArchitectAgent, CoachAgent, CodeAgent, ReviewAgent, TestAgent, DocsAgent, VisionAgent };
-export type { RunConfig };
-export { llmClient } from './llm/client';
-export * from './agents/types';
+============================================ */

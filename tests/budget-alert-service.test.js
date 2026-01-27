@@ -16,16 +16,28 @@ const {
   getCurrentMonthSpending,
   checkBudgetAfterBuild,
   getBudgetStatus,
-} = require('../src/services/budget-alert-service');
+} = require('../dist/services/budget-alert-service');
 
-const {
-  sendNotification,
-  getTeamNotificationChannels,
-} = require('../src/services/notification-service');
-
-// Mock dependencies
+// Mock dependencies - must be before require
 jest.mock('ioredis');
-jest.mock('../src/services/notification-service');
+jest.mock('../dist/services/notification-service', () => ({
+  sendNotification: jest.fn(),
+  getTeamNotificationChannels: jest.fn(),
+  NotificationType: {
+    BUILD_STARTED: 'build.started',
+    BUILD_COMPLETED: 'build.completed',
+    BUILD_FAILED: 'build.failed',
+    APPROVAL_REQUIRED: 'approval.required',
+    APPROVAL_APPROVED: 'approval.approved',
+    APPROVAL_REJECTED: 'approval.rejected',
+    AGENT_COMPLETED: 'agent.completed',
+    AGENT_FAILED: 'agent.failed',
+  },
+}));
+
+// Import mocked module - must be after jest.mock
+const notificationService = require('../dist/services/notification-service');
+const { sendNotification, getTeamNotificationChannels } = notificationService;
 
 describe('Budget Alert Service', () => {
   let redis;

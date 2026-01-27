@@ -46,3 +46,4 @@ coverage/
 # OS
 Thumbs.db
 .aider*
+.push-instructions.txt

@@ -3,6 +3,7 @@
 ## 1) Einstieg
 - `README.md`
 - `PROJECT_STATE.md`
+- `PR_PRIORITY_ORDER.md` ⭐ NEW - PR Reihenfolge & Prioritäten
 
 ## 2) Master Planung
 - `MASTER_TODO_FINAL.md`

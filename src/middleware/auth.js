@@ -109,7 +109,7 @@ function authenticate(options = {}) {
       }
 
       // Optional auth - continue without auth
-      next();
+      return next();
     } catch (error) {
       return res.status(500).json({
         error: {
@@ -156,7 +156,7 @@ function requireRole(requiredRole) {
       });
     }
 
-    next();
+    return next();
   };
 }
 
@@ -220,7 +220,7 @@ function requireTeamOwnership(teamIdParam = 'id') {
         });
       }
 
-      next();
+      return next();
     } catch (error) {
       return res.status(500).json({
         error: {
@@ -234,84 +234,72 @@ function requireTeamOwnership(teamIdParam = 'id') {
 }
 
 /**
- * Rate limiting by authentication
- * Different limits for different auth types
+ * Extract authentication info without enforcing it
+ * Populates req.auth if valid credentials are present, but doesn't fail if not
+ * Used for tiered rate limiting based on authentication level
  */
-const rateLimitStore = new Map();
+function extractAuth() {
+  return async (req, res, next) => {
+    try {
+      // Try API key first
+      const apiKey = extractApiKey(req);
+      if (apiKey) {
+        try {
+          // Get redis from app.locals (already set in api-server.js)
+          const redis = req.app.locals.redis;
+          if (!redis) {
+            // If redis not available, continue without auth
+            return next();
+          }
+          
+          const apiKeyData = await verifyApiKey(redis, apiKey);
 
-function rateLimit(options = {}) {
-  const {
-    windowMs = 60000, // 1 minute
-    maxAnonymous = 10,
-    maxAuthenticated = 100,
-    maxApiKey = 1000,
-  } = options;
+          req.auth = {
+            type: 'apikey',
+            role: apiKeyData.role,
+            teamId: apiKeyData.teamId,
+            permissions: apiKeyData.permissions,
+            name: apiKeyData.name,
+          };
 
-  return (req, res, next) => {
-    const identifier = req.auth
-      ? req.auth.type === 'apikey'
-        ? `apikey:${req.auth.name}`
-        : `user:${req.auth.userId}`
-      : `ip:${req.ip}`;
-
-    const now = Date.now();
-    const windowStart = now - windowMs;
-
-    // Get or create rate limit record
-    let record = rateLimitStore.get(identifier);
-    if (!record) {
-      record = { requests: [], resetTime: now + windowMs };
-      rateLimitStore.set(identifier, record);
-    }
-
-    // Remove old requests outside the window
-    record.requests = record.requests.filter((timestamp) => timestamp > windowStart);
-
-    // Determine max requests based on auth type
-    let maxRequests = maxAnonymous;
-    if (req.auth) {
-      maxRequests = req.auth.type === 'apikey' ? maxApiKey : maxAuthenticated;
-    }
-
-    // Check if limit exceeded
-    if (record.requests.length >= maxRequests) {
-      const resetTime = new Date(record.resetTime).toISOString();
-      return res.status(429).json({
-        error: {
-          code: 'RATE_LIMIT_EXCEEDED',
-          message: 'Too many requests',
-          limit: maxRequests,
-          resetTime,
-        },
-      });
-    }
-
-    // Add current request
-    record.requests.push(now);
-
-    // Update reset time if needed
-    if (now >= record.resetTime) {
-      record.resetTime = now + windowMs;
-    }
-
-    // Clean up old entries periodically
-    if (Math.random() < 0.01) {
-      // 1% chance
-      for (const [key, value] of rateLimitStore.entries()) {
-        if (now >= value.resetTime && value.requests.length === 0) {
-          rateLimitStore.delete(key);
+          return next();
+        } catch (error) {
+          // Silently continue without auth
         }
       }
-    }
 
-    next();
+      // Try JWT token
+      const token = extractToken(req);
+      if (token) {
+        try {
+          const decoded = verifyToken(token);
+
+          req.auth = {
+            type: 'jwt',
+            userId: decoded.userId,
+            email: decoded.email,
+            role: decoded.role,
+          };
+
+          return next();
+        } catch (error) {
+          // Silently continue without auth
+        }
+      }
+
+      // No valid authentication found - continue without auth
+      return next();
+    } catch (error) {
+      // On any error, just continue without auth
+      return next();
+    }
   };
 }
 
 module.exports = {
   authenticate,
+  extractAuth,
   requireRole,
   requireTeamOwnership,
-  rateLimit,
   Roles,
 };

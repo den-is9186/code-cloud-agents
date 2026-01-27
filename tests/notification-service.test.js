@@ -17,7 +17,7 @@ const {
   getTeamNotificationChannels,
   updateTeamNotificationChannels,
   storeNotification,
-} = require('../src/services/notification-service');
+} = require('../dist/services/notification-service');
 
 // Mock axios and Redis
 jest.mock('axios');

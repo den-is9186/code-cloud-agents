@@ -27,6 +27,7 @@ const {
 } = require('./notification-service');
 
 const { checkBudgetAfterBuild } = require('./budget-alert-service');
+const { logger } = require('../../dist/utils/logger');
 
 // Try to import streamEmitter, but provide a fallback if not available
 let streamEmitter;
@@ -85,7 +86,7 @@ async function orchestrateBuild(redis, options) {
   });
 
   const buildId = build.id;
-  console.log(`🚀 Starting build ${buildId} for team ${teamId}`);
+  logger.info('Build started', { buildId, teamId, preset });
 
   // Emit build start event
   streamEmitter.emitBuildStart({ buildId });
@@ -103,7 +104,7 @@ async function orchestrateBuild(redis, options) {
       }, channels);
     }
   } catch (notifError) {
-    console.error('Failed to send build start notification:', notifError);
+    logger.error('Failed to send build start notification', { error: notifError.message, buildId, teamId });
   }
 
   try {
@@ -112,7 +113,7 @@ async function orchestrateBuild(redis, options) {
 
     // Get agent sequence from preset
     const agentSequence = getAgentSequence(presetConfig);
-    console.log(`📋 Agent sequence: ${agentSequence.join(' → ')}`);
+    logger.info('Agent sequence configured', { sequence: agentSequence });
 
     // Execute agents in sequence
     const result = await executeAgentSequence(redis, {
@@ -150,7 +151,7 @@ async function orchestrateBuild(redis, options) {
         }, channels);
       }
     } catch (notifError) {
-      console.error('Failed to send build completion notification:', notifError);
+      logger.error('Failed to send build completion notification', { error: notifError.message, buildId });
     }
 
     // Check budget and send alerts if thresholds exceeded
@@ -161,15 +162,15 @@ async function orchestrateBuild(redis, options) {
         completedBuild.cost.totalCost
       );
       if (budgetCheck.alertSent) {
-        console.warn(
-          `⚠️ Budget alert sent for team ${teamId}: ${budgetCheck.alertLevel} (${budgetCheck.percentage}%)`
-        );
+        logger.warn('Build cost exceeds budget limit', {
+          teamId, alertLevel: budgetCheck.alertLevel, percentage: budgetCheck.percentage
+        });
       }
     } catch (budgetError) {
-      console.error('Failed to check budget:', budgetError);
+      logger.error('Failed to check budget', { error: budgetError.message, buildId });
     }
 
-    console.log(`✅ Build ${buildId} completed successfully`);
+    logger.info('Build completed successfully', { buildId, duration: completedBuild.build.duration });
 
     return {
       buildId: build.id,
@@ -183,7 +184,7 @@ async function orchestrateBuild(redis, options) {
       errors: result.errors || [],
     };
   } catch (error) {
-    console.error(`❌ Build ${buildId} failed:`, error.message);
+    logger.error('Build failed', { buildId, error: error.message, stack: error.stack });
 
     // Fail build
     await failBuild(redis, buildId, error.message);
@@ -208,7 +209,7 @@ async function orchestrateBuild(redis, options) {
         }, channels);
       }
     } catch (notifError) {
-      console.error('Failed to send build failure notification:', notifError);
+      logger.error('Failed to send build failure notification', { error: notifError.message, buildId });
     }
 
     throw error;
@@ -241,12 +242,12 @@ async function executeAgentSequence(redis, options) {
   let executionPlan = null;
 
   for (const agentName of agentSequence) {
-    console.log(`⚡ Executing agent: ${agentName}`);
+    logger.info('Agent executing', { agent: agentName, buildId });
 
     // Get model for this agent
     const model = presetModels[agentName];
     if (!model) {
-      console.warn(`⚠️ No model configured for agent ${agentName}, skipping`);
+      logger.warn('Agent skipped - no model configured', { agent: agentName });
       continue;
     }
 
@@ -309,9 +310,9 @@ async function executeAgentSequence(redis, options) {
         buildId,
       });
 
-      console.log(`✓ Agent ${agentName} completed`);
+      logger.info('Agent completed', { agent: agentName, duration: agentResult.duration || 0 });
     } catch (error) {
-      console.error(`❌ Agent ${agentName} failed:`, error.message);
+      logger.error('Agent failed', { agent: agentName, error: error.message, stack: error.stack });
 
       // Record error
       result.errors.push(`${agentName}: ${error.message}`);

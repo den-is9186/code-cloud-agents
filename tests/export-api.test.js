@@ -6,15 +6,26 @@
 
 const request = require('supertest');
 const app = require('../src/api-server');
+// Mock export service with explicit mock factory
+const mockExportBuildReport = jest.fn();
+const mockExportCostReport = jest.fn();
+const mockExportAgentPerformanceReport = jest.fn();
+const mockExportBudgetReport = jest.fn();
+
+jest.mock('../dist/services/export-service', () => ({
+  exportBuildReport: mockExportBuildReport,
+  exportCostReport: mockExportCostReport,
+  exportAgentPerformanceReport: mockExportAgentPerformanceReport,
+  exportBudgetReport: mockExportBudgetReport,
+}));
+
 const {
   exportBuildReport,
   exportCostReport,
   exportAgentPerformanceReport,
   exportBudgetReport,
-} = require('../src/services/export-service');
+} = require('../dist/services/export-service');
 const { getTestToken, Roles } = require('./helpers/auth-helper');
-
-jest.mock('../src/services/export-service');
 
 // Helper to create authenticated request (MANAGER role for team ownership endpoints)
 const authGet = (url) =>

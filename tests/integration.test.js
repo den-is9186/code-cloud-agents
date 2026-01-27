@@ -7,7 +7,7 @@ const path = require('path');
 jest.mock('ioredis');
 
 const app = require('../src/api-server');
-const { generateToken, Roles } = require('../src/services/auth-service');
+const { generateToken, Roles } = require('../dist/services/auth-service');
 
 // Helper to generate test auth token
 function getTestToken(role = Roles.DEVELOPER) {
