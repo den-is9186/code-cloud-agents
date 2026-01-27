@@ -395,7 +395,17 @@ async function getBuild(redis, buildId) {
 
   // Parse JSON fields
   if (build.completedAgents) {
-    build.completedAgents = JSON.parse(build.completedAgents);
+    try {
+      build.completedAgents = JSON.parse(build.completedAgents);
+    } catch (error) {
+      // If parsing fails, log warning and use empty array
+      console.warn('Failed to parse completedAgents, using empty array', {
+        buildId,
+        completedAgents: build.completedAgents,
+        error: error.message,
+      });
+      build.completedAgents = [];
+    }
   }
 
   // Convert numeric fields
