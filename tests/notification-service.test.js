@@ -133,7 +133,9 @@ describe('Notification Service', () => {
     });
 
     test('should handle webhook failure', async () => {
-      axios.post.mockRejectedValue(new Error('Network error'));
+      const error = new Error('Network error');
+      axios.isAxiosError.mockReturnValue(true);
+      axios.post.mockRejectedValue(error);
 
       const result = await sendWebhook('https://example.com/webhook', {
         message: 'Test',
@@ -146,6 +148,7 @@ describe('Notification Service', () => {
     test('should include response status on error', async () => {
       const error = new Error('Bad Request');
       error.response = { status: 400 };
+      axios.isAxiosError.mockReturnValue(true);
       axios.post.mockRejectedValue(error);
 
       const result = await sendWebhook('https://example.com/webhook', {
