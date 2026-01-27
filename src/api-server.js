@@ -4,20 +4,21 @@ const fs = require('fs').promises;
 const path = require('path');
 const { z } = require('zod');
 const crypto = require('crypto');
+const { logger } = require('../dist/utils/logger');
 const { WorkflowStateMachine, States, Events } = require('./workflow/state-machine');
 const { streamEmitter, StreamEventType } = require('../dist/utils/events');
 const {
   sendNotification,
   NotificationType,
   getTeamNotificationChannels,
-} = require('./services/notification-service');
+} = require('../dist/services/notification-service.js');
 const {
   ExportFormat,
   exportBuildReport,
   exportCostReport,
   exportAgentPerformanceReport,
   exportBudgetReport,
-} = require('./services/export-service');
+} = require('../dist/services/export-service.js');
 const {
   createUser,
   authenticateUser,
@@ -25,15 +26,20 @@ const {
   revokeRefreshToken,
   createApiKey,
   Roles,
-} = require('./services/auth-service');
+} = require('../dist/services/auth-service.js');
 const {
   authenticate,
   requireRole,
   requireTeamOwnership,
-  rateLimit,
-} = require('./middleware/auth');
-const { cors } = require('./middleware/cors');
-const { csrfProtection, getCsrfTokenEndpoint } = require('./middleware/csrf');
+} = require('../dist/middleware/auth');
+const { cors } = require('../dist/middleware/cors');
+const { csrfProtection, getCsrfTokenEndpoint } = require('../dist/middleware/csrf');
+const {
+  createGlobalRateLimiter,
+  createTeamRateLimiter,
+  createStrictRateLimiter,
+  createBuildRateLimiter,
+} = require('../dist/middleware/rate-limit');
 
 const app = express();
 
@@ -52,11 +58,11 @@ const redis = new Redis(redisConfig);
 
 // Handle Redis connection errors
 redis.on('error', (err) => {
-  console.error('Redis connection error:', err);
+  logger.error('Redis connection error', { error: err.message, stack: err.stack });
 });
 
 redis.on('connect', () => {
-  console.log('Redis connected successfully');
+  logger.info('Redis connected successfully', { host: redisConfig.host, port: redisConfig.port });
 });
 
 // CORS middleware (must be early in the chain)
@@ -66,6 +72,15 @@ app.use(express.json({ limit: '10mb' }));
 
 // Make Redis available to middleware
 app.locals.redis = redis;
+
+// Global rate limiting (tiered: 10/100/1000 req/min based on auth)
+const globalRateLimiter = createGlobalRateLimiter(redis);
+app.use(globalRateLimiter);
+
+// Create other rate limiters (used per-route)
+const strictRateLimiter = createStrictRateLimiter(redis);
+const teamRateLimiter = createTeamRateLimiter(redis);
+const buildRateLimiter = createBuildRateLimiter(redis);
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));
@@ -114,7 +129,7 @@ function validatePath(requestedPath) {
  * Register a new user
  * POST /api/v1/auth/register
  */
-app.post('/api/v1/auth/register', async (req, res) => {
+app.post('/api/v1/auth/register', strictRateLimiter, async (req, res) => {
   try {
     const { userId, email, password, role } = req.body;
 
@@ -174,7 +189,7 @@ app.post('/api/v1/auth/register', async (req, res) => {
  * Login with email and password
  * POST /api/v1/auth/login
  */
-app.post('/api/v1/auth/login', async (req, res) => {
+app.post('/api/v1/auth/login', strictRateLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -207,7 +222,7 @@ app.post('/api/v1/auth/login', async (req, res) => {
  * Refresh access token
  * POST /api/v1/auth/refresh
  */
-app.post('/api/v1/auth/refresh', async (req, res) => {
+app.post('/api/v1/auth/refresh', strictRateLimiter, async (req, res) => {
   try {
     const { refreshToken } = req.body;
 
@@ -1684,7 +1699,7 @@ async function saveTeamWithStateMachine(teamKey, teamData, stateMachine, metadat
 app.post('/api/v1/teams/:id/approve', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, reason } = req.body;
+    const { userId, reason } = req.body || {};
 
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1753,7 +1768,7 @@ app.post('/api/v1/teams/:id/approve', authenticate(), requireRole(Roles.MANAGER)
         );
       }
     } catch (notifError) {
-      console.error('Failed to send approval notification:', notifError);
+      logger.error('Failed to send approval notification', { error: notifError.message, teamId: id });
       // Don't fail the request if notification fails
     }
 
@@ -1776,7 +1791,7 @@ app.post('/api/v1/teams/:id/approve', authenticate(), requireRole(Roles.MANAGER)
 app.post('/api/v1/teams/:id/reject', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, reason } = req.body;
+    const { userId, reason } = req.body || {};
 
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1856,7 +1871,7 @@ app.post('/api/v1/teams/:id/reject', authenticate(), requireRole(Roles.MANAGER),
         );
       }
     } catch (notifError) {
-      console.error('Failed to send rejection notification:', notifError);
+      logger.error('Failed to send rejection notification', { error: notifError.message, teamId: id });
       // Don't fail the request if notification fails
     }
 
@@ -1879,7 +1894,7 @@ app.post('/api/v1/teams/:id/reject', authenticate(), requireRole(Roles.MANAGER),
 app.post('/api/v1/teams/:id/skip-premium', authenticate(), requireRole(Roles.MANAGER), async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, reason } = req.body;
+    const { userId, reason } = req.body || {};
 
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1954,7 +1969,7 @@ const {
   getTeamBudgetLimit,
   getBudgetStatus,
   getBudgetAlertHistory,
-} = require('./services/budget-alert-service');
+} = require('../dist/services/budget-alert-service.js');
 
 /**
  * Set team budget limits
@@ -1983,7 +1998,7 @@ app.put('/api/teams/:id/budget', authenticate(), requireTeamOwnership('id'), asy
       budgetLimits,
     });
   } catch (error) {
-    console.error('Error setting budget limits:', error);
+    logger.error('Error setting budget limits', { error: error.message, teamId: req.params.teamId });
     res.status(500).json({
       error: 'Failed to set budget limits',
       message: error.message,
@@ -2012,7 +2027,7 @@ app.get('/api/teams/:id/budget', authenticate(), requireTeamOwnership('id'), asy
       budgetLimits,
     });
   } catch (error) {
-    console.error('Error getting budget limits:', error);
+    logger.error('Error getting budget limits', { error: error.message, teamId: req.params.teamId });
     res.status(500).json({
       error: 'Failed to get budget limits',
       message: error.message,
@@ -2035,7 +2050,7 @@ app.get('/api/teams/:id/budget/status', authenticate(), requireTeamOwnership('id
       ...status,
     });
   } catch (error) {
-    console.error('Error getting budget status:', error);
+    logger.error('Error getting budget status', { error: error.message, teamId: req.params.teamId });
     res.status(500).json({
       error: 'Failed to get budget status',
       message: error.message,
@@ -2060,7 +2075,7 @@ app.get('/api/teams/:id/budget/alerts', authenticate(), requireTeamOwnership('id
       count: alerts.length,
     });
   } catch (error) {
-    console.error('Error getting budget alerts:', error);
+    logger.error('Error getting budget alerts', { error: error.message, teamId: req.params.teamId });
     res.status(500).json({
       error: 'Failed to get budget alerts',
       message: error.message,
@@ -2263,7 +2278,7 @@ app.get('/api/v1/export/builds', authenticate(), requireRole(Roles.VIEWER), asyn
 
     res.send(result);
   } catch (error) {
-    console.error('Export builds error:', error);
+    logger.error('Export builds error', { error: error.message, query: req.query });
     res.status(500).json({
       success: false,
       error: {
@@ -2342,7 +2357,7 @@ app.get('/api/v1/export/costs', authenticate(), requireRole(Roles.VIEWER), async
 
     res.send(result);
   } catch (error) {
-    console.error('Export costs error:', error);
+    logger.error('Export costs error', { error: error.message, query: req.query });
     res.status(500).json({
       success: false,
       error: {
@@ -2399,7 +2414,7 @@ app.get('/api/v1/export/agents', authenticate(), requireRole(Roles.VIEWER), asyn
 
     res.send(result);
   } catch (error) {
-    console.error('Export agents error:', error);
+    logger.error('Export agents error', { error: error.message, query: req.query });
     res.status(500).json({
       success: false,
       error: {
@@ -2445,7 +2460,7 @@ app.get('/api/v1/export/budget/:teamId', authenticate(), requireTeamOwnership('t
 
     res.send(result);
   } catch (error) {
-    console.error('Export budget error:', error);
+    logger.error('Export budget error', { error: error.message, teamId: req.params.teamId });
     res.status(500).json({
       success: false,
       error: {
@@ -2461,21 +2476,21 @@ let server = null;
 
 // Graceful shutdown handler
 const gracefulShutdown = async (signal) => {
-  console.log(`${signal} received, starting graceful shutdown`);
-  
+  logger.info('Graceful shutdown initiated', { signal });
+
   if (server) {
     server.close(() => {
-      console.log('HTTP server closed');
+      logger.info('HTTP server closed');
     });
   }
-  
+
   try {
     await redis.quit();
-    console.log('Redis connection closed');
+    logger.info('Redis connection closed');
   } catch (error) {
-    console.error('Error closing Redis connection:', error);
+    logger.error('Error closing Redis connection', { error: error.message });
   }
-  
+
   process.exit(0);
 };
 
@@ -2494,14 +2509,11 @@ let isShuttingDown = false;
  * These occur when a Promise is rejected and no .catch() handler is attached
  */
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('🚨 Unhandled Rejection detected:');
-  console.error('   Reason:', reason);
-  console.error('   Promise:', promise);
-
-  // Log stack trace if available
-  if (reason instanceof Error) {
-    console.error('   Stack:', reason.stack);
-  }
+  logger.error('Unhandled rejection detected', {
+    reason: reason instanceof Error ? reason.message : reason,
+    stack: reason instanceof Error ? reason.stack : undefined,
+    promise: promise.toString(),
+  });
 
   // In production, we might want to gracefully shutdown
   // For now, we log and continue, but track the error
@@ -2517,15 +2529,16 @@ process.on('unhandledRejection', (reason, promise) => {
  * CRITICAL: These can leave the application in an undefined state
  */
 process.on('uncaughtException', async (error) => {
-  console.error('💀 Uncaught Exception detected:');
-  console.error('   Error:', error.message);
-  console.error('   Stack:', error.stack);
+  logger.error('Uncaught exception detected', {
+    error: error.message,
+    stack: error.stack,
+  });
 
   // Uncaught exceptions are critical - the application state may be corrupted
   // We must shutdown gracefully to prevent data corruption
   if (!isShuttingDown) {
     isShuttingDown = true;
-    console.error('⚠️  Application state may be corrupted. Initiating graceful shutdown...');
+    logger.warn('Application state may be corrupted. Initiating graceful shutdown');
 
     try {
       // Give ongoing requests a chance to complete (max 10 seconds)
@@ -2546,9 +2559,9 @@ process.on('uncaughtException', async (error) => {
       // Close Redis connection
       await redis.quit().catch(() => {});
 
-      console.error('✓ Graceful shutdown completed after uncaught exception');
+      logger.info('Graceful shutdown completed after uncaught exception');
     } catch (shutdownError) {
-      console.error('Error during graceful shutdown:', shutdownError);
+      logger.error('Error during graceful shutdown', { error: shutdownError.message });
     }
 
     // Exit with error code
@@ -2562,8 +2575,11 @@ process.on('uncaughtException', async (error) => {
  * Useful for logging/metrics while still allowing the process to crash
  */
 process.on('uncaughtExceptionMonitor', (error, origin) => {
-  console.error(`📊 Exception Monitor: ${origin}`);
-  console.error('   This is logged before the uncaughtException handler runs');
+  logger.warn('Exception monitor triggered', {
+    origin,
+    error: error.message,
+    note: 'Logged before uncaughtException handler runs',
+  });
 
   // Track metrics here
   // metrics.increment('uncaught_exceptions', { origin });
@@ -2574,13 +2590,11 @@ process.on('uncaughtExceptionMonitor', (error, origin) => {
  * Node.js emits warnings for various conditions (memory, deprecated APIs, etc.)
  */
 process.on('warning', (warning) => {
-  console.warn('⚠️  Process Warning:');
-  console.warn('   Name:', warning.name);
-  console.warn('   Message:', warning.message);
-
-  if (warning.stack) {
-    console.warn('   Stack:', warning.stack);
-  }
+  logger.warn('Process warning', {
+    name: warning.name,
+    message: warning.message,
+    stack: warning.stack,
+  });
 });
 
 // Export app for testing
@@ -2590,11 +2604,11 @@ module.exports = app;
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   server = app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    logger.info('Server started', { port: PORT, environment: process.env.NODE_ENV || 'development' });
   });
-  
+
   server.on('error', (error) => {
-    console.error('Server error:', error);
+    logger.error('Server error', { error: error.message, stack: error.stack });
     process.exit(1);
   });
 }

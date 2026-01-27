@@ -4,6 +4,7 @@ import { executeTool, validatePath } from '../tools';
 import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
 import { sanitizeLogMessage } from '../utils/security';
+import { logger } from '../utils/logger';
 
 export interface MergeConflict {
   file: string;
@@ -66,13 +67,11 @@ export class MergeAgent implements Agent {
           }
         }
       } catch (error) {
-        console.warn(
-          sanitizeLogMessage(
-            `[Merge] Failed to read ${file}: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          )
-        );
+        logger.warn('Failed to read file', {
+          agent: 'merge',
+          file,
+          error: sanitizeLogMessage(error instanceof Error ? error.message : String(error)),
+        });
       }
     }
 
@@ -174,7 +173,10 @@ ${input.baseBranch ? `Base Content:${baseContent}\n` : ''}Source Content:${sourc
           }
         } else if (file.action === 'delete') {
           // Note: We don't actually delete files, just mark them for deletion
-          console.log(sanitizeLogMessage(`[Merge] File marked for deletion: ${file.path}`));
+          logger.info('File marked for deletion', {
+            agent: 'merge',
+            path: sanitizeLogMessage(file.path),
+          });
         }
       }
 
@@ -186,7 +188,12 @@ ${input.baseBranch ? `Base Content:${baseContent}\n` : ''}Source Content:${sourc
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(sanitizeLogMessage(`[${this.role}] Error: ${errorMessage}`));
+      const stack = error instanceof Error ? error.stack : undefined;
+      logger.error('Merge operation failed', {
+        agent: this.role,
+        error: sanitizeLogMessage(errorMessage),
+        stack: stack ? sanitizeLogMessage(stack) : undefined,
+      });
       return {
         filesChanged: [],
         conflicts: [],

@@ -8,6 +8,7 @@
  * - Integration with notification service
  */
 
+const { logger } = require('../../dist/utils/logger');
 const {
   sendNotification,
   NotificationType,
@@ -102,7 +103,11 @@ async function sendBudgetAlert(redis, teamId, alertInfo) {
   const teamData = await redis.get(teamKey);
 
   if (!teamData) {
-    console.error(`Team ${teamId} not found for budget alert`);
+    logger.error('Team not found for budget alert', {
+      teamId,
+      level: alertInfo.level,
+      percentage: alertInfo.percentage,
+    });
     return [];
   }
 
@@ -112,7 +117,11 @@ async function sendBudgetAlert(redis, teamId, alertInfo) {
   const channels = await getTeamNotificationChannels(redis, teamId);
 
   if (channels.length === 0) {
-    console.warn(`No notification channels configured for team ${teamId}`);
+    logger.warn('No notification channels configured for team', {
+      teamId,
+      teamName: team.name,
+      level: alertInfo.level,
+    });
     return [];
   }
 
@@ -317,9 +326,12 @@ async function checkBudgetAfterBuild(redis, teamId, buildCost) {
 
   // Check per-build limit
   if (budgetLimits.perBuild && buildCost > budgetLimits.perBuild) {
-    console.warn(
-      `Build exceeded per-build limit: $${buildCost} > $${budgetLimits.perBuild}`
-    );
+    logger.warn('Build exceeded per-build limit', {
+      teamId,
+      buildCost,
+      perBuildLimit: budgetLimits.perBuild,
+      overage: buildCost - budgetLimits.perBuild,
+    });
   }
 
   // Get current month spending

@@ -4,7 +4,7 @@
 
 const request = require('supertest');
 const app = require('../src/api-server');
-const { generateToken, Roles } = require('../src/services/auth-service');
+const { generateToken, Roles } = require('../dist/services/auth-service');
 
 // Helper to generate test auth token
 function getTestToken(role = Roles.VIEWER) {
@@ -173,7 +173,7 @@ describe('CSRF Protection', () => {
 
 describe('Secure Cookie Configuration', () => {
   test('should set httpOnly flag for session cookies', () => {
-    const { getSecureCookieOptions } = require('../src/middleware/csrf');
+    const { getSecureCookieOptions } = require('../dist/middleware/csrf');
 
     const options = getSecureCookieOptions({ httpOnly: true });
 
@@ -182,7 +182,7 @@ describe('Secure Cookie Configuration', () => {
   });
 
   test('should set SameSite=Strict for CSRF protection', () => {
-    const { getSecureCookieOptions } = require('../src/middleware/csrf');
+    const { getSecureCookieOptions } = require('../dist/middleware/csrf');
 
     const options = getSecureCookieOptions();
 
@@ -190,7 +190,7 @@ describe('Secure Cookie Configuration', () => {
   });
 
   test('should set secure flag in production', () => {
-    const { getSecureCookieOptions } = require('../src/middleware/csrf');
+    const { getSecureCookieOptions } = require('../dist/middleware/csrf');
     const originalEnv = process.env.NODE_ENV;
 
     process.env.NODE_ENV = 'production';
@@ -202,7 +202,7 @@ describe('Secure Cookie Configuration', () => {
   });
 
   test('should not set secure flag in development', () => {
-    const { getSecureCookieOptions } = require('../src/middleware/csrf');
+    const { getSecureCookieOptions } = require('../dist/middleware/csrf');
     const originalEnv = process.env.NODE_ENV;
 
     process.env.NODE_ENV = 'development';
@@ -214,7 +214,7 @@ describe('Secure Cookie Configuration', () => {
   });
 
   test('should set appropriate maxAge', () => {
-    const { getSecureCookieOptions } = require('../src/middleware/csrf');
+    const { getSecureCookieOptions } = require('../dist/middleware/csrf');
 
     const options = getSecureCookieOptions({ maxAge: 3600000 }); // 1 hour
 

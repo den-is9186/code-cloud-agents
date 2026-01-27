@@ -19,7 +19,7 @@ const {
   generateToken,
   verifyToken,
   Roles,
-} = require('../src/services/auth-service');
+} = require('../dist/services/auth-service');
 
 describe('Authentication System', () => {
   let redis;

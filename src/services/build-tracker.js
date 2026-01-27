@@ -6,6 +6,7 @@
  */
 
 const crypto = require('crypto');
+const { logger } = require('../../dist/utils/logger');
 const {
   createBuild,
   getBuild,
@@ -21,6 +22,35 @@ const { calculateBuildCost, generateBuildCostReport } = require('../utils/cost-t
 // ===================================================================
 // BUILD LIFECYCLE
 // ===================================================================
+
+/**
+ * Safely normalize completedAgents to array
+ * Handles string (JSON), array, null, or undefined
+ */
+function normalizeCompletedAgents(completedAgents) {
+  if (!completedAgents) {
+    return [];
+  }
+  
+  if (Array.isArray(completedAgents)) {
+    return completedAgents.filter(agent => typeof agent === 'string');
+  }
+  
+  if (typeof completedAgents === 'string') {
+    try {
+      const parsed = JSON.parse(completedAgents);
+      return Array.isArray(parsed) ? parsed.filter(agent => typeof agent === 'string') : [];
+    } catch (error) {
+      logger.warn('Failed to parse completedAgents, returning empty array', {
+        completedAgents,
+        error: error.message,
+      });
+      return [];
+    }
+  }
+  
+  return [];
+}
 
 /**
  * Start a new build for a team
@@ -84,8 +114,35 @@ async function completeBuild(redis, buildId, { success = true, errorMessage = nu
   }
 
   const completedAt = new Date().toISOString();
-  const startedAt = new Date(build.startedAt);
-  const duration = Date.now() - startedAt.getTime();
+  
+  // Guard against missing startedAt
+  let duration = 0;
+  if (build.startedAt) {
+    try {
+      const startedAt = new Date(build.startedAt);
+      duration = Date.now() - startedAt.getTime();
+    } catch (error) {
+      logger.warn('Invalid startedAt date, using 0 duration', {
+        buildId,
+        startedAt: build.startedAt,
+        error: error.message,
+      });
+    }
+  } else {
+    // If startedAt is missing, calculate from createdAt if available
+    if (build.createdAt) {
+      try {
+        const createdAt = new Date(build.createdAt);
+        duration = Date.now() - createdAt.getTime();
+      } catch (error) {
+        logger.warn('Invalid createdAt date, using 0 duration', {
+          buildId,
+          createdAt: build.createdAt,
+          error: error.message,
+        });
+      }
+    }
+  }
 
   // Calculate final cost
   const buildCost = await calculateBuildCost(redis, buildId);
@@ -206,7 +263,13 @@ async function completeAgentRun(
       });
       cost = costCalc.totalCost;
     } catch (error) {
-      console.error(`Failed to calculate cost for agent run ${runId}:`, error.message);
+      logger.error('Failed to calculate cost for agent run', {
+        runId,
+        error: error.message,
+        model: agentRun.model,
+        inputTokens,
+        outputTokens,
+      });
     }
   }
 
@@ -225,12 +288,14 @@ async function completeAgentRun(
 
   // Update build's completed agents list
   const build = await getBuild(redis, agentRun.buildId);
-  const completedAgents = build.completedAgents || [];
-  if (!completedAgents.includes(agentRun.agentName)) {
-    completedAgents.push(agentRun.agentName);
-    await updateBuild(redis, agentRun.buildId, {
-      completedAgents,
-    });
+  if (build) {
+    const completedAgents = normalizeCompletedAgents(build.completedAgents);
+    if (!completedAgents.includes(agentRun.agentName)) {
+      completedAgents.push(agentRun.agentName);
+      await updateBuild(redis, agentRun.buildId, {
+        completedAgents,
+      });
+    }
   }
 
   return await require('../database/redis-schema').getAgentRun(redis, runId);
@@ -292,14 +357,18 @@ async function getBuildStatus(redis, buildId) {
     try {
       cost = await calculateBuildCost(redis, buildId);
     } catch (error) {
-      console.error(`Failed to calculate build cost: ${error.message}`);
+      logger.error('Failed to calculate build cost', {
+        buildId,
+        error: error.message,
+        buildStatus: build.status,
+      });
     }
   }
 
   return {
     build: {
       ...build,
-      completedAgents: build.completedAgents || [],
+      completedAgents: normalizeCompletedAgents(build.completedAgents),
     },
     agentRuns,
     progress: {
@@ -328,7 +397,7 @@ async function getTeamBuildHistory(redis, teamId, limit = 10) {
     if (build) {
       builds.push({
         ...build,
-        completedAgents: build.completedAgents || [],
+        completedAgents: normalizeCompletedAgents(build.completedAgents),
       });
     }
   }

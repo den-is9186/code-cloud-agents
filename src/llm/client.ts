@@ -1,6 +1,6 @@
 import { Message, LLMResponse, TokenUsage } from '../agents/types';
 import { RATE_LIMIT_CONFIG } from '../config/constants';
-import { sanitizeLogMessage } from '../utils/security';
+import { logger } from '../utils/logger';
 
 interface ModelConfig {
   provider: 'novita' | 'anthropic' | 'local';
@@ -91,9 +91,12 @@ async function withRetry<T>(
 
       if (attempt < config.maxRetries) {
         const delay = Math.min(config.baseDelay * Math.pow(2, attempt), config.maxDelay);
-        console.log(
-          sanitizeLogMessage(`Retry ${attempt + 1}/${config.maxRetries} after ${delay}ms...`)
-        );
+        logger.info('Retrying LLM request', {
+          agent: 'llm-client',
+          attempt: attempt + 1,
+          maxRetries: config.maxRetries,
+          delay,
+        });
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
