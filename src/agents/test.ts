@@ -1,14 +1,26 @@
-import { Agent, AgentRole, SubTask, FileChange, TestFile, TestResult, TestFailure } from './types';
+import {
+  Agent,
+  AgentRole,
+  AgentStatus,
+  SubTask,
+  FileChange,
+  TestFile,
+  TestResult,
+  TestFailure,
+} from './types';
 import { llmClient } from '../llm/client';
 import { executeTool } from '../tools';
 import { safeJsonParse } from '../utils/schemas';
 import { z } from 'zod';
 import { validatePath } from '../tools/index';
 
-export class TestAgent implements Agent {
+export class TestAgent implements Agent<
+  { filesChanged: FileChange[]; task: SubTask },
+  { testsWritten: TestFile[]; testResults: TestResult; failures?: TestFailure[] }
+> {
   role: AgentRole = 'test';
   model: string;
-  status = 'idle' as const;
+  status: AgentStatus = 'idle';
 
   constructor(model: string) {
     this.model = model;

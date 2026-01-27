@@ -41,7 +41,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
     const createResponse = await authRequest.post('/api/v1/teams').send({
       name: 'Test Team',
       repo: 'github.com/test/repo',
-      preset: 'IQ',
+      preset: 'A',
       task: 'Test task description',
     });
 
@@ -53,7 +53,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
       id: teamId,
       name: 'Test Team',
       repo: 'github.com/test/repo',
-      preset: 'IQ',
+      preset: 'A',
       task: 'Test task description',
       status: 'awaiting_approval',
       workflowState: States.AWAITING_APPROVAL,
