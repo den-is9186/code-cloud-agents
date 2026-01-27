@@ -4,12 +4,23 @@
  * Tests for the Refactor Agent that improves code quality without changing functionality
  */
 
+jest.mock('../dist/llm/client', () => ({
+  llmClient: {
+    chat: jest.fn(),
+    streamChat: jest.fn(),
+  },
+}));
+
+jest.mock('../dist/tools', () => ({
+  executeTool: jest.fn(),
+  registerTool: jest.fn(),
+  getTool: jest.fn(),
+  listTools: jest.fn(),
+}));
+
 const { RefactorAgent } = require('../dist/agents/refactor');
 const { llmClient } = require('../dist/llm/client');
 const { executeTool } = require('../dist/tools');
-
-jest.mock('../dist/llm/client');
-jest.mock('../dist/tools');
 
 describe('RefactorAgent', () => {
   let agent;

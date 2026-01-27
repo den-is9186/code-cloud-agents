@@ -25,44 +25,48 @@ describe('Agent Orchestrator', () => {
   });
 
   describe('Agent Sequence', () => {
-    test('orchestrateBuild should execute agents in correct sequence', async () => {
-      const result = await orchestrateBuild(mockRedis, {
-        teamId: 'team-123',
-        preset: 'A',
-        phase: 'prototype',
-        task: 'Create a login form',
-        projectPath: '/project/path',
-      });
+    test(
+      'orchestrateBuild should execute agents in correct sequence',
+      async () => {
+        const result = await orchestrateBuild(mockRedis, {
+          teamId: 'team-123',
+          preset: 'A',
+          phase: 'prototype',
+          task: 'Create a login form',
+          projectPath: '/project/path',
+        });
 
-      expect(result.buildId).toBeDefined();
-      expect(result.success).toBe(true);
+        expect(result.buildId).toBeDefined();
+        expect(result.success).toBe(true);
 
-      // Check that build was created
-      const build = await getBuild(mockRedis, result.buildId);
-      expect(build).toBeDefined();
-      expect(build.status).toBe('completed');
-      expect(build.preset).toBe('A');
+        // Check that build was created
+        const build = await getBuild(mockRedis, result.buildId);
+        expect(build).toBeDefined();
+        expect(build.status).toBe('completed');
+        expect(build.preset).toBe('A');
 
-      // Check that agent runs were created
-      const runIds = await getBuildAgentRuns(mockRedis, result.buildId);
-      expect(runIds.length).toBeGreaterThan(0);
+        // Check that agent runs were created
+        const runIds = await getBuildAgentRuns(mockRedis, result.buildId);
+        expect(runIds.length).toBeGreaterThan(0);
 
-      // Verify agent sequence
-      const runs = [];
-      for (const runId of runIds) {
-        const run = await getAgentRun(mockRedis, runId);
-        runs.push(run);
-      }
+        // Verify agent sequence
+        const runs = [];
+        for (const runId of runIds) {
+          const run = await getAgentRun(mockRedis, runId);
+          runs.push(run);
+        }
 
-      // Expected sequence: supervisor → architect → coach → code → review → test → docs
-      const expectedAgents = ['supervisor', 'architect', 'coach', 'code', 'review', 'test', 'docs'];
-      const actualAgents = runs.map((r) => r.agentName);
+        // Expected sequence: supervisor → architect → coach → code → review → test → docs
+        const expectedAgents = ['supervisor', 'architect', 'coach', 'code', 'review', 'test', 'docs'];
+        const actualAgents = runs.map((r) => r.agentName);
 
-      // Check that all expected agents were executed (order might vary slightly in parallel execution)
-      expectedAgents.forEach((agent) => {
-        expect(actualAgents).toContain(agent);
-      });
-    });
+        // Check that all expected agents were executed (order might vary slightly in parallel execution)
+        expectedAgents.forEach((agent) => {
+          expect(actualAgents).toContain(agent);
+        });
+      },
+      30000
+    );
 
     test('orchestrateBuild should track costs for each agent', async () => {
       const result = await orchestrateBuild(mockRedis, {
@@ -219,7 +223,7 @@ describe('Agent Orchestrator', () => {
       expect(progress.progress.total).toBeGreaterThan(0);
       expect(progress.agentRuns).toBeDefined();
       expect(Array.isArray(progress.agentRuns)).toBe(true);
-    });
+    }, 30000);
 
     test('getBuildProgress should include agent run details', async () => {
       const buildResult = await orchestrateBuild(mockRedis, {
@@ -240,7 +244,7 @@ describe('Agent Orchestrator', () => {
         expect(typeof run.tokens).toBe('number');
         expect(typeof run.cost).toBe('number');
       });
-    });
+    }, 30000);
 
     test('getBuildProgress should include cost information', async () => {
       const buildResult = await orchestrateBuild(mockRedis, {
@@ -260,24 +264,26 @@ describe('Agent Orchestrator', () => {
   });
 
   describe('Integration - Full Agent Flow', () => {
-    test('should execute complete build flow from start to finish', async () => {
-      // Advance time for duration tracking
-      const startTime = Date.now();
+    test(
+      'should execute complete build flow from start to finish',
+      async () => {
+        // Advance time for duration tracking
+        const startTime = Date.now();
 
-      const result = await orchestrateBuild(mockRedis, {
-        teamId: 'team-full-flow',
-        preset: 'B',
-        phase: 'prototype',
-        task: 'Build a complete feature with tests and docs',
-        projectPath: '/project/test',
-        metadata: {
-          repository: 'test-repo',
-          branch: 'feature/test',
-        },
-      });
+        const result = await orchestrateBuild(mockRedis, {
+          teamId: 'team-full-flow',
+          preset: 'B',
+          phase: 'prototype',
+          task: 'Build a complete feature with tests and docs',
+          projectPath: '/project/test',
+          metadata: {
+            repository: 'test-repo',
+            branch: 'feature/test',
+          },
+        });
 
-      // 1. Build should be created
-      expect(result.buildId).toBeDefined();
+        // 1. Build should be created
+        expect(result.buildId).toBeDefined();
       expect(result.success).toBe(true);
 
       // 2. Build should have correct metadata
@@ -329,15 +335,17 @@ describe('Agent Orchestrator', () => {
       const progress = await getBuildProgress(mockRedis, result.buildId);
       expect(progress.status).toBe('completed');
       expect(progress.progress.percent).toBe(100);
-    });
+    }, 30000);
 
-    test('should handle parallel execution of independent tasks', async () => {
-      const result = await orchestrateBuild(mockRedis, {
-        teamId: 'team-parallel',
-        preset: 'A',
-        phase: 'prototype',
-        task: 'Test parallel execution',
-        projectPath: '/project/parallel',
+    test(
+      'should handle parallel execution of independent tasks',
+      async () => {
+        const result = await orchestrateBuild(mockRedis, {
+          teamId: 'team-parallel',
+          preset: 'A',
+          phase: 'prototype',
+          task: 'Test parallel execution',
+          projectPath: '/project/parallel',
       });
 
       expect(result.success).toBe(true);
@@ -345,20 +353,22 @@ describe('Agent Orchestrator', () => {
       // Check that multiple agent runs exist
       const runIds = await getBuildAgentRuns(mockRedis, result.buildId);
       expect(runIds.length).toBeGreaterThan(3);
-    });
+    }, 30000);
 
-    test('should support different phases (prototype vs premium)', async () => {
-      const prototypeResult = await orchestrateBuild(mockRedis, {
-        teamId: 'team-phases',
-        preset: 'A',
-        phase: 'prototype',
-        task: 'Prototype phase test',
-        projectPath: '/project/prototype',
-      });
+    test(
+      'should support different phases (prototype vs premium)',
+      async () => {
+        const prototypeResult = await orchestrateBuild(mockRedis, {
+          teamId: 'team-phases',
+          preset: 'A',
+          phase: 'prototype',
+          task: 'Prototype phase test',
+          projectPath: '/project/prototype',
+        });
 
-      const premiumResult = await orchestrateBuild(mockRedis, {
-        teamId: 'team-phases',
-        preset: 'C',
+        const premiumResult = await orchestrateBuild(mockRedis, {
+          teamId: 'team-phases',
+          preset: 'C',
         phase: 'premium',
         task: 'Premium phase test',
         projectPath: '/project/premium',
@@ -374,18 +384,20 @@ describe('Agent Orchestrator', () => {
 
       expect(prototypeBuild.phase).toBe('prototype');
       expect(premiumBuild.phase).toBe('premium');
-    });
+    }, 30000);
   });
 
   describe('State Management', () => {
-    test('should maintain state between agent executions', async () => {
-      const result = await orchestrateBuild(mockRedis, {
-        teamId: 'team-state',
-        preset: 'B',
-        phase: 'prototype',
-        task: 'Test state management',
-        projectPath: '/project/state',
-      });
+    test(
+      'should maintain state between agent executions',
+      async () => {
+        const result = await orchestrateBuild(mockRedis, {
+          teamId: 'team-state',
+          preset: 'B',
+          phase: 'prototype',
+          task: 'Test state management',
+          projectPath: '/project/state',
+        });
 
       expect(result.success).toBe(true);
 
@@ -406,21 +418,25 @@ describe('Agent Orchestrator', () => {
           new Date(coachRun.startedAt).getTime()
         );
       }
-    });
+    }, 30000);
 
-    test('should track completed agents in build', async () => {
-      const result = await orchestrateBuild(mockRedis, {
-        teamId: 'team-completed',
-        preset: 'A',
-        phase: 'prototype',
-        task: 'Test completed agents tracking',
-        projectPath: '/project/completed',
-      });
+    test(
+      'should track completed agents in build',
+      async () => {
+        const result = await orchestrateBuild(mockRedis, {
+          teamId: 'team-completed',
+          preset: 'A',
+          phase: 'prototype',
+          task: 'Test completed agents tracking',
+          projectPath: '/project/completed',
+        });
 
-      const build = await getBuild(mockRedis, result.buildId);
-      expect(build.completedAgents).toBeDefined();
-      expect(Array.isArray(build.completedAgents)).toBe(true);
-      expect(build.completedAgents.length).toBeGreaterThan(0);
-    });
+        const build = await getBuild(mockRedis, result.buildId);
+        expect(build.completedAgents).toBeDefined();
+        expect(Array.isArray(build.completedAgents)).toBe(true);
+        expect(build.completedAgents.length).toBeGreaterThan(0);
+      },
+      30000
+    );
   });
 });

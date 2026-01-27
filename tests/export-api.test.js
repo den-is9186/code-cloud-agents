@@ -6,15 +6,26 @@
 
 const request = require('supertest');
 const app = require('../src/api-server');
+const { getTestToken, Roles } = require('./helpers/auth-helper');
+
+jest.mock('../dist/services/export-service', () => ({
+  ExportFormat: {
+    JSON: 'json',
+    CSV: 'csv',
+    YAML: 'yaml',
+  },
+  exportBuildReport: jest.fn(),
+  exportCostReport: jest.fn(),
+  exportAgentPerformanceReport: jest.fn(),
+  exportBudgetReport: jest.fn(),
+}));
+
 const {
   exportBuildReport,
   exportCostReport,
   exportAgentPerformanceReport,
   exportBudgetReport,
 } = require('../dist/services/export-service');
-const { getTestToken, Roles } = require('./helpers/auth-helper');
-
-jest.mock('../dist/services/export-service');
 
 // Helper to create authenticated request (MANAGER role for team ownership endpoints)
 const authGet = (url) =>

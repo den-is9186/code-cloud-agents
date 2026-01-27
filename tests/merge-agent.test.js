@@ -4,12 +4,23 @@
  * Tests for the Merge Agent that intelligently merges code from different branches
  */
 
+jest.mock('../dist/llm/client', () => ({
+  llmClient: {
+    chat: jest.fn(),
+    streamChat: jest.fn(),
+  },
+}));
+
+jest.mock('../dist/tools', () => ({
+  executeTool: jest.fn(),
+  registerTool: jest.fn(),
+  getTool: jest.fn(),
+  listTools: jest.fn(),
+}));
+
 const { MergeAgent } = require('../dist/agents/merge');
 const { llmClient } = require('../dist/llm/client');
 const { executeTool } = require('../dist/tools');
-
-jest.mock('../dist/llm/client');
-jest.mock('../dist/tools');
 
 describe('MergeAgent', () => {
   let agent;

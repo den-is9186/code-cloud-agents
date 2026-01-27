@@ -5,11 +5,21 @@
  */
 
 const path = require('path');
-const { execFile } = require('child_process');
 const { promisify } = require('util');
 
-jest.mock('../dist/llm/client');
-jest.mock('child_process');
+jest.mock('../dist/llm/client', () => ({
+  llmClient: {
+    chat: jest.fn(),
+    streamChat: jest.fn(),
+  },
+}));
+
+jest.mock('child_process', () => ({
+  execFile: jest.fn(),
+  exec: jest.fn(),
+  spawn: jest.fn(),
+  fork: jest.fn(),
+}));
 
 // Mock fs/promises module
 const mockAccess = jest.fn();
@@ -32,6 +42,7 @@ jest.mock('fs/promises', () => ({
 
 const { MultiRepoAgent } = require('../dist/agents/multi-repo');
 const { llmClient } = require('../dist/llm/client');
+const { execFile } = require('child_process');
 
 const execFileAsync = promisify(execFile);
 

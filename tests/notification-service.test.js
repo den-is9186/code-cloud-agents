@@ -5,6 +5,24 @@
  */
 
 const Redis = require('ioredis');
+
+// Mock axios and Redis
+jest.mock('axios', () => ({
+  post: jest.fn(),
+  get: jest.fn(),
+  put: jest.fn(),
+  delete: jest.fn(),
+  patch: jest.fn(),
+  create: jest.fn(),
+  defaults: {
+    headers: {
+      common: {},
+    },
+  },
+}));
+
+jest.mock('ioredis');
+
 const axios = require('axios');
 const {
   NotificationType,
@@ -18,10 +36,6 @@ const {
   updateTeamNotificationChannels,
   storeNotification,
 } = require('../dist/services/notification-service');
-
-// Mock axios and Redis
-jest.mock('axios');
-jest.mock('ioredis');
 
 describe('Notification Service', () => {
   let redis;
