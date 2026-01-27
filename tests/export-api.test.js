@@ -4,10 +4,7 @@
  * Tests for export/reports API endpoints
  */
 
-const request = require('supertest');
-const app = require('../src/api-server');
-const { getTestToken, Roles } = require('./helpers/auth-helper');
-
+// Mock export service BEFORE loading api-server
 jest.mock('../dist/services/export-service', () => ({
   ExportFormat: {
     JSON: 'json',
@@ -19,6 +16,10 @@ jest.mock('../dist/services/export-service', () => ({
   exportAgentPerformanceReport: jest.fn(),
   exportBudgetReport: jest.fn(),
 }));
+
+const request = require('supertest');
+const app = require('../src/api-server');
+const { getTestToken, Roles } = require('./helpers/auth-helper');
 
 const {
   exportBuildReport,
