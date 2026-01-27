@@ -28,6 +28,16 @@ import {
   getTeamNotificationChannels,
 } from './notification-service.js';
 
+// Import all agent classes
+import { SupervisorAgent } from '../agents/supervisor.js';
+import { ArchitectAgent } from '../agents/architect.js';
+import { CoachAgent } from '../agents/coach.js';
+import { CodeAgent } from '../agents/code.js';
+import { ReviewAgent } from '../agents/review.js';
+import { TestAgent } from '../agents/test.js';
+import { DocsAgent } from '../agents/docs.js';
+import type { Agent } from '../agents/types.js';
+
 import { checkBudgetAfterBuild } from './budget-alert-service.js';
 import { logger } from '../utils/logger';
 
@@ -507,6 +517,42 @@ async function executeAgentSequence(
   }
 
   return result;
+}
+
+/**
+ * Create agent instance by name
+ *
+ * @param agentName - Agent name
+ * @param model - LLM model to use
+ * @param preset - Preset configuration (required for supervisor agent)
+ * @returns Agent instance
+ * @throws Error if agent name is unknown
+ */
+// @ts-expect-error - Will be used in Step 2 (executeAgent refactor)
+function createAgentInstance(agentName: string, model: string, preset?: string): Agent {
+  switch (agentName) {
+    case 'supervisor':
+      // SupervisorAgent needs a config object with model and preset
+      if (!preset) {
+        throw new Error('Preset is required for SupervisorAgent');
+      }
+      return new SupervisorAgent({ model, preset });
+    case 'architect':
+      return new ArchitectAgent(model);
+    case 'coach':
+      return new CoachAgent(model);
+    case 'code':
+      return new CodeAgent(model);
+    case 'review':
+      return new ReviewAgent(model);
+    case 'test':
+      return new TestAgent(model);
+    case 'docs':
+      // DocsAgent doesn't take constructor parameters - uses hardcoded model
+      return new DocsAgent();
+    default:
+      throw new Error(`Unknown agent: ${agentName}`);
+  }
 }
 
 /**

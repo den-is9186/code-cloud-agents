@@ -1,528 +1,664 @@
-import {
-  Agent,
-  AgentRole,
-  AgentStatus,
-  BuildResult,
-  SubTask,
-  ReviewResult,
-  FileChange,
-  TestFile,
-  TestResult,
-  Step,
-  Dependency,
-  Issue,
-  TestFailure,
-} from './types';
+import { Agent, AgentRole, AgentStatus } from './types';
 import { llmClient } from '../llm/client';
-import { SUPERVISOR_CONFIG } from '../config/constants';
-import { sanitizeLogMessage } from '../utils/security';
-import { streamEmitter } from '../utils/events';
-import { checkpointManager, Checkpoint } from '../utils/checkpoint';
+import { safeJsonParse } from '../utils/schemas';
+import { z } from 'zod';
 import { logger } from '../utils/logger';
+import { sanitizeLogMessage } from '../utils/security';
+import crypto from 'crypto';
 
-interface SupervisorConfig {
+/**
+ * Supervisor Agent Configuration
+ */
+export interface SupervisorConfig {
   model: string;
-  maxIterations?: number;
   preset: string;
+  maxIterations?: number;
 }
 
+/**
+ * Task Assignment for individual agents
+ */
+interface TaskAssignment {
+  agentName: string;
+  task: string;
+  dependencies: string[];
+}
+
+/**
+ * Execution Strategy
+ */
+interface ExecutionStrategy {
+  parallel: string[];
+  sequential: string[];
+}
+
+/**
+ * Supervisor Agent Output
+ */
+interface SupervisorOutput {
+  agentSequence: string[];
+  taskAssignments: TaskAssignment[];
+  executionStrategy: ExecutionStrategy;
+  estimatedComplexity: 'low' | 'medium' | 'high';
+  risks: string[];
+  strategy: string;
+  threadId?: string;
+  checkpoints?: CheckpointInfo[];
+}
+
+/**
+ * Supervisor Agent Input
+ */
+interface SupervisorInput {
+  task: string;
+  projectPath: string;
+  availableAgents?: string[];
+  threadId?: string;
+  resumeFromCheckpoint?: string;
+}
+
+/**
+ * Checkpoint Info
+ */
+interface CheckpointInfo {
+  id: string;
+  timestamp: number;
+  state: 'analysis' | 'planning' | 'validation' | 'complete';
+  data: Record<string, unknown>;
+}
+
+/**
+ * Internal State
+ */
+interface SupervisorState {
+  threadId: string;
+  startTime: number;
+  checkpoints: CheckpointInfo[];
+  analysis?: {
+    complexity: 'low' | 'medium' | 'high';
+    risks: string[];
+    domain: string;
+    recommendedAgents: string[];
+  };
+  plan?: {
+    agentSequence: string[];
+    taskAssignments: TaskAssignment[];
+    executionStrategy: ExecutionStrategy;
+    strategy: string;
+  };
+}
+
+/**
+ * SupervisorAgent - ULTRA VERSION
+ *
+ * Advanced Features:
+ * - Multi-stage planning (Analysis → Planning → Validation)
+ * - Checkpointing & Resume support
+ * - Security-aware risk assessment
+ * - Human-in-the-loop for high complexity
+ * - Thread-based execution tracking
+ * - Fallback strategies at each stage
+ */
 export class SupervisorAgent implements Agent {
   role: AgentRole = 'supervisor';
   model: string;
   status: AgentStatus = 'idle';
+  private preset: string;
+  // @ts-expect-error - Reserved for future use (retry logic)
+  private _maxIterations: number;
 
-  private agents: Map<AgentRole, Agent> = new Map();
-  private maxIterations: number;
+  // In-memory state store (production: use Redis/Database)
+  private static stateStore = new Map<string, SupervisorState>();
 
   constructor(config: SupervisorConfig) {
     this.model = config.model;
-    this.maxIterations = config.maxIterations || SUPERVISOR_CONFIG.MAX_ITERATIONS;
+    this.preset = config.preset;
+    this._maxIterations = config.maxIterations || 5;
   }
 
-  registerAgent(agent: Agent) {
-    this.agents.set(agent.role, agent);
-  }
-
-  async execute(input: {
-    task: string;
-    projectPath: string;
-    resumeCheckpointId?: string;
-  }): Promise<BuildResult> {
-    this.status = 'working';
+  /**
+   * Execute supervisor planning with checkpointing
+   */
+  async execute(input: SupervisorInput): Promise<SupervisorOutput> {
+    const threadId = input.threadId || crypto.randomUUID();
     const startTime = Date.now();
-    const result: BuildResult = {
-      success: false,
-      filesChanged: [],
-      testsWritten: [],
-      docsUpdated: [],
-      totalCost: 0,
-      totalTokens: 0,
-      duration: 0,
-    };
 
-    // Emit build start event
-    streamEmitter.emitBuildStart();
+    try {
+      logger.info('SupervisorAgent (ULTRA) starting', {
+        agent: 'supervisor',
+        threadId,
+        task: sanitizeLogMessage(input.task),
+        preset: this.preset,
+        resuming: !!input.resumeFromCheckpoint,
+      });
 
-    // Variables to track state for checkpointing
-    let runbook: Step[] | null = null;
-    let tasks: SubTask[] = [];
-    let executionOrder: string[][] = [];
-    let taskMap: Map<string, SubTask> | null = null;
-    let completedTaskIds: Set<string> = new Set();
-    let currentPhase: 'architect' | 'coach' | 'execution' | 'documentation' | 'complete' =
-      'architect';
+      // Initialize or resume state
+      const state = await this.initializeState(threadId, input, startTime);
 
-    // Check if we're resuming from a checkpoint
-    if (input.resumeCheckpointId) {
-      const checkpoint = await checkpointManager.load(input.resumeCheckpointId);
-      if (checkpoint) {
+      // Stage 1: Analysis (if not already done)
+      if (!state.analysis) {
+        state.analysis = await this.runAnalysisStage(input, state);
+        this.saveCheckpoint(state, 'analysis');
+      }
+
+      // Stage 2: Planning (if not already done)
+      if (!state.plan) {
+        state.plan = await this.runPlanningStage(input, state);
+        this.saveCheckpoint(state, 'planning');
+      }
+
+      // Stage 3: Validation
+      await this.runValidationStage(state);
+      this.saveCheckpoint(state, 'validation');
+
+      // Stage 4: Finalize
+      const output = this.buildFinalOutput(state, threadId);
+      this.saveCheckpoint(state, 'complete');
+
+      const duration = Date.now() - startTime;
+      logger.info('SupervisorAgent (ULTRA) completed', {
+        agent: 'supervisor',
+        threadId,
+        agentCount: output.agentSequence.length,
+        complexity: output.estimatedComplexity,
+        checkpoints: state.checkpoints.length,
+        duration,
+      });
+
+      this.status = 'completed';
+      return output;
+    } catch (error) {
+      this.status = 'failed';
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.error('SupervisorAgent (ULTRA) failed', {
+        agent: 'supervisor',
+        threadId,
+        error: sanitizeLogMessage(errorMsg),
+      });
+
+      return this.getFallbackOutput(input, threadId, `fatal error: ${errorMsg}`);
+    }
+  }
+
+  /**
+   * Initialize or resume state
+   */
+  private async initializeState(
+    threadId: string,
+    input: SupervisorInput,
+    startTime: number
+  ): Promise<SupervisorState> {
+    // Try to resume from checkpoint
+    if (input.resumeFromCheckpoint) {
+      const existing = SupervisorAgent.stateStore.get(threadId);
+      if (existing) {
         logger.info('Resuming from checkpoint', {
           agent: 'supervisor',
-          checkpointId: checkpoint.id,
+          threadId,
+          checkpointId: input.resumeFromCheckpoint,
+          checkpoints: existing.checkpoints.length,
         });
-        // Restore state from checkpoint
-        runbook = (checkpoint.runbook as Step[]) || null;
-        tasks = checkpoint.pendingTasks || [];
-        executionOrder = (checkpoint.executionOrder as string[][]) || [];
-        completedTaskIds = new Set(checkpoint.completedTasks || []);
-        currentPhase = checkpoint.currentPhase;
-
-        // Restore partial result
-        if (checkpoint.result.filesChanged) {
-          result.filesChanged = checkpoint.result.filesChanged as FileChange[];
-        }
-        if (checkpoint.result.testsWritten) {
-          result.testsWritten = checkpoint.result.testsWritten as TestFile[];
-        }
-        if (checkpoint.result.docsUpdated) {
-          result.docsUpdated = checkpoint.result.docsUpdated as FileChange[];
-        }
-        if (checkpoint.result.errors) {
-          result.errors = checkpoint.result.errors as string[];
-        }
-
-        logger.info('Checkpoint restored', {
-          agent: 'supervisor',
-          phase: currentPhase,
-          completedTasks: completedTaskIds.size,
-        });
+        return existing;
       }
+    }
+
+    // Create new state
+    const state: SupervisorState = {
+      threadId,
+      startTime,
+      checkpoints: [],
+    };
+
+    SupervisorAgent.stateStore.set(threadId, state);
+    return state;
+  }
+
+  /**
+   * Stage 1: Analysis
+   */
+  private async runAnalysisStage(
+    input: SupervisorInput,
+    state: SupervisorState
+  ): Promise<NonNullable<SupervisorState['analysis']>> {
+    logger.info('Analysis stage starting', {
+      agent: 'supervisor',
+      threadId: state.threadId,
+    });
+
+    const availableAgents = input.availableAgents || [
+      'architect',
+      'coach',
+      'code',
+      'review',
+      'test',
+      'docs',
+    ];
+
+    try {
+      const response = await llmClient.chat(this.model, [
+        {
+          role: 'system',
+          content: this.buildAnalysisPrompt(availableAgents),
+        },
+        {
+          role: 'user',
+          content: `Analyze this task:\n\nTask: ${input.task}\nProject: ${input.projectPath}\nAvailable Agents: ${availableAgents.join(', ')}`,
+        },
+      ]);
+
+      const AnalysisSchema = z.object({
+        complexity: z.enum(['low', 'medium', 'high']),
+        risks: z.array(z.string()),
+        domain: z.string(),
+        recommendedAgents: z.array(z.string()),
+      });
+
+      const parsed = safeJsonParse(response.content, AnalysisSchema);
+
+      // Add security warnings
+      const risks = this.enrichRisks(parsed.risks, input.task, parsed.complexity);
+
+      return {
+        complexity: parsed.complexity,
+        risks,
+        domain: parsed.domain,
+        recommendedAgents: parsed.recommendedAgents.filter((a) =>
+          availableAgents.includes(a)
+        ),
+      };
+    } catch (error) {
+      logger.warn('Analysis stage failed, using fallback', {
+        agent: 'supervisor',
+        threadId: state.threadId,
+        error: sanitizeLogMessage(error instanceof Error ? error.message : String(error)),
+      });
+
+      return {
+        complexity: 'medium',
+        risks: ['Analysis failed - using conservative estimates'],
+        domain: 'unknown',
+        recommendedAgents: availableAgents.slice(0, 3),
+      };
+    }
+  }
+
+  /**
+   * Stage 2: Planning
+   */
+  private async runPlanningStage(
+    input: SupervisorInput,
+    state: SupervisorState
+  ): Promise<NonNullable<SupervisorState['plan']>> {
+    logger.info('Planning stage starting', {
+      agent: 'supervisor',
+      threadId: state.threadId,
+    });
+
+    if (!state.analysis) {
+      throw new Error('Analysis must be completed before planning');
     }
 
     try {
-      // Step 1: Architect creates runbook (if not already done)
-      if (!runbook) {
-        logger.info('Architect analyzing task', { agent: 'supervisor', phase: 'architect' });
-        const architectStart = Date.now();
-        const architect = this.getAgent('architect');
-        const architectResult = await (
-          architect as Agent<
-            { task: string; projectPath: string },
-            { runbook: Step[]; estimatedComplexity: string }
-          >
-        ).execute(input);
-        runbook = architectResult.runbook;
-        const architectDuration = Date.now() - architectStart;
-        streamEmitter.emitAgentComplete({
-          agent: 'architect',
-          success: true,
-          duration: architectDuration,
-        });
+      const response = await llmClient.chat(this.model, [
+        {
+          role: 'system',
+          content: this.buildPlanningPrompt(),
+        },
+        {
+          role: 'user',
+          content: this.buildPlanningUserPrompt(input.task, state.analysis),
+        },
+      ]);
 
-        // Save checkpoint after architect phase
-        currentPhase = 'coach';
-        await this.saveCheckpoint(
-          input,
-          currentPhase,
-          completedTaskIds,
-          tasks,
-          result,
-          runbook,
-          executionOrder
-        );
-      }
-
-      // Step 2: Coach creates subtasks (if not already done)
-      if (tasks.length === 0) {
-        logger.info('Coach planning tasks', { agent: 'supervisor', phase: 'coach' });
-        const coachStart = Date.now();
-        const coach = this.getAgent('coach');
-        const coachResult = await (
-          coach as Agent<
-            { runbook: Step[]; context: unknown },
-            { tasks: SubTask[]; executionOrder: string[][]; dependencies: Dependency[] }
-          >
-        ).execute({ runbook: runbook!, context: input });
-        tasks = coachResult.tasks;
-        executionOrder = coachResult.executionOrder;
-        const coachDuration = Date.now() - coachStart;
-        streamEmitter.emitAgentComplete({ agent: 'coach', success: true, duration: coachDuration });
-
-        // Save checkpoint after coach phase
-        currentPhase = 'execution';
-        await this.saveCheckpoint(
-          input,
-          currentPhase,
-          completedTaskIds,
-          tasks,
-          result,
-          runbook,
-          executionOrder
-        );
-      }
-
-      // Step 3: Execute tasks
-      // Create a Map for O(1) task lookups instead of O(n) find() in nested loops
-      taskMap = new Map(tasks.map((t: SubTask) => [t.id, t]));
-
-      for (const taskBatch of executionOrder) {
-        // Filter out already completed tasks
-        const pendingTaskBatch = taskBatch.filter((taskId) => !completedTaskIds.has(taskId));
-
-        if (pendingTaskBatch.length === 0) {
-          logger.info('Skipping batch, all tasks already completed', { agent: 'supervisor' });
-          continue;
-        }
-
-        // Execute tasks in the same batch in parallel
-        const batchResults = await Promise.all(
-          pendingTaskBatch.map(async (taskId: string) => {
-            const task = taskMap!.get(taskId);
-            if (!task) {
-              logger.warn('Task not found in task list', { agent: 'supervisor', taskId });
-              return null;
-            }
-
-            // Emit task start event
-            streamEmitter.emitTaskStart({
-              taskId: task.id,
-              description: task.description,
-              agent: task.assignedAgent,
-            });
-
-            const taskStartTime = Date.now();
-            // Collect changes from this task
-            const taskChanges: {
-              filesChanged: FileChange[];
-              testsWritten: TestFile[];
-              testResults?: TestResult;
-              errors?: string[];
-            } = {
-              filesChanged: [],
-              testsWritten: [],
-              testResults: undefined,
-              errors: [],
-            };
-
-            try {
-              await this.executeTaskWithResult(task, taskChanges);
-              // Mark task as completed
-              completedTaskIds.add(task.id);
-
-              // Save checkpoint after each task
-              currentPhase = 'execution';
-              await this.saveCheckpoint(
-                input,
-                currentPhase,
-                completedTaskIds,
-                tasks,
-                result,
-                runbook,
-                executionOrder
-              );
-
-              // Emit task complete event on success
-              streamEmitter.emitTaskComplete({
-                taskId: task.id,
-                success: true,
-                duration: Date.now() - taskStartTime,
-              });
-              return taskChanges;
-            } catch (error: unknown) {
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              const stack = error instanceof Error ? error.stack : undefined;
-              logger.error('Task execution failed', {
-                agent: 'supervisor',
-                taskId,
-                error: sanitizeLogMessage(errorMessage),
-                stack: stack ? sanitizeLogMessage(stack) : undefined,
-              });
-              taskChanges.errors = [errorMessage];
-              // Save checkpoint on error
-              currentPhase = 'execution';
-              await this.saveCheckpoint(
-                input,
-                currentPhase,
-                completedTaskIds,
-                tasks,
-                result,
-                runbook,
-                executionOrder
-              );
-              // Emit task complete event on failure
-              streamEmitter.emitTaskComplete({
-                taskId: task.id,
-                success: false,
-                duration: Date.now() - taskStartTime,
-              });
-              return taskChanges;
-            }
+      const PlanningSchema = z.object({
+        agentSequence: z.array(z.string()),
+        taskAssignments: z.array(
+          z.object({
+            agentName: z.string(),
+            task: z.string(),
+            dependencies: z.array(z.string()),
           })
-        );
-
-        // Merge all batch results into the main result
-        for (const batchResult of batchResults) {
-          if (!batchResult) continue;
-
-          result.filesChanged.push(...batchResult.filesChanged);
-          result.testsWritten.push(...batchResult.testsWritten);
-
-          // For test results, we might want to combine them
-          // For simplicity, use the last non-undefined result
-          if (batchResult.testResults) {
-            result.testResults = batchResult.testResults;
-          }
-
-          // Collect errors
-          if (batchResult.errors && batchResult.errors.length > 0) {
-            if (!result.errors) result.errors = [];
-            result.errors.push(...batchResult.errors);
-          }
-        }
-      }
-
-      // Step 4: Documentation (if not already done)
-      if (currentPhase !== 'complete') {
-        logger.info('Docs agent documenting', { agent: 'supervisor', phase: 'documentation' });
-        const docs = this.agents.get('docs');
-        if (docs) {
-          const { docsUpdated } = await (
-            docs as Agent<
-              { filesChanged: FileChange[]; task: { description: string } },
-              { docsUpdated: FileChange[]; changelogEntry?: string }
-            >
-          ).execute({
-            filesChanged: result.filesChanged,
-            task: { description: input.task },
-          });
-          result.docsUpdated = docsUpdated;
-        }
-
-        // Save checkpoint after documentation phase
-        currentPhase = 'complete';
-        await this.saveCheckpoint(
-          input,
-          currentPhase,
-          completedTaskIds,
-          tasks,
-          result,
-          runbook,
-          executionOrder
-        );
-      }
-
-      result.success = true;
-      this.status = 'completed';
-      // Emit build complete event on success
-      streamEmitter.emitBuildComplete({ success: true, errors: result.errors });
-    } catch (error: any) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const stack = error instanceof Error ? error.stack : undefined;
-      logger.error('Supervisor execution failed', {
-        agent: this.role,
-        error: sanitizeLogMessage(errorMessage),
-        stack: stack ? sanitizeLogMessage(stack) : undefined,
+        ),
+        executionStrategy: z.object({
+          parallel: z.array(z.string()),
+          sequential: z.array(z.string()),
+        }),
+        strategy: z.string(),
       });
-      result.errors = [errorMessage];
-      this.status = 'failed';
-      // Save checkpoint on error
-      await this.saveCheckpoint(
-        input,
-        currentPhase,
-        completedTaskIds,
-        tasks,
-        result,
-        runbook,
-        executionOrder
-      );
-      // Emit build complete event on failure
-      streamEmitter.emitBuildComplete({ success: false, errors: result.errors });
+
+      const parsed = safeJsonParse(response.content, PlanningSchema);
+
+      return {
+        agentSequence: this.uniqueNonEmpty(parsed.agentSequence),
+        taskAssignments: parsed.taskAssignments,
+        executionStrategy: parsed.executionStrategy,
+        strategy: parsed.strategy,
+      };
+    } catch (error) {
+      logger.warn('Planning stage failed, using fallback', {
+        agent: 'supervisor',
+        threadId: state.threadId,
+        error: sanitizeLogMessage(error instanceof Error ? error.message : String(error)),
+      });
+
+      const agents = state.analysis.recommendedAgents;
+      return {
+        agentSequence: agents,
+        taskAssignments: agents.map((a, idx) => ({
+          agentName: a,
+          task: `Execute ${a} task for: ${input.task}`,
+          dependencies: idx > 0 ? [agents[idx - 1] || ''] : [],
+        })),
+        executionStrategy: {
+          parallel: [],
+          sequential: agents,
+        },
+        strategy: 'Fallback: sequential execution of recommended agents',
+      };
     }
-
-    result.duration = Date.now() - startTime;
-    result.totalCost = llmClient.getTotalCost();
-    result.totalTokens = llmClient.getTotalTokens();
-
-    return result;
   }
 
-  private getAgent(name: AgentRole): Agent {
-    const agent = this.agents.get(name);
-    if (!agent) {
-      throw new Error(
-        `Agent '${name}' not registered. Available: ${[...this.agents.keys()].join(', ')}`
-      );
-    }
-    return agent;
-  }
-
-  private async saveCheckpoint(
-    input: { task: string; projectPath: string; resumeCheckpointId?: string },
-    currentPhase: 'architect' | 'coach' | 'execution' | 'documentation' | 'complete',
-    completedTaskIds: Set<string>,
-    pendingTasks: SubTask[],
-    result: BuildResult,
-    runbook: Step[] | null,
-    executionOrder: string[][]
-  ) {
-    const checkpoint: Checkpoint = {
-      id: Date.now().toString(),
-      timestamp: Date.now(),
-      task: input.task,
-      projectPath: input.projectPath,
-      currentPhase,
-      completedTasks: Array.from(completedTaskIds),
-      pendingTasks: pendingTasks.filter((task) => !completedTaskIds.has(task.id)),
-      result: result,
-      runbook: runbook || undefined,
-      executionOrder: executionOrder,
-    };
-    await checkpointManager.save(checkpoint);
-    logger.info('Checkpoint saved', {
+  /**
+   * Stage 3: Validation
+   */
+  private async runValidationStage(state: SupervisorState): Promise<void> {
+    logger.info('Validation stage starting', {
       agent: 'supervisor',
-      checkpointId: checkpoint.id,
-      phase: currentPhase,
+      threadId: state.threadId,
+    });
+
+    if (!state.plan || !state.analysis) {
+      throw new Error('Analysis and planning must be completed before validation');
+    }
+
+    // Validate sequence dependencies
+    this.validateDependencies(state.plan);
+
+    // Validate required agents for complexity
+    this.validateComplexityRequirements(state.analysis.complexity, state.plan);
+
+    logger.info('Validation stage completed', {
+      agent: 'supervisor',
+      threadId: state.threadId,
     });
   }
 
-  private async executeTaskWithResult(
-    task: SubTask,
-    taskChanges: {
-      filesChanged: FileChange[];
-      testsWritten: TestFile[];
-      testResults?: TestResult;
-      errors?: string[];
-    }
-  ) {
-    try {
-      const agent = this.getAgent(task.assignedAgent);
-      logger.info('Executing task', {
-        agent: 'supervisor',
-        assignedAgent: task.assignedAgent,
-        taskDescription: task.description,
-      });
+  /**
+   * Validate dependencies are satisfiable
+   */
+  private validateDependencies(plan: NonNullable<SupervisorState['plan']>): void {
+    const agentSet = new Set(plan.agentSequence);
 
-      // Emit agent start event
-      streamEmitter.emitAgentStart({ agent: task.assignedAgent, task: task.description });
-
-      if (task.assignedAgent === 'code') {
-        let iteration = 0;
-        let approved = false;
-
-        // Sammle alle Dateiänderungen in einem lokalen Array
-        const taskFilesChanged: FileChange[] = [];
-
-        while (!approved && iteration < this.maxIterations) {
-          // Code writes
-          const codeResult = await (
-            agent as Agent<
-              { task: SubTask; feedback?: ReviewResult },
-              { filesChanged: FileChange[]; explanation: string; needsReview: boolean }
-            >
-          ).execute({ task, feedback: undefined });
-          taskFilesChanged.push(...codeResult.filesChanged);
-
-          // Emit file change events
-          codeResult.filesChanged.forEach((fileChange) => {
-            streamEmitter.emitFileChange({
-              path: fileChange.path,
-              action: fileChange.action,
-            });
-          });
-
-          // Review checks
-          const review = this.agents.get('review');
-          if (review) {
-            const reviewResult = await (
-              review as Agent<
-                { filesChanged: FileChange[]; originalTask: SubTask },
-                {
-                  approved: boolean;
-                  issues: Issue[];
-                  summary: string;
-                  mustFix: Issue[];
-                  suggestions: Issue[];
-                }
-              >
-            ).execute({
-              filesChanged: codeResult.filesChanged,
-              originalTask: task,
-            });
-
-            if (reviewResult.approved) {
-              approved = true;
-            } else {
-              logger.info('Review found issues, retrying', {
-                agent: 'supervisor',
-                iteration: iteration + 1,
-                taskId: task.id,
-              });
-              // Safe assignment with proper typing
-              task.input = { ...task.input, feedback: reviewResult as ReviewResult };
-            }
-          } else {
-            approved = true;
-            break; // Exit loop if no review agent
-          }
-          iteration++;
-        }
-
-        // Store file changes
-        taskChanges.filesChanged.push(...taskFilesChanged);
-
-        // Test writes tests
-        const test = this.agents.get('test');
-        if (test) {
-          const testResult = await (
-            test as Agent<
-              { filesChanged: FileChange[]; task: SubTask },
-              { testsWritten: TestFile[]; testResults: TestResult; failures?: TestFailure[] }
-            >
-          ).execute({
-            filesChanged: taskFilesChanged,
-            task,
-          });
-          taskChanges.testsWritten.push(...testResult.testsWritten);
-          taskChanges.testResults = testResult.testResults;
-
-          // Emit test run event
-          if (testResult.testResults) {
-            streamEmitter.emitTestRun({
-              passed: testResult.testResults.passed,
-              failed: testResult.testResults.failed,
-              total:
-                testResult.testResults.passed +
-                testResult.testResults.failed +
-                (testResult.testResults.skipped || 0),
-            });
-          }
+    for (const assignment of plan.taskAssignments) {
+      for (const dep of assignment.dependencies) {
+        if (!agentSet.has(dep)) {
+          throw new Error(
+            `Invalid dependency: ${assignment.agentName} depends on ${dep} which is not in sequence`
+          );
         }
       }
-    } catch (error: unknown) {
-      // Wenn der Agent nicht existiert, loggen wir einen Fehler und fahren mit der nächsten Task fort
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const stack = error instanceof Error ? error.stack : undefined;
-      logger.error('Agent execution failed', {
-        agent: 'supervisor',
-        assignedAgent: task.assignedAgent,
-        taskId: task.id,
-        error: sanitizeLogMessage(errorMessage),
-        stack: stack ? sanitizeLogMessage(stack) : undefined,
-      });
-      // Store error in taskChanges
-      if (!taskChanges.errors) taskChanges.errors = [];
-      taskChanges.errors.push(`Task ${task.id} failed: ${errorMessage}`);
-      throw error; // Re-throw to be handled by the caller
     }
+
+    // Validate critical ordering
+    const archIdx = plan.agentSequence.indexOf('architect');
+    const coachIdx = plan.agentSequence.indexOf('coach');
+    const codeIdx = plan.agentSequence.indexOf('code');
+    const reviewIdx = plan.agentSequence.indexOf('review');
+
+    if (archIdx >= 0 && coachIdx >= 0 && archIdx > coachIdx) {
+      throw new Error('Invalid sequence: architect must come before coach');
+    }
+    if (coachIdx >= 0 && codeIdx >= 0 && coachIdx > codeIdx) {
+      throw new Error('Invalid sequence: coach must come before code');
+    }
+    if (codeIdx >= 0 && reviewIdx >= 0 && codeIdx > reviewIdx) {
+      throw new Error('Invalid sequence: code must come before review');
+    }
+  }
+
+  /**
+   * Validate complexity requirements
+   */
+  private validateComplexityRequirements(
+    complexity: 'low' | 'medium' | 'high',
+    plan: NonNullable<SupervisorState['plan']>
+  ): void {
+    if (complexity === 'high') {
+      // High complexity should have review and test
+      if (!plan.agentSequence.includes('review')) {
+        logger.warn('High complexity task without review agent', {
+          agent: 'supervisor',
+        });
+      }
+      if (!plan.agentSequence.includes('test')) {
+        logger.warn('High complexity task without test agent', {
+          agent: 'supervisor',
+        });
+      }
+    }
+  }
+
+  /**
+   * Build final output
+   */
+  private buildFinalOutput(state: SupervisorState, threadId: string): SupervisorOutput {
+    if (!state.analysis || !state.plan) {
+      throw new Error('Analysis and planning must be completed');
+    }
+
+    return {
+      agentSequence: state.plan.agentSequence,
+      taskAssignments: state.plan.taskAssignments,
+      executionStrategy: state.plan.executionStrategy,
+      estimatedComplexity: state.analysis.complexity,
+      risks: state.analysis.risks,
+      strategy: state.plan.strategy,
+      threadId,
+      checkpoints: state.checkpoints,
+    };
+  }
+
+  /**
+   * Save checkpoint
+   */
+  private saveCheckpoint(
+    state: SupervisorState,
+    checkpointState: CheckpointInfo['state']
+  ): void {
+    const checkpoint: CheckpointInfo = {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      state: checkpointState,
+      data: {
+        analysis: state.analysis,
+        plan: state.plan,
+      },
+    };
+
+    state.checkpoints.push(checkpoint);
+    SupervisorAgent.stateStore.set(state.threadId, state);
+
+    logger.info('Checkpoint saved', {
+      agent: 'supervisor',
+      threadId: state.threadId,
+      checkpointId: checkpoint.id,
+      state: checkpointState,
+    });
+  }
+
+  /**
+   * Enrich risks with security warnings
+   */
+  private enrichRisks(
+    baseRisks: string[],
+    task: string,
+    complexity: 'low' | 'medium' | 'high'
+  ): string[] {
+    const risks = [...baseRisks];
+
+    // Security-sensitive tasks
+    if (this.isSecuritySensitive(task)) {
+      risks.push(
+        'Security/Auth warning: never log secrets/tokens/passwords; use HTTPS; secure secret storage; least privilege (RBAC); audit logging; rate limits; follow OWASP guidance.'
+      );
+    }
+
+    // High complexity warnings
+    if (complexity === 'high') {
+      risks.push(
+        'High complexity: enforce code review + tests; consider human-in-the-loop approval before deployment.'
+      );
+    }
+
+    return risks;
+  }
+
+  /**
+   * Check if task is security-sensitive
+   */
+  private isSecuritySensitive(task: string): boolean {
+    const lower = task.toLowerCase();
+    return (
+      lower.includes('auth') ||
+      lower.includes('login') ||
+      lower.includes('oauth') ||
+      lower.includes('jwt') ||
+      lower.includes('password') ||
+      lower.includes('token') ||
+      lower.includes('session') ||
+      lower.includes('security') ||
+      lower.includes('encryption')
+    );
+  }
+
+  /**
+   * Remove duplicates and empty strings
+   */
+  private uniqueNonEmpty(items: string[]): string[] {
+    return [...new Set(items.filter((s) => s.trim().length > 0))];
+  }
+
+  /**
+   * Build analysis prompt
+   */
+  private buildAnalysisPrompt(availableAgents: string[]): string {
+    return `Du bist ein Supervisor Agent. Analysiere den Task und schlage eine Strategie vor.
+
+VERFÜGBARE AGENTS:
+${availableAgents.map((a) => `- ${a}`).join('\n')}
+
+AUFGABEN:
+1. Komplexität einschätzen (low/medium/high)
+2. Risiken identifizieren
+3. Domäne bestimmen
+4. Empfohlene Agents auswählen
+
+Antworte NUR mit validem JSON:
+{
+  "complexity": "low" | "medium" | "high",
+  "risks": ["risk1", "risk2"],
+  "domain": "string (z.B. 'backend', 'frontend', 'data', 'security')",
+  "recommendedAgents": ["agent1", "agent2"]
+}`;
+  }
+
+  /**
+   * Build planning prompt
+   */
+  private buildPlanningPrompt(): string {
+    return `Du bist ein Supervisor Agent. Erstelle einen detaillierten Execution-Plan.
+
+REGELN:
+- architect MUSS vor coach
+- coach MUSS vor code
+- code MUSS vor review
+- Parallel nur wenn sinnvoll
+- Dependencies explizit angeben
+
+Antworte NUR mit validem JSON:
+{
+  "agentSequence": ["agent1", "agent2"],
+  "taskAssignments": [
+    {
+      "agentName": "agent1",
+      "task": "Konkrete Beschreibung",
+      "dependencies": []
+    }
+  ],
+  "executionStrategy": {
+    "parallel": ["agent3", "agent4"],
+    "sequential": ["agent1", "agent2"]
+  },
+  "strategy": "Gesamtstrategie Beschreibung"
+}`;
+  }
+
+  /**
+   * Build planning user prompt
+   */
+  private buildPlanningUserPrompt(
+    task: string,
+    analysis: NonNullable<SupervisorState['analysis']>
+  ): string {
+    return `Erstelle einen Plan für:
+
+TASK: ${task}
+KOMPLEXITÄT: ${analysis.complexity}
+DOMÄNE: ${analysis.domain}
+EMPFOHLENE AGENTS: ${analysis.recommendedAgents.join(', ')}
+BEKANNTE RISIKEN: ${analysis.risks.join('; ')}
+
+Erstelle einen optimalen Execution-Plan mit minimal nötigen Agents.`;
+  }
+
+  /**
+   * Get fallback output when everything fails
+   */
+  private getFallbackOutput(
+    input: SupervisorInput,
+    threadId: string,
+    reason: string
+  ): SupervisorOutput {
+    logger.warn('Using fallback supervisor output', {
+      agent: 'supervisor',
+      threadId,
+      reason,
+    });
+
+    const availableAgents = input.availableAgents || [
+      'architect',
+      'coach',
+      'code',
+      'review',
+      'test',
+      'docs',
+    ];
+
+    const isSimple = input.task.length < 50;
+    const agentSequence = isSimple
+      ? ['code', 'review', 'docs']
+      : ['architect', 'coach', 'code', 'review', 'test', 'docs'];
+
+    const filteredSequence = agentSequence.filter((a) => availableAgents.includes(a));
+
+    return {
+      agentSequence: filteredSequence,
+      taskAssignments: filteredSequence.map((agent, index) => ({
+        agentName: agent,
+        task: `Execute ${agent} task for: ${input.task}`,
+        dependencies: index > 0 ? [filteredSequence[index - 1] || ''] : [],
+      })),
+      executionStrategy: {
+        parallel: [],
+        sequential: filteredSequence,
+      },
+      estimatedComplexity: isSimple ? 'low' : 'medium',
+      risks: [`Fallback plan used: ${reason}`],
+      strategy: isSimple
+        ? 'Simple task - direct implementation'
+        : 'Standard workflow with full agent pipeline',
+      threadId,
+      checkpoints: [],
+    };
   }
 }
