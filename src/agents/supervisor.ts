@@ -35,7 +35,7 @@ interface ExecutionStrategy {
 /**
  * Supervisor Agent Output
  */
-interface SupervisorOutput {
+export interface SupervisorOutput {
   agentSequence: string[];
   taskAssignments: TaskAssignment[];
   executionStrategy: ExecutionStrategy;
@@ -49,7 +49,7 @@ interface SupervisorOutput {
 /**
  * Supervisor Agent Input
  */
-interface SupervisorInput {
+export interface SupervisorInput {
   task: string;
   projectPath: string;
   availableAgents?: string[];

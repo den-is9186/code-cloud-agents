@@ -8,7 +8,7 @@ import { logger } from '../utils/logger';
 /**
  * Coach Agent Input
  */
-interface CoachInput {
+export interface CoachInput {
   runbook: Step[];
   context?: unknown;
 }
@@ -16,7 +16,7 @@ interface CoachInput {
 /**
  * Coach Agent Output
  */
-interface CoachOutput {
+export interface CoachOutput {
   tasks: SubTask[];
   executionOrder: string[][];
   dependencies: Dependency[];

@@ -29,14 +29,24 @@ import {
 } from './notification-service.js';
 
 // Import all agent classes
-import { SupervisorAgent } from '../agents/supervisor.js';
-import { ArchitectAgent } from '../agents/architect.js';
-import { CoachAgent } from '../agents/coach.js';
+import {
+  SupervisorAgent,
+  type SupervisorInput,
+  type SupervisorOutput,
+} from '../agents/supervisor.js';
+import { ArchitectAgent, type ArchitectInput, type ArchitectOutput } from '../agents/architect.js';
+import { CoachAgent, type CoachInput, type CoachOutput } from '../agents/coach.js';
 import { CodeAgent, type CodeInput, type CodeOutput } from '../agents/code.js';
 import { ReviewAgent, type ReviewInput, type ReviewOutput } from '../agents/review.js';
 import { TestAgent, type TestInput, type TestOutput } from '../agents/test.js';
 import { DocsAgent, type DocsInput, type DocsOutput } from '../agents/docs.js';
-import type { Agent, SubTask, FileChange as AgentFileChange } from '../agents/types.js';
+import type {
+  Agent,
+  SubTask,
+  FileChange as AgentFileChange,
+  Step,
+  Dependency,
+} from '../agents/types.js';
 
 import { checkBudgetAfterBuild } from './budget-alert-service.js';
 import { logger } from '../utils/logger';
@@ -217,15 +227,25 @@ interface ModelConfig {
  * Pipeline Context - State shared between agents
  */
 interface PipelineContext {
+  // From Supervisor
+  supervisorOutput?: SupervisorOutput;
+  agentSequence?: string[];
+  estimatedComplexity?: 'low' | 'medium' | 'high';
+  risks?: string[];
+
   // From Architect
-  runbook?: unknown; // Architect output structure
+  runbook?: Step[];
+  architectComplexity?: 'low' | 'medium' | 'high';
+
   // From Coach
   tasks?: SubTask[];
   executionOrder?: string[][];
-  dependencies?: unknown[]; // Dependency structure
+  dependencies?: Dependency[];
+
   // From Code/Review cycle
   filesChanged: AgentFileChange[];
   lastReviewOutput?: ReviewOutput;
+
   // Flags
   reviewRetries: number;
   codeApproved: boolean;
@@ -665,7 +685,7 @@ async function executeAgent(
   options: AgentExecutionOptions
 ): Promise<AgentExecutionResult> {
   const startTime = Date.now();
-  const { model, context, preset, task } = options;
+  const { model, context, preset, task, projectPath } = options;
 
   // Use MVP hardcoded model if not provided
   const agentModel = model || MVP_MODELS[agentName as keyof typeof MVP_MODELS] || 'claude-sonnet-4';
@@ -825,11 +845,112 @@ async function executeAgent(
       break;
     }
 
-    case 'supervisor':
-    case 'architect':
-    case 'coach':
-      // TODO: Implement these agents in next phase
-      throw new Error(`Agent ${agentName} not yet implemented in MVP`);
+    case 'supervisor': {
+      const supervisorAgent = agent as SupervisorAgent;
+
+      const supervisorInput: SupervisorInput = {
+        task: task,
+        projectPath: projectPath,
+      };
+
+      const output: SupervisorOutput = await supervisorAgent.execute(supervisorInput);
+
+      // Store in context for next agents
+      context.supervisorOutput = output;
+      context.agentSequence = output.agentSequence;
+      context.estimatedComplexity = output.estimatedComplexity;
+      context.risks = output.risks;
+
+      result = {
+        inputTokens: 0,
+        outputTokens: 0,
+        duration: Date.now() - startTime,
+        output: output as unknown as Record<string, unknown>,
+      };
+      break;
+    }
+
+    case 'architect': {
+      const architectAgent = agent as ArchitectAgent;
+
+      const architectInput: ArchitectInput = {
+        task: task,
+        projectPath: projectPath,
+      };
+
+      const output: ArchitectOutput = await architectAgent.execute(architectInput);
+
+      // Store runbook for Coach
+      context.runbook = output.runbook;
+      context.architectComplexity = output.estimatedComplexity;
+
+      // Log critical risks
+      if (context.risks && context.risks.length > 0) {
+        logger.warn('Risks identified', {
+          agent: 'architect',
+          risks: context.risks,
+        });
+      }
+
+      result = {
+        inputTokens: 0,
+        outputTokens: 0,
+        duration: Date.now() - startTime,
+        output: output as unknown as Record<string, unknown>,
+        runbook: output.runbook.map((s, idx) => ({
+          step: idx + 1,
+          description: s.description,
+        })),
+      };
+      break;
+    }
+
+    case 'coach': {
+      const coachAgent = agent as CoachAgent;
+
+      if (!context.runbook) {
+        throw new Error('Coach agent requires runbook from Architect');
+      }
+
+      const coachInput: CoachInput = {
+        runbook: context.runbook,
+      };
+
+      const output: CoachOutput = await coachAgent.execute(coachInput);
+
+      // Validate output
+      if (!output.tasks || output.tasks.length === 0) {
+        throw new Error('Coach failed to create SubTasks');
+      }
+
+      // Store for execution
+      context.tasks = output.tasks;
+      context.executionOrder = output.executionOrder;
+      context.dependencies = output.dependencies;
+
+      logger.info('Coach planning completed', {
+        agent: 'coach',
+        totalTasks: output.tasks.length,
+        batches: output.executionOrder.length,
+      });
+
+      result = {
+        inputTokens: 0,
+        outputTokens: 0,
+        duration: Date.now() - startTime,
+        output: output as unknown as Record<string, unknown>,
+        subtasks: output.tasks.map((t) => ({
+          id: t.id,
+          description: t.description,
+          agent: t.assignedAgent,
+        })),
+        executionPlan: {
+          parallel: output.executionOrder.some((batch) => batch.length > 1),
+          sequential: true,
+        },
+      };
+      break;
+    }
 
     default:
       throw new Error(`Unknown agent: ${agentName}`);

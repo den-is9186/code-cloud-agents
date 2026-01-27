@@ -9,7 +9,7 @@ import { logger } from '../utils/logger';
 /**
  * Architect Agent Input
  */
-interface ArchitectInput {
+export interface ArchitectInput {
   task: string;
   projectPath: string;
 }
@@ -17,7 +17,7 @@ interface ArchitectInput {
 /**
  * Architect Agent Output
  */
-interface ArchitectOutput {
+export interface ArchitectOutput {
   runbook: Step[];
   estimatedComplexity: 'low' | 'medium' | 'high';
 }
