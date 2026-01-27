@@ -5,11 +5,17 @@
  */
 
 const path = require('path');
-const { execFile } = require('child_process');
 const { promisify } = require('util');
 
 jest.mock('../dist/llm/client');
-jest.mock('child_process');
+
+// Mock child_process with explicit mock factory
+const mockExecFile = jest.fn();
+jest.mock('child_process', () => ({
+  execFile: mockExecFile,
+}));
+
+const { execFile } = require('child_process');
 
 // Mock fs/promises module
 const mockAccess = jest.fn();
@@ -51,7 +57,7 @@ describe('MultiRepoAgent', () => {
     mockReadFile.mockResolvedValue('{}');
     mockUnlink.mockResolvedValue(undefined);
 
-    execFile.mockImplementation((cmd, args, options, callback) => {
+    mockExecFile.mockImplementation((cmd, args, options, callback) => {
       if (!callback && typeof options === 'function') {
         callback = options;
       }

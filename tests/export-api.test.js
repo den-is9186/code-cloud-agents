@@ -6,6 +6,8 @@
 
 const request = require('supertest');
 const app = require('../src/api-server');
+const { getTestToken, Roles } = require('./helpers/auth-helper');
+
 // Mock export service with explicit mock factory
 const mockExportBuildReport = jest.fn();
 const mockExportCostReport = jest.fn();
@@ -25,7 +27,6 @@ const {
   exportAgentPerformanceReport,
   exportBudgetReport,
 } = require('../dist/services/export-service');
-const { getTestToken, Roles } = require('./helpers/auth-helper');
 
 // Helper to create authenticated request (MANAGER role for team ownership endpoints)
 const authGet = (url) =>
@@ -47,7 +48,7 @@ describe('Export API', () => {
         },
       ];
 
-      exportBuildReport.mockResolvedValue(JSON.stringify(mockBuilds, null, 2));
+      mockExportBuildReport.mockResolvedValue(JSON.stringify(mockBuilds, null, 2));
 
       const response = await authGet('/api/v1/export/builds')
         .query({ teamId: 'team-1', format: 'json' });
@@ -66,7 +67,7 @@ describe('Export API', () => {
     test('should export builds in CSV format', async () => {
       const mockCSV = 'id,teamId,status,totalCost\nbuild-1,team-1,completed,0.5';
 
-      exportBuildReport.mockResolvedValue(mockCSV);
+      mockExportBuildReport.mockResolvedValue(mockCSV);
 
       const response = await authGet('/api/v1/export/builds')
         .query({ teamId: 'team-1', format: 'csv' });
@@ -78,7 +79,7 @@ describe('Export API', () => {
     });
 
     test('should filter by buildId', async () => {
-      exportBuildReport.mockResolvedValue('[]');
+      mockExportBuildReport.mockResolvedValue('[]');
 
       await authGet('/api/v1/export/builds').query({ buildId: 'build-123' });
 
@@ -91,7 +92,7 @@ describe('Export API', () => {
     });
 
     test('should filter by date range', async () => {
-      exportBuildReport.mockResolvedValue('[]');
+      mockExportBuildReport.mockResolvedValue('[]');
 
       await authGet('/api/v1/export/builds').query({
         startDate: '2026-01-01',
@@ -116,7 +117,7 @@ describe('Export API', () => {
     });
 
     test('should handle export errors', async () => {
-      exportBuildReport.mockRejectedValue(new Error('Export failed'));
+      mockExportBuildReport.mockRejectedValue(new Error('Export failed'));
 
       const response = await authGet('/api/v1/export/builds');
 
@@ -133,7 +134,7 @@ describe('Export API', () => {
         totalBuilds: 5,
       };
 
-      exportCostReport.mockResolvedValue(JSON.stringify(mockCosts, null, 2));
+      mockExportCostReport.mockResolvedValue(JSON.stringify(mockCosts, null, 2));
 
       const response = await authGet('/api/v1/export/costs')
         .query({ teamId: 'team-1' });
@@ -155,7 +156,7 @@ describe('Export API', () => {
     });
 
     test('should support different periods', async () => {
-      exportCostReport.mockResolvedValue('{}');
+      mockExportCostReport.mockResolvedValue('{}');
 
       await authGet('/api/v1/export/costs').query({
         teamId: 'team-1',
@@ -183,7 +184,7 @@ describe('Export API', () => {
     test('should export costs in CSV format', async () => {
       const mockCSV = 'teamId,totalCost,totalBuilds\nteam-1,10.5,5';
 
-      exportCostReport.mockResolvedValue(mockCSV);
+      mockExportCostReport.mockResolvedValue(mockCSV);
 
       const response = await authGet('/api/v1/export/costs').query({
         teamId: 'team-1',
@@ -196,7 +197,7 @@ describe('Export API', () => {
     });
 
     test('should support custom date ranges', async () => {
-      exportCostReport.mockResolvedValue('{}');
+      mockExportCostReport.mockResolvedValue('{}');
 
       await authGet('/api/v1/export/costs').query({
         teamId: 'team-1',
@@ -225,7 +226,7 @@ describe('Export API', () => {
         },
       };
 
-      exportAgentPerformanceReport.mockResolvedValue(JSON.stringify(mockPerformance, null, 2));
+      mockExportAgentPerformanceReport.mockResolvedValue(JSON.stringify(mockPerformance, null, 2));
 
       const response = await authGet('/api/v1/export/agents');
 
@@ -234,7 +235,7 @@ describe('Export API', () => {
     });
 
     test('should filter by teamId', async () => {
-      exportAgentPerformanceReport.mockResolvedValue('{}');
+      mockExportAgentPerformanceReport.mockResolvedValue('{}');
 
       await authGet('/api/v1/export/agents').query({ teamId: 'team-1' });
 
@@ -247,7 +248,7 @@ describe('Export API', () => {
     });
 
     test('should filter by agentName', async () => {
-      exportAgentPerformanceReport.mockResolvedValue('{}');
+      mockExportAgentPerformanceReport.mockResolvedValue('{}');
 
       await authGet('/api/v1/export/agents').query({ agentName: 'code' });
 
@@ -262,7 +263,7 @@ describe('Export API', () => {
     test('should export in CSV format', async () => {
       const mockCSV = 'agent,totalRuns,successRate\ncode,10,90';
 
-      exportAgentPerformanceReport.mockResolvedValue(mockCSV);
+      mockExportAgentPerformanceReport.mockResolvedValue(mockCSV);
 
       const response = await authGet('/api/v1/export/agents').query({
         format: 'csv',
@@ -274,7 +275,7 @@ describe('Export API', () => {
     });
 
     test('should handle date range filters', async () => {
-      exportAgentPerformanceReport.mockResolvedValue('{}');
+      mockExportAgentPerformanceReport.mockResolvedValue('{}');
 
       await authGet('/api/v1/export/agents').query({
         startDate: '2026-01-01',
@@ -300,7 +301,7 @@ describe('Export API', () => {
         remaining: 50,
       };
 
-      exportBudgetReport.mockResolvedValue(JSON.stringify(mockBudget, null, 2));
+      mockExportBudgetReport.mockResolvedValue(JSON.stringify(mockBudget, null, 2));
 
       const response = await authGet('/api/v1/export/budget/team-1');
 
@@ -311,7 +312,7 @@ describe('Export API', () => {
     test('should export in CSV format', async () => {
       const mockCSV = 'teamId,monthlySpending,percentage,remaining\nteam-1,50,50%,50';
 
-      exportBudgetReport.mockResolvedValue(mockCSV);
+      mockExportBudgetReport.mockResolvedValue(mockCSV);
 
       const response = await authGet('/api/v1/export/budget/team-1')
         .query({ format: 'csv' });
@@ -330,7 +331,7 @@ describe('Export API', () => {
     });
 
     test('should handle export errors', async () => {
-      exportBudgetReport.mockRejectedValue(new Error('Budget not found'));
+      mockExportBudgetReport.mockRejectedValue(new Error('Budget not found'));
 
       const response = await authGet('/api/v1/export/budget/team-1');
 

@@ -5,6 +5,13 @@
  */
 
 const Redis = require('ioredis');
+
+// Mock axios with explicit mock factory
+const mockAxiosPost = jest.fn();
+jest.mock('axios', () => ({
+  post: mockAxiosPost,
+}));
+
 const axios = require('axios');
 const {
   NotificationType,
@@ -19,8 +26,7 @@ const {
   storeNotification,
 } = require('../dist/services/notification-service');
 
-// Mock axios and Redis
-jest.mock('axios');
+// Mock Redis
 jest.mock('ioredis');
 
 describe('Notification Service', () => {
@@ -96,7 +102,7 @@ describe('Notification Service', () => {
         status: 200,
         data: { success: true },
       };
-      axios.post.mockResolvedValue(mockResponse);
+      mockAxiosPost.mockResolvedValue(mockResponse);
 
       const result = await sendWebhook('https://example.com/webhook', {
         message: 'Test',
@@ -104,7 +110,7 @@ describe('Notification Service', () => {
 
       expect(result.success).toBe(true);
       expect(result.status).toBe(200);
-      expect(axios.post).toHaveBeenCalledWith(
+      expect(mockAxiosPost).toHaveBeenCalledWith(
         'https://example.com/webhook',
         { message: 'Test' },
         expect.objectContaining({
@@ -118,7 +124,7 @@ describe('Notification Service', () => {
     });
 
     test('should handle webhook failure', async () => {
-      axios.post.mockRejectedValue(new Error('Network error'));
+      mockAxiosPost.mockRejectedValue(new Error('Network error'));
 
       const result = await sendWebhook('https://example.com/webhook', {
         message: 'Test',
@@ -131,7 +137,7 @@ describe('Notification Service', () => {
     test('should include response status on error', async () => {
       const error = new Error('Bad Request');
       error.response = { status: 400 };
-      axios.post.mockRejectedValue(error);
+      mockAxiosPost.mockRejectedValue(error);
 
       const result = await sendWebhook('https://example.com/webhook', {
         message: 'Test',
@@ -185,7 +191,7 @@ describe('Notification Service', () => {
     });
 
     test('should accept valid public URLs', async () => {
-      axios.post.mockResolvedValue({ status: 200, data: { success: true } });
+      mockAxiosPost.mockResolvedValue({ status: 200, data: { success: true } });
 
       const result = await sendWebhook('https://api.example.com/webhook', {
         message: 'Test',
@@ -197,7 +203,7 @@ describe('Notification Service', () => {
 
   describe('sendSlackNotification', () => {
     test('should format Slack message correctly', async () => {
-      axios.post.mockResolvedValue({ status: 200, data: { ok: true } });
+      mockAxiosPost.mockResolvedValue({ status: 200, data: { ok: true } });
 
       const notification = {
         type: NotificationType.BUILD_COMPLETED,
@@ -210,7 +216,7 @@ describe('Notification Service', () => {
 
       await sendSlackNotification('https://hooks.slack.com/test', notification);
 
-      expect(axios.post).toHaveBeenCalledWith(
+      expect(mockAxiosPost).toHaveBeenCalledWith(
         'https://hooks.slack.com/test',
         expect.objectContaining({
           text: 'Build completed successfully',
@@ -225,7 +231,7 @@ describe('Notification Service', () => {
     });
 
     test('should include buildId in Slack message', async () => {
-      axios.post.mockResolvedValue({ status: 200, data: { ok: true } });
+      mockAxiosPost.mockResolvedValue({ status: 200, data: { ok: true } });
 
       const notification = {
         type: NotificationType.BUILD_STARTED,
@@ -238,7 +244,7 @@ describe('Notification Service', () => {
 
       await sendSlackNotification('https://hooks.slack.com/test', notification);
 
-      const callArgs = axios.post.mock.calls[0][1];
+      const callArgs = mockAxiosPost.mock.calls[0][1];
       const buildIdField = callArgs.attachments[0].blocks[1].fields.find((f) =>
         f.text.includes('Build ID')
       );
@@ -249,7 +255,7 @@ describe('Notification Service', () => {
 
   describe('sendDiscordNotification', () => {
     test('should format Discord embed correctly', async () => {
-      axios.post.mockResolvedValue({ status: 204 });
+      mockAxiosPost.mockResolvedValue({ status: 204 });
 
       const notification = {
         type: NotificationType.BUILD_FAILED,
@@ -262,7 +268,7 @@ describe('Notification Service', () => {
 
       await sendDiscordNotification('https://discord.com/api/webhooks/test', notification);
 
-      expect(axios.post).toHaveBeenCalledWith(
+      expect(mockAxiosPost).toHaveBeenCalledWith(
         'https://discord.com/api/webhooks/test',
         expect.objectContaining({
           content: 'Build failed',
@@ -288,7 +294,7 @@ describe('Notification Service', () => {
     });
 
     test('should include buildId in Discord embed', async () => {
-      axios.post.mockResolvedValue({ status: 204 });
+      mockAxiosPost.mockResolvedValue({ status: 204 });
 
       const notification = {
         type: NotificationType.BUILD_COMPLETED,
@@ -301,7 +307,7 @@ describe('Notification Service', () => {
 
       await sendDiscordNotification('https://discord.com/api/webhooks/test', notification);
 
-      const callArgs = axios.post.mock.calls[0][1];
+      const callArgs = mockAxiosPost.mock.calls[0][1];
       const buildIdField = callArgs.embeds[0].fields.find((f) => f.name === 'Build ID');
       expect(buildIdField).toBeDefined();
       expect(buildIdField.value).toContain('build-999');
@@ -325,7 +331,7 @@ describe('Notification Service', () => {
 
   describe('sendNotification', () => {
     test('should send webhook notification', async () => {
-      axios.post.mockResolvedValue({ status: 200, data: {} });
+      mockAxiosPost.mockResolvedValue({ status: 200, data: {} });
 
       const notification = {
         type: NotificationType.BUILD_STARTED,
@@ -348,7 +354,7 @@ describe('Notification Service', () => {
     });
 
     test('should send Slack notification', async () => {
-      axios.post.mockResolvedValue({ status: 200, data: { ok: true } });
+      mockAxiosPost.mockResolvedValue({ status: 200, data: { ok: true } });
 
       const notification = {
         type: NotificationType.APPROVAL_APPROVED,
@@ -372,7 +378,7 @@ describe('Notification Service', () => {
     });
 
     test('should send Discord notification', async () => {
-      axios.post.mockResolvedValue({ status: 204 });
+      mockAxiosPost.mockResolvedValue({ status: 204 });
 
       const notification = {
         type: NotificationType.BUILD_COMPLETED,
@@ -417,7 +423,7 @@ describe('Notification Service', () => {
     });
 
     test('should send to multiple channels', async () => {
-      axios.post.mockResolvedValue({ status: 200, data: {} });
+      mockAxiosPost.mockResolvedValue({ status: 200, data: {} });
 
       const notification = {
         type: NotificationType.BUILD_FAILED,
@@ -470,7 +476,7 @@ describe('Notification Service', () => {
     });
 
     test('should store notification in Redis', async () => {
-      axios.post.mockResolvedValue({ status: 200, data: {} });
+      mockAxiosPost.mockResolvedValue({ status: 200, data: {} });
 
       const notification = {
         type: NotificationType.BUILD_COMPLETED,
@@ -497,7 +503,7 @@ describe('Notification Service', () => {
     });
 
     test('should continue on individual channel failure', async () => {
-      axios.post
+      mockAxiosPost
         .mockRejectedValueOnce(new Error('Webhook failed'))
         .mockResolvedValueOnce({ status: 200, data: { ok: true } });
 
