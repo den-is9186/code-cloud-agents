@@ -28,8 +28,39 @@ import {
   getTeamNotificationChannels,
 } from './notification-service.js';
 
+// Import all agent classes
+import {
+  SupervisorAgent,
+  type SupervisorInput,
+  type SupervisorOutput,
+} from '../agents/supervisor.js';
+import { ArchitectAgent, type ArchitectInput, type ArchitectOutput } from '../agents/architect.js';
+import { CoachAgent, type CoachInput, type CoachOutput } from '../agents/coach.js';
+import { CodeAgent, type CodeInput, type CodeOutput } from '../agents/code.js';
+import { ReviewAgent, type ReviewInput, type ReviewOutput } from '../agents/review.js';
+import { TestAgent, type TestInput, type TestOutput } from '../agents/test.js';
+import { DocsAgent, type DocsInput, type DocsOutput } from '../agents/docs.js';
+import type {
+  Agent,
+  SubTask,
+  FileChange as AgentFileChange,
+  Step,
+  Dependency,
+} from '../agents/types.js';
+
 import { checkBudgetAfterBuild } from './budget-alert-service.js';
 import { logger } from '../utils/logger';
+
+/**
+ * MVP Hardcoded Models
+ * Diese Models werden für die MVP-Phase verwendet, bis preset integration vollständig ist
+ */
+const MVP_MODELS = {
+  code: 'claude-sonnet-4',
+  review: 'deepseek-r1',
+  test: 'deepseek-v3',
+  docs: 'llama-4-scout-local',
+} as const;
 
 /**
  * Stream emitter interface
@@ -160,10 +191,9 @@ interface ExecutionSequenceResult {
 interface AgentExecutionOptions {
   task: string;
   projectPath: string;
-  runbook: Array<{ step: number; description: string }> | null;
-  subtasks: Array<{ id: string; description: string; agent: string }>;
-  executionPlan: { parallel: boolean; sequential: boolean } | null;
   model: string;
+  context: PipelineContext;
+  preset?: string; // For SupervisorAgent
 }
 
 /**
@@ -191,6 +221,34 @@ interface PresetConfig {
 interface ModelConfig {
   id: string;
   model_id?: string;
+}
+
+/**
+ * Pipeline Context - State shared between agents
+ */
+interface PipelineContext {
+  // From Supervisor
+  supervisorOutput?: SupervisorOutput;
+  agentSequence?: string[];
+  estimatedComplexity?: 'low' | 'medium' | 'high';
+  risks?: string[];
+
+  // From Architect
+  runbook?: Step[];
+  architectComplexity?: 'low' | 'medium' | 'high';
+
+  // From Coach
+  tasks?: SubTask[];
+  executionOrder?: string[][];
+  dependencies?: Dependency[];
+
+  // From Code/Review cycle
+  filesChanged: AgentFileChange[];
+  lastReviewOutput?: ReviewOutput;
+
+  // Flags
+  reviewRetries: number;
+  codeApproved: boolean;
 }
 
 // ===================================================================
@@ -401,10 +459,12 @@ async function executeAgentSequence(
     errors: [],
   };
 
-  // State to pass between agents
-  let runbook: Array<{ step: number; description: string }> | null = null;
-  let subtasks: Array<{ id: string; description: string; agent: string }> = [];
-  let executionPlan: { parallel: boolean; sequential: boolean } | null = null;
+  // Initialize pipeline context
+  const context: PipelineContext = {
+    filesChanged: [],
+    reviewRetries: 0,
+    codeApproved: false,
+  };
 
   for (const agentName of agentSequence) {
     logger.info('Agent executing', { agent: agentName, buildId });
@@ -429,23 +489,86 @@ async function executeAgentSequence(
       // Emit agent start event
       streamEmitter.emitAgentStart({ agent: agentName, task, buildId });
 
-      // Execute agent
+      // Execute agent with pipeline context
       const agentResult = await executeAgent(agentName, {
         task,
         projectPath,
-        runbook,
-        subtasks,
-        executionPlan,
         model: model.id,
+        context,
+        preset,
       });
 
-      // Update state for next agent
-      if (agentName === 'architect' && agentResult.runbook) {
-        runbook = agentResult.runbook;
-      }
-      if (agentName === 'coach' && agentResult.subtasks) {
-        subtasks = agentResult.subtasks;
-        executionPlan = agentResult.executionPlan ?? null;
+      // Special handling for Review agent: Retry loop if not approved
+      if (agentName === 'review' && !context.codeApproved && context.reviewRetries < 3) {
+        logger.warn('Code not approved, retrying...', {
+          attempt: context.reviewRetries + 1,
+          issues: context.lastReviewOutput?.mustFix.length || 0,
+        });
+
+        // Increment retry counter
+        context.reviewRetries++;
+
+        // Re-run Code agent with feedback
+        const codeModel = presetModels['code'] as ModelConfig | undefined;
+        if (codeModel) {
+          logger.info('Re-running Code agent with review feedback');
+
+          const codeAgentRun = await startAgentRun(redis, {
+            buildId,
+            teamId,
+            agentName: 'code',
+            model: codeModel.id,
+            modelVersion: codeModel.model_id || null,
+          });
+
+          const codeResult = await executeAgent('code', {
+            task,
+            projectPath,
+            model: codeModel.id,
+            context, // Context now has lastReviewOutput
+            preset,
+          });
+
+          await completeAgentRun(redis, codeAgentRun.id, {
+            success: true,
+            inputTokens: codeResult.inputTokens || 0,
+            outputTokens: codeResult.outputTokens || 0,
+            output: codeResult.output ? JSON.stringify(codeResult.output) : null,
+          });
+
+          // Re-run Review agent
+          logger.info('Re-running Review agent after code fixes');
+
+          const reviewAgentRun = await startAgentRun(redis, {
+            buildId,
+            teamId,
+            agentName: 'review',
+            model: model.id,
+            modelVersion: model.model_id || null,
+          });
+
+          const reviewResult = await executeAgent('review', {
+            task,
+            projectPath,
+            model: model.id,
+            context,
+            preset,
+          });
+
+          await completeAgentRun(redis, reviewAgentRun.id, {
+            success: true,
+            inputTokens: reviewResult.inputTokens || 0,
+            outputTokens: reviewResult.outputTokens || 0,
+            output: reviewResult.output ? JSON.stringify(reviewResult.output) : null,
+          });
+
+          // If still not approved after 3 retries, fail hard
+          if (!context.codeApproved && context.reviewRetries >= 3) {
+            throw new Error(
+              `Code review failed after ${context.reviewRetries} attempts. Critical issues: ${context.lastReviewOutput?.mustFix.map((i) => i.message).join(', ')}`
+            );
+          }
+        }
       }
 
       // Collect results
@@ -483,7 +606,6 @@ async function executeAgentSequence(
 
       // Record error
       result.errors.push(`${agentName}: ${errorMsg}`);
-      result.success = false;
 
       // Fail agent run
       const agentRun = await getAgentRunByName(redis, buildId, agentName);
@@ -499,14 +621,56 @@ async function executeAgentSequence(
         buildId,
       });
 
-      // Stop execution on critical agents
-      if (['architect', 'coach', 'code'].includes(agentName)) {
+      // Hard failures (stop execution)
+      if (['code', 'review'].includes(agentName)) {
+        result.success = false;
         throw error;
+      }
+
+      // Soft failures (continue execution)
+      if (['test', 'docs'].includes(agentName)) {
+        logger.warn('Soft failure - continuing execution', { agent: agentName });
+        // Don't throw, continue to next agent
       }
     }
   }
 
   return result;
+}
+
+/**
+ * Create agent instance by name
+ *
+ * @param agentName - Agent name
+ * @param model - LLM model to use
+ * @param preset - Preset configuration (required for supervisor agent)
+ * @returns Agent instance
+ * @throws Error if agent name is unknown
+ */
+function createAgentInstance(agentName: string, model: string, preset?: string): Agent {
+  switch (agentName) {
+    case 'supervisor':
+      // SupervisorAgent needs a config object with model and preset
+      if (!preset) {
+        throw new Error('Preset is required for SupervisorAgent');
+      }
+      return new SupervisorAgent({ model, preset });
+    case 'architect':
+      return new ArchitectAgent(model);
+    case 'coach':
+      return new CoachAgent(model);
+    case 'code':
+      return new CodeAgent(model);
+    case 'review':
+      return new ReviewAgent(model);
+    case 'test':
+      return new TestAgent(model);
+    case 'docs':
+      // DocsAgent doesn't take constructor parameters - uses hardcoded model
+      return new DocsAgent();
+    default:
+      throw new Error(`Unknown agent: ${agentName}`);
+  }
 }
 
 /**
@@ -518,100 +682,275 @@ async function executeAgentSequence(
  */
 async function executeAgent(
   agentName: string,
-  _options: AgentExecutionOptions
+  options: AgentExecutionOptions
 ): Promise<AgentExecutionResult> {
-  // Simulate agent execution
-  // In a real implementation, this would call the actual agent
   const startTime = Date.now();
+  const { model, context, preset, task, projectPath } = options;
 
-  // Mock execution based on agent type
+  // Use MVP hardcoded model if not provided
+  const agentModel = model || MVP_MODELS[agentName as keyof typeof MVP_MODELS] || 'claude-sonnet-4';
+
+  // Create agent instance
+  const agent = createAgentInstance(agentName, agentModel, preset);
+
+  // Build agent-specific input and execute
   let result: AgentExecutionResult;
 
   switch (agentName) {
-    case 'supervisor':
-      result = {
-        inputTokens: 1000,
-        outputTokens: 500,
-        duration: Date.now() - startTime,
-        output: { message: 'Supervisor orchestration started' },
-      };
-      break;
+    case 'code': {
+      // Code Agent needs SubTask and optional ReviewResult feedback
+      const codeAgent = agent as CodeAgent;
 
-    case 'architect':
-      result = {
-        inputTokens: 5000,
-        outputTokens: 3000,
-        duration: Date.now() - startTime,
-        runbook: [
-          { step: 1, description: 'Analyze requirements' },
-          { step: 2, description: 'Design architecture' },
-          { step: 3, description: 'Plan implementation' },
-        ],
-        output: { runbookGenerated: true },
+      // Build a SubTask from current context
+      const subtask: SubTask = {
+        id: 'code-task-1',
+        stepId: 'step-1',
+        assignedAgent: 'code',
+        description: task,
+        input: { files: [] },
+        expectedOutput: 'Code implementation',
+        status: 'in_progress',
       };
-      break;
 
-    case 'coach':
-      result = {
-        inputTokens: 3000,
-        outputTokens: 2000,
-        duration: Date.now() - startTime,
-        subtasks: [
-          { id: 'task-1', description: 'Implement feature X', agent: 'code' },
-          { id: 'task-2', description: 'Add error handling', agent: 'code' },
-        ],
-        executionPlan: { parallel: false, sequential: true },
-        output: { tasksPlanned: 2 },
+      const codeInput: CodeInput = {
+        task: subtask,
+        feedback: context.lastReviewOutput,
+        dryRun: false,
       };
-      break;
 
-    case 'code':
-      result = {
-        inputTokens: 10000,
-        outputTokens: 7000,
-        duration: Date.now() - startTime,
-        filesChanged: [
-          { path: 'src/feature.js', action: 'created', changes: 50 },
-          { path: 'src/utils.js', action: 'modified', changes: 10 },
-        ],
-        output: { filesModified: 2 },
-      };
-      break;
+      const output: CodeOutput = await codeAgent.execute(codeInput);
 
-    case 'review':
-      result = {
-        inputTokens: 5000,
-        outputTokens: 2000,
-        duration: Date.now() - startTime,
-        output: { approved: true, issues: [] },
-      };
-      break;
+      // Update context
+      context.filesChanged = output.filesChanged;
 
-    case 'test':
       result = {
-        inputTokens: 8000,
-        outputTokens: 4000,
+        inputTokens: 0, // TODO: Get from LLM response
+        outputTokens: 0,
         duration: Date.now() - startTime,
-        testsWritten: [
-          { path: 'tests/feature.test.js', tests: 5 },
-          { path: 'tests/utils.test.js', tests: 3 },
-        ],
-        output: { testsCreated: 8, passed: 8, failed: 0 },
+        output: output as unknown as Record<string, unknown>,
+        filesChanged: output.filesChanged.map((f) => ({
+          path: f.path,
+          action: f.action,
+          changes: f.content?.length || 0,
+        })),
       };
       break;
+    }
 
-    case 'docs':
+    case 'review': {
+      const reviewAgent = agent as ReviewAgent;
+
+      // Review needs filesChanged from Code agent
+      if (!context.filesChanged || context.filesChanged.length === 0) {
+        throw new Error('Review agent requires filesChanged from Code agent');
+      }
+
+      const subtask: SubTask = {
+        id: 'review-task-1',
+        stepId: 'step-1',
+        assignedAgent: 'review',
+        description: task,
+        input: {},
+        expectedOutput: 'Code review',
+        status: 'in_progress',
+      };
+
+      const reviewInput: ReviewInput = {
+        filesChanged: context.filesChanged,
+        originalTask: subtask,
+        skipSecurityScan: false,
+      };
+
+      const output: ReviewOutput = await reviewAgent.execute(reviewInput);
+
+      // Update context
+      context.lastReviewOutput = output;
+      context.codeApproved = output.approved;
+
       result = {
-        inputTokens: 3000,
-        outputTokens: 2000,
+        inputTokens: 0,
+        outputTokens: 0,
         duration: Date.now() - startTime,
-        docsUpdated: [
-          { path: 'README.md', action: 'modified', changes: 20 },
-          { path: 'docs/API.md', action: 'created', changes: 50 },
-        ],
-        output: { docsUpdated: 2 },
+        output: output as unknown as Record<string, unknown>,
       };
       break;
+    }
+
+    case 'test': {
+      const testAgent = agent as TestAgent;
+
+      if (!context.filesChanged || context.filesChanged.length === 0) {
+        throw new Error('Test agent requires filesChanged from Code agent');
+      }
+
+      const subtask: SubTask = {
+        id: 'test-task-1',
+        stepId: 'step-1',
+        assignedAgent: 'test',
+        description: task,
+        input: {},
+        expectedOutput: 'Test implementation',
+        status: 'in_progress',
+      };
+
+      const testInput: TestInput = {
+        filesChanged: context.filesChanged,
+        task: subtask,
+        runTests: true,
+        dryRun: false,
+      };
+
+      const output: TestOutput = await testAgent.execute(testInput);
+
+      result = {
+        inputTokens: 0,
+        outputTokens: 0,
+        duration: Date.now() - startTime,
+        output: output as unknown as Record<string, unknown>,
+        testsWritten: output.testsWritten.map((t) => ({
+          path: t.path,
+          tests: t.testCount,
+        })),
+      };
+      break;
+    }
+
+    case 'docs': {
+      const docsAgent = agent as DocsAgent;
+
+      if (!context.filesChanged || context.filesChanged.length === 0) {
+        throw new Error('Docs agent requires filesChanged from Code agent');
+      }
+
+      const docsInput: DocsInput = {
+        filesChanged: context.filesChanged,
+        task: { description: task },
+        dryRun: false,
+        skipChangelog: false,
+      };
+
+      const output: DocsOutput = await docsAgent.execute(docsInput);
+
+      result = {
+        inputTokens: 0,
+        outputTokens: 0,
+        duration: Date.now() - startTime,
+        output: output as unknown as Record<string, unknown>,
+        docsUpdated: output.docsUpdated.map((d) => ({
+          path: d.path,
+          action: d.action,
+          changes: d.content?.length || 0,
+        })),
+      };
+      break;
+    }
+
+    case 'supervisor': {
+      const supervisorAgent = agent as SupervisorAgent;
+
+      const supervisorInput: SupervisorInput = {
+        task: task,
+        projectPath: projectPath,
+      };
+
+      const output: SupervisorOutput = await supervisorAgent.execute(supervisorInput);
+
+      // Store in context for next agents
+      context.supervisorOutput = output;
+      context.agentSequence = output.agentSequence;
+      context.estimatedComplexity = output.estimatedComplexity;
+      context.risks = output.risks;
+
+      result = {
+        inputTokens: 0,
+        outputTokens: 0,
+        duration: Date.now() - startTime,
+        output: output as unknown as Record<string, unknown>,
+      };
+      break;
+    }
+
+    case 'architect': {
+      const architectAgent = agent as ArchitectAgent;
+
+      const architectInput: ArchitectInput = {
+        task: task,
+        projectPath: projectPath,
+      };
+
+      const output: ArchitectOutput = await architectAgent.execute(architectInput);
+
+      // Store runbook for Coach
+      context.runbook = output.runbook;
+      context.architectComplexity = output.estimatedComplexity;
+
+      // Log critical risks
+      if (context.risks && context.risks.length > 0) {
+        logger.warn('Risks identified', {
+          agent: 'architect',
+          risks: context.risks,
+        });
+      }
+
+      result = {
+        inputTokens: 0,
+        outputTokens: 0,
+        duration: Date.now() - startTime,
+        output: output as unknown as Record<string, unknown>,
+        runbook: output.runbook.map((s, idx) => ({
+          step: idx + 1,
+          description: s.description,
+        })),
+      };
+      break;
+    }
+
+    case 'coach': {
+      const coachAgent = agent as CoachAgent;
+
+      if (!context.runbook) {
+        throw new Error('Coach agent requires runbook from Architect');
+      }
+
+      const coachInput: CoachInput = {
+        runbook: context.runbook,
+      };
+
+      const output: CoachOutput = await coachAgent.execute(coachInput);
+
+      // Validate output
+      if (!output.tasks || output.tasks.length === 0) {
+        throw new Error('Coach failed to create SubTasks');
+      }
+
+      // Store for execution
+      context.tasks = output.tasks;
+      context.executionOrder = output.executionOrder;
+      context.dependencies = output.dependencies;
+
+      logger.info('Coach planning completed', {
+        agent: 'coach',
+        totalTasks: output.tasks.length,
+        batches: output.executionOrder.length,
+      });
+
+      result = {
+        inputTokens: 0,
+        outputTokens: 0,
+        duration: Date.now() - startTime,
+        output: output as unknown as Record<string, unknown>,
+        subtasks: output.tasks.map((t) => ({
+          id: t.id,
+          description: t.description,
+          agent: t.assignedAgent,
+        })),
+        executionPlan: {
+          parallel: output.executionOrder.some((batch) => batch.length > 1),
+          sequential: true,
+        },
+      };
+      break;
+    }
 
     default:
       throw new Error(`Unknown agent: ${agentName}`);

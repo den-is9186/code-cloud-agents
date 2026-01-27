@@ -7,11 +7,15 @@
 
 import crypto from 'crypto';
 import type { Redis } from 'ioredis';
+import { validateEnvironment, getRequiredEnv, getOptionalEnv } from '../utils/env-validation';
+
+// Validate environment variables at module load
+validateEnvironment();
 
 // JWT configuration
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
-const JWT_EXPIRY = process.env.JWT_EXPIRY || '24h';
-const REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || '7d';
+const JWT_SECRET = getRequiredEnv('JWT_SECRET', crypto.randomBytes(64).toString('hex'));
+const JWT_EXPIRY = getOptionalEnv('JWT_EXPIRY', '24h');
+const REFRESH_TOKEN_EXPIRY = getOptionalEnv('REFRESH_TOKEN_EXPIRY', '7d');
 
 /**
  * User roles with hierarchical permissions

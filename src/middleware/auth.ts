@@ -289,15 +289,19 @@ function requireTeamOwnership(
  * Populates req.auth if valid credentials are present, but doesn't fail if not
  * Used for tiered rate limiting based on authentication level
  */
-function extractAuth() {
-  return async (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+function extractAuth(): (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => Promise<void> {
+  return async (req: AuthenticatedRequest, _res: Response, next: NextFunction): Promise<void> => {
     try {
       // Try API key first
       const apiKey = extractApiKey(req);
       if (apiKey) {
         try {
           // Get redis from app.locals (already set in api-server.js)
-          const redis: Redis = req.app.locals.redis;
+          const redis: Redis | undefined = req.app.locals.redis;
           if (!redis) {
             // If redis not available, continue without auth
             return next();
@@ -329,7 +333,7 @@ function extractAuth() {
             type: 'jwt',
             userId: decoded.userId,
             email: decoded.email,
-            role: decoded.role || Roles.VIEWER,
+            role: decoded.role || 'viewer',
           };
 
           return next();

@@ -1,5 +1,6 @@
 import { llmClient } from '../llm/client';
-import { run, RunConfig } from '../index';
+// DEPRECATED: run() function commented out during agent refactor
+// import { run, RunConfig } from '../index';
 import { TaskAnalysis, TeamSuggestion } from '../agents/types';
 
 const PRESET_INFO = {
@@ -231,7 +232,18 @@ ${suggestion.optimizationTip ? `💡 Tipp: ${suggestion.optimizationTip}\n` : ''
 • Oder stelle eine Frage`;
   }
 
+  // DEPRECATED: Commented out during agent refactor
+  // Will be re-implemented after agent refactor is complete
   private async handleExecute(): Promise<string> {
+    return `⚠️ Execute-Funktion vorübergehend deaktiviert während Agent-Refactoring.
+
+Bitte verwende stattdessen die API:
+- POST /api/builds/start
+- GET /api/builds/:buildId
+
+Oder warte bis das Refactoring abgeschlossen ist.`;
+
+    /*
     if (!this.pendingSuggestion) {
       return 'Ich habe noch keinen Task zum Ausführen. Beschreibe zuerst was du bauen möchtest.';
     }
@@ -268,6 +280,7 @@ Möchtest du es nochmal versuchen oder den Task anpassen?`;
     } catch (error: any) {
       return `❌ Fehler beim Ausführen: ${error.message}`;
     }
+    */
   }
 
   private async handleAdjust(message: string): Promise<string> {
