@@ -168,9 +168,7 @@ export class LLMClient {
       availableModels,
     });
 
-    throw new Error(
-      `Unknown model: ${model}. Available models: ${availableModels}`
-    );
+    throw new Error(`Unknown model: ${model}. Available models: ${availableModels}`);
   }
 
   private async callNovita(
