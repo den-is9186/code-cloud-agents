@@ -74,7 +74,7 @@ export class MultiRepoAgent implements Agent<MultiRepoInput, MultiRepoResult> {
         const fileChanges = this.parseChanges(response.content);
 
         // Create branch
-        await this.createBranch(repoPath, branchName, baseBranch);
+        await this.createBranch(repoPath, branchName, baseBranch, repo.remote);
 
         // Apply changes
         await this.applyChanges(repoPath, fileChanges);
@@ -280,29 +280,46 @@ Please generate the necessary file changes for this repository.`;
   private parseChanges(response: string): FileChange[] {
     try {
       const parsed = JSON.parse(response);
-      return parsed.files || [];
+
+      if (!parsed.files || !Array.isArray(parsed.files)) {
+        throw new Error('LLM response missing "files" array');
+      }
+
+      return parsed.files;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to parse LLM response', {
         agent: 'multi-repo',
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
+        response: response.substring(0, 200), // Log first 200 chars for debugging
       });
-      return [];
+
+      throw new Error(`Failed to parse LLM response: ${errorMessage}`);
     }
   }
 
-  private async createBranch(repoPath: string, branchName: string, baseBranch: string) {
+  private async createBranch(
+    repoPath: string,
+    branchName: string,
+    baseBranch: string,
+    remote?: string
+  ) {
     const { execFile } = require('child_process');
     const { promisify } = require('util');
     const execFileAsync = promisify(execFile);
 
-    // Fetch latest changes
-    await execFileAsync('git', ['fetch', 'origin'], { cwd: repoPath });
+    // Fetch latest changes if remote is configured
+    if (remote) {
+      await execFileAsync('git', ['fetch', remote], { cwd: repoPath });
+    }
 
     // Checkout base branch
     await execFileAsync('git', ['checkout', baseBranch], { cwd: repoPath });
 
-    // Pull latest changes
-    await execFileAsync('git', ['pull', 'origin', baseBranch], { cwd: repoPath });
+    // Pull latest changes if remote is configured
+    if (remote) {
+      await execFileAsync('git', ['pull', remote, baseBranch], { cwd: repoPath });
+    }
 
     // Create and checkout new branch
     await execFileAsync('git', ['checkout', '-b', branchName], { cwd: repoPath });
@@ -312,15 +329,32 @@ Please generate the necessary file changes for this repository.`;
     for (const change of changes) {
       const filePath = path.join(repoPath, change.path);
 
+      // Security: Validate path is within repository boundary
+      const resolvedPath = path.resolve(filePath);
+      const resolvedRepo = path.resolve(repoPath);
+
+      if (!resolvedPath.startsWith(resolvedRepo + path.sep) && resolvedPath !== resolvedRepo) {
+        throw new Error(
+          `Security: Path traversal detected. Attempted to access ${change.path} outside repository boundary`
+        );
+      }
+
       if (change.action === 'delete') {
         await fs.unlink(filePath);
       } else if (change.action === 'create' || change.action === 'modify') {
+        // Validate content exists
+        if (!change.content || change.content.trim() === '') {
+          throw new Error(
+            `Invalid content for ${change.action} action on ${change.path}. Content cannot be empty.`
+          );
+        }
+
         // Ensure directory exists
         const dir = path.dirname(filePath);
         await fs.mkdir(dir, { recursive: true });
 
         // Write file
-        await fs.writeFile(filePath, change.content || '', 'utf-8');
+        await fs.writeFile(filePath, change.content, 'utf-8');
       }
     }
   }

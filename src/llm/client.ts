@@ -159,8 +159,16 @@ export class LLMClient {
         return config;
       }
     }
-    // Default to local
-    return modelConfigs['llama-4-scout-local']!;
+
+    // No silent fallback - throw error for unknown models
+    const availableModels = Object.keys(modelConfigs).join(', ');
+    logger.error('Unknown model requested', {
+      agent: 'llm-client',
+      requestedModel: model,
+      availableModels,
+    });
+
+    throw new Error(`Unknown model: ${model}. Available models: ${availableModels}`);
   }
 
   private async callNovita(
