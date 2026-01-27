@@ -314,7 +314,7 @@ function extractAuth() {
           };
 
           return next();
-        } catch (_error) {
+        } catch {
           // Silently continue without auth
         }
       }
@@ -333,14 +333,14 @@ function extractAuth() {
           };
 
           return next();
-        } catch (_error) {
+        } catch {
           // Silently continue without auth
         }
       }
 
       // No valid authentication found - continue without auth
       return next();
-    } catch (_error) {
+    } catch {
       // On any error, just continue without auth
       return next();
     }
