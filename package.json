@@ -50,16 +50,6 @@
     "prettier": "^3.8.1",
     "supertest": "^7.2.2"
   },
-  "jest": {
-    "testEnvironment": "node",
-    "coverageDirectory": "coverage",
-    "collectCoverageFrom": [
-      "src/**/*.js"
-    ],
-    "testMatch": [
-      "**/tests/**/*.test.js"
-    ]
-  },
   "directories": {
     "doc": "docs",
     "test": "tests"
