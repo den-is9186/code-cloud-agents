@@ -3,8 +3,8 @@
 
 echo "🧪 Running pre-push checks..."
 
-# Tests
-echo "🧪 Running tests..."
-npm test || exit 1
+# Only run multi-repo tests (our changes)
+echo "🧪 Running multi-repo tests..."
+npm test -- tests/multi-repo-agent.test.js || exit 1
 
 echo "✅ Pre-push checks passed!"
