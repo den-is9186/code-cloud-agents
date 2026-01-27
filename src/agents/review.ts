@@ -8,7 +8,7 @@ import { logger } from '../utils/logger';
 /**
  * Review Agent Input
  */
-interface ReviewInput {
+export interface ReviewInput {
   filesChanged: FileChange[];
   originalTask: SubTask;
   skipSecurityScan?: boolean;
@@ -17,7 +17,7 @@ interface ReviewInput {
 /**
  * Review Agent Output
  */
-interface ReviewOutput {
+export interface ReviewOutput {
   approved: boolean;
   issues: Issue[];
   summary: string;

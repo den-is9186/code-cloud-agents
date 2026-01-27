@@ -9,7 +9,7 @@ import { logger } from '../utils/logger';
 /**
  * Docs Agent Input
  */
-interface DocsInput {
+export interface DocsInput {
   filesChanged: FileChange[];
   task: { description: string };
   dryRun?: boolean;
@@ -19,7 +19,7 @@ interface DocsInput {
 /**
  * Docs Agent Output
  */
-interface DocsOutput {
+export interface DocsOutput {
   docsUpdated: FileChange[];
   changelogEntry?: string;
   docQualityScore?: number;

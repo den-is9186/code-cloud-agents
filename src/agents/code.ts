@@ -9,7 +9,7 @@ import { logger } from '../utils/logger';
 /**
  * Code Agent Input
  */
-interface CodeInput {
+export interface CodeInput {
   task: SubTask;
   feedback?: ReviewResult;
   dryRun?: boolean;
@@ -18,7 +18,7 @@ interface CodeInput {
 /**
  * Code Agent Output
  */
-interface CodeOutput {
+export interface CodeOutput {
   filesChanged: FileChange[];
   explanation: string;
   needsReview: boolean;

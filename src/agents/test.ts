@@ -18,7 +18,7 @@ import { logger } from '../utils/logger';
 /**
  * Test Agent Input
  */
-interface TestInput {
+export interface TestInput {
   filesChanged: FileChange[];
   task: SubTask;
   runTests?: boolean; // Default true
@@ -28,7 +28,7 @@ interface TestInput {
 /**
  * Test Agent Output
  */
-interface TestOutput {
+export interface TestOutput {
   testsWritten: TestFile[];
   testResults?: TestResult;
   failures?: TestFailure[];
