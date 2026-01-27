@@ -284,5 +284,68 @@ function requireTeamOwnership(
   };
 }
 
-export { authenticate, requireRole, requireTeamOwnership, Roles };
+/**
+ * Extract authentication info without enforcing it
+ * Populates req.auth if valid credentials are present, but doesn't fail if not
+ * Used for tiered rate limiting based on authentication level
+ */
+function extractAuth() {
+  return async (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+    try {
+      // Try API key first
+      const apiKey = extractApiKey(req);
+      if (apiKey) {
+        try {
+          // Get redis from app.locals (already set in api-server.js)
+          const redis: Redis = req.app.locals.redis;
+          if (!redis) {
+            // If redis not available, continue without auth
+            return next();
+          }
+          
+          const apiKeyData = await verifyApiKey(redis, apiKey);
+
+          req.auth = {
+            type: 'apikey',
+            role: apiKeyData.role,
+            teamId: apiKeyData.teamId,
+            permissions: apiKeyData.permissions,
+            name: apiKeyData.name,
+          };
+
+          return next();
+        } catch (error) {
+          // Silently continue without auth
+        }
+      }
+
+      // Try JWT token
+      const token = extractToken(req);
+      if (token) {
+        try {
+          const decoded = verifyToken(token);
+
+          req.auth = {
+            type: 'jwt',
+            userId: decoded.userId,
+            email: decoded.email,
+            role: decoded.role || Roles.VIEWER,
+          };
+
+          return next();
+        } catch (error) {
+          // Silently continue without auth
+        }
+      }
+
+      // No valid authentication found - continue without auth
+      return next();
+    } catch (error) {
+      // On any error, just continue without auth
+      return next();
+    }
+  };
+}
+
+export { authenticate, extractAuth, requireRole, requireTeamOwnership, Roles };
 export type { AuthData, AuthenticateOptions };
