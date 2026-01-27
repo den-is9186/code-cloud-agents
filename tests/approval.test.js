@@ -6,7 +6,7 @@ jest.mock('ioredis');
 
 const app = require('../src/api-server');
 const { States } = require('../src/workflow/state-machine');
-const { generateToken, Roles } = require('../src/services/auth-service');
+const { generateToken, Roles } = require('../dist/services/auth-service');
 
 // Helper to generate test auth token
 function getTestToken(role = Roles.MANAGER) {
@@ -41,7 +41,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
     const createResponse = await authRequest.post('/api/v1/teams').send({
       name: 'Test Team',
       repo: 'github.com/test/repo',
-      preset: 'IQ',
+      preset: 'A',
       task: 'Test task description',
     });
 
@@ -53,7 +53,7 @@ describe('Integration Tests - Team Approval/Reject API', () => {
       id: teamId,
       name: 'Test Team',
       repo: 'github.com/test/repo',
-      preset: 'IQ',
+      preset: 'A',
       task: 'Test task description',
       status: 'awaiting_approval',
       workflowState: States.AWAITING_APPROVAL,

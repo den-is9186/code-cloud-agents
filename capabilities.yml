@@ -210,7 +210,32 @@ multi_agent_system:
     description: "Track costs per build, team, and user with budget alerts"
     mode: "INTERNAL"
     criticality: "HIGH"
-    status: "planned"
+    status: "implemented"
+    functions:
+      calculateModelCost:
+        description: "Calculate cost for a model based on token usage"
+        test: "tests/cost-tracker.test.js"
+      calculateAgentCost:
+        description: "Calculate cost for an agent run"
+        test: "tests/cost-tracker.test.js"
+      calculateBuildCost:
+        description: "Calculate total cost for a build by summing all agent runs"
+        test: "tests/cost-tracker.test.js"
+      checkBudget:
+        description: "Check if build is approaching or exceeding budget"
+        test: "tests/cost-tracker.test.js"
+      getBuildBudgetStatus:
+        description: "Get budget status for a build"
+        test: "tests/cost-tracker.test.js"
+      estimatePresetCost:
+        description: "Estimate cost for a preset based on average token usage"
+        test: "tests/cost-tracker.test.js"
+      comparePresetCosts:
+        description: "Compare costs between multiple presets"
+        test: "tests/cost-tracker.test.js"
+      generateBuildCostReport:
+        description: "Generate detailed cost report for a build"
+        test: "tests/cost-tracker.test.js"
     tests_required:
       - type: "unit"
         name: "calculate_agent_cost"
@@ -227,6 +252,249 @@ multi_agent_system:
       - type: "integration"
         name: "cost_tracking_flow"
         description: "Track costs throughout build and update database"
+
+  # ──────────────────────────────────────────────────────────────
+  # Preset Configuration
+  # ──────────────────────────────────────────────────────────────
+
+  - id: "preset-functions"
+    name: "Preset Configuration Functions"
+    description: "Functions for loading and managing preset configurations"
+    mode: "INTERNAL"
+    criticality: "HIGH"
+    status: "implemented"
+    functions:
+      loadConfig:
+        description: "Load both presets and models configuration"
+        test: "tests/presets.test.js"
+      loadPresetsYAML:
+        description: "Load presets configuration from YAML"
+        test: "tests/presets.test.js"
+      loadModelsYAML:
+        description: "Load models configuration from YAML"
+        test: "tests/presets.test.js"
+      clearCache:
+        description: "Clear configuration cache"
+        test: "tests/presets.test.js"
+      getAllPresets:
+        description: "Get all available presets"
+        test: "tests/presets.test.js"
+      getPreset:
+        description: "Get a specific preset by ID"
+        test: "tests/presets.test.js"
+      presetExists:
+        description: "Check if a preset exists"
+        test: "tests/presets.test.js"
+      getStandardPresets:
+        description: "Get all standard presets (A, B, C, D)"
+        test: "tests/presets.test.js"
+      getSpecialPresets:
+        description: "Get special presets (V, L, LOCAL, etc.)"
+        test: "tests/presets.test.js"
+      getRecommendedPreset:
+        description: "Get recommended preset"
+        test: "tests/presets.test.js"
+      getSelectionGuide:
+        description: "Get preset selection guide"
+        test: "tests/presets.test.js"
+      getTwoPhaseWorkflow:
+        description: "Get two-phase workflow configuration"
+        test: "tests/presets.test.js"
+      getAllModels:
+        description: "Get all available models"
+        test: "tests/presets.test.js"
+      getModel:
+        description: "Get a specific model by ID"
+        test: "tests/presets.test.js"
+      modelExists:
+        description: "Check if a model exists"
+        test: "tests/presets.test.js"
+      getModelsByTier:
+        description: "Get models by tier"
+        test: "tests/presets.test.js"
+      getModelSelectionGuide:
+        description: "Get model selection guide"
+        test: "tests/presets.test.js"
+      getPricingComparison:
+        description: "Get pricing comparison"
+        test: "tests/presets.test.js"
+      validatePreset:
+        description: "Validate preset configuration"
+        test: "tests/presets.test.js"
+      validateModel:
+        description: "Validate model configuration"
+        test: "tests/presets.test.js"
+      validateAllPresets:
+        description: "Validate all presets"
+        test: "tests/presets.test.js"
+      validateAllModels:
+        description: "Validate all models"
+        test: "tests/presets.test.js"
+      calculateModelCost:
+        description: "Calculate cost for a model (from presets.js)"
+        test: "tests/presets.test.js"
+      getPresetEstimatedCost:
+        description: "Get estimated cost for a preset"
+        test: "tests/presets.test.js"
+      comparePresetCosts:
+        description: "Compare costs between presets (from presets.js)"
+        test: "tests/presets.test.js"
+      getPresetForUseCase:
+        description: "Get preset for use case"
+        test: "tests/presets.test.js"
+      getPresetsByPriority:
+        description: "Get presets by priority"
+        test: "tests/presets.test.js"
+      getPresetModels:
+        description: "Get all agent models for a preset"
+        test: "tests/presets.test.js"
+      getValidPresetIds:
+        description: "Get list of valid preset IDs"
+        test: "tests/presets.test.js"
+      getValidModelIds:
+        description: "Get list of valid model IDs"
+        test: "tests/presets.test.js"
+
+  # ──────────────────────────────────────────────────────────────
+  # Authentication Middleware
+  # ──────────────────────────────────────────────────────────────
+
+  - id: "auth-middleware"
+    name: "Authentication Middleware"
+    description: "Middleware for authentication and authorization"
+    mode: "MIDDLEWARE"
+    criticality: "HIGH"
+    status: "implemented"
+    functions:
+      authenticate:
+        description: "Verify JWT token or API key and attach user info to request"
+        test: "tests/auth.test.js"
+      requireRole:
+        description: "Check if authenticated user has required role"
+        test: "tests/auth.test.js"
+      requireTeamOwnership:
+        description: "Check if user owns the team or is admin/manager"
+        test: "tests/auth.test.js"
+
+  # ──────────────────────────────────────────────────────────────
+  # CSRF Protection
+  # ──────────────────────────────────────────────────────────────
+
+  - id: "csrf-middleware"
+    name: "CSRF Protection Middleware"
+    description: "Cross-Site Request Forgery protection"
+    mode: "MIDDLEWARE"
+    criticality: "HIGH"
+    status: "implemented"
+    functions:
+      csrfProtection:
+        description: "CSRF protection middleware using Double Submit Cookie pattern"
+        test: "tests/cors-csrf.test.js"
+      getCsrfTokenEndpoint:
+        description: "Endpoint to get CSRF token"
+        test: "tests/cors-csrf.test.js"
+      generateCsrfToken:
+        description: "Generate a secure CSRF token"
+        test: "tests/cors-csrf.test.js"
+      verifyCsrfToken:
+        description: "Verify CSRF token"
+        test: "tests/cors-csrf.test.js"
+      getSecureCookieOptions:
+        description: "Get secure cookie configuration"
+        test: "tests/cors-csrf.test.js"
+
+  # ──────────────────────────────────────────────────────────────
+  # Authentication Service
+  # ──────────────────────────────────────────────────────────────
+
+  - id: "auth-service"
+    name: "Authentication Service"
+    description: "JWT-based authentication with RBAC"
+    mode: "SERVICE"
+    criticality: "HIGH"
+    status: "implemented"
+    functions:
+      hashPassword:
+        description: "Hash password using PBKDF2"
+        test: "tests/auth-service.test.js"
+      verifyPassword:
+        description: "Verify password against hash"
+        test: "tests/auth-service.test.js"
+      generateToken:
+        description: "Generate JWT token"
+        test: "tests/auth-service.test.js"
+      verifyToken:
+        description: "Verify and decode JWT token"
+        test: "tests/auth-service.test.js"
+      createUser:
+        description: "Create a new user"
+        test: "tests/auth-service.test.js"
+      authenticateUser:
+        description: "Authenticate user with email and password"
+        test: "tests/auth-service.test.js"
+      refreshAccessToken:
+        description: "Refresh access token using refresh token"
+        test: "tests/auth-service.test.js"
+      revokeRefreshToken:
+        description: "Revoke refresh token (logout)"
+        test: "tests/auth-service.test.js"
+      createApiKey:
+        description: "Create API key for service-to-service authentication"
+        test: "tests/auth-service.test.js"
+      verifyApiKey:
+        description: "Verify API key"
+        test: "tests/auth-service.test.js"
+      hasRole:
+        description: "Check if user has required role"
+        test: "tests/auth-service.test.js"
+      hasPermission:
+        description: "Check if user has required permission"
+        test: "tests/auth-service.test.js"
+
+  # ──────────────────────────────────────────────────────────────
+  # Build Tracker Service
+  # ──────────────────────────────────────────────────────────────
+
+  - id: "build-tracker-service"
+    name: "Build Tracker Service"
+    description: "Manages build lifecycle and tracking"
+    mode: "SERVICE"
+    criticality: "HIGH"
+    status: "implemented"
+    functions:
+      startBuild:
+        description: "Start a new build for a team"
+        test: "tests/build-tracker.test.js"
+      markBuildRunning:
+        description: "Mark a build as running"
+        test: "tests/build-tracker.test.js"
+      completeBuild:
+        description: "Mark a build as completed"
+        test: "tests/build-tracker.test.js"
+      failBuild:
+        description: "Mark a build as failed"
+        test: "tests/build-tracker.test.js"
+      startAgentRun:
+        description: "Start an agent run within a build"
+        test: "tests/build-tracker.test.js"
+      completeAgentRun:
+        description: "Complete an agent run with results"
+        test: "tests/build-tracker.test.js"
+      failAgentRun:
+        description: "Fail an agent run"
+        test: "tests/build-tracker.test.js"
+      getBuildStatus:
+        description: "Get build status with detailed information"
+        test: "tests/build-tracker.test.js"
+      getTeamBuildHistory:
+        description: "Get all builds for a team"
+        test: "tests/build-tracker.test.js"
+      getLatestTeamBuild:
+        description: "Get the latest build for a team"
+        test: "tests/build-tracker.test.js"
+      getBuildStatistics:
+        description: "Get comprehensive build statistics"
+        test: "tests/build-tracker.test.js"
 
 # ═══════════════════════════════════════════════════════════════
 # DASHBOARD & UI CAPABILITIES (NEU)
@@ -383,6 +651,57 @@ original_features:
         description: "API-Fehler werden caught"
       - type: "integration"
         description: "Workflow schlägt graceful fehl bei Fehlern"
+
+  - id: "global-error-handlers"
+    name: "Global Error Handlers"
+    description: "Process-level error handlers for unhandled rejections, uncaught exceptions, and graceful shutdown"
+    status: "implemented"
+    tests_required:
+      - type: "unit"
+        name: "unhandled_rejection_handler"
+        description: "Handles unhandled promise rejections with logging"
+      - type: "unit"
+        name: "uncaught_exception_handler"
+        description: "Handles uncaught exceptions with graceful shutdown"
+      - type: "unit"
+        name: "process_warning_handler"
+        description: "Handles process warnings with logging"
+      - type: "unit"
+        name: "graceful_shutdown"
+        description: "Graceful shutdown on SIGTERM/SIGINT"
+      - type: "unit"
+        name: "exception_monitor"
+        description: "Monitor exceptions before crash for metrics"
+
+  - id: "rate-limiting"
+    name: "Distributed Rate Limiting"
+    description: "Redis-backed rate limiting for multi-instance deployments with tiered limits"
+    status: "implemented"
+    tests_required:
+      - type: "unit"
+        name: "createRateLimiter"
+        description: "Create Redis-backed rate limiter with configurable window and max requests"
+      - type: "unit"
+        name: "createGlobalRateLimiter"
+        description: "Create tiered global rate limiter (10/100/1000 req/min based on auth)"
+      - type: "unit"
+        name: "createTeamRateLimiter"
+        description: "Create per-team rate limiter (1000 req/hour per team)"
+      - type: "unit"
+        name: "createStrictRateLimiter"
+        description: "Create strict rate limiter for auth endpoints (5 req/15min)"
+      - type: "unit"
+        name: "createBuildRateLimiter"
+        description: "Create build creation rate limiter (100 builds/hour per team)"
+      - type: "integration"
+        name: "rate_limit_tiered_auth"
+        description: "Test tiered rate limiting based on authentication level"
+      - type: "integration"
+        name: "rate_limit_redis_distributed"
+        description: "Test rate limiting works across multiple instances via Redis"
+      - type: "integration"
+        name: "rate_limit_headers"
+        description: "Test standard rate limit headers are returned"
 
 # ═══════════════════════════════════════════════════════════════
 # TESTING COVERAGE REQUIREMENTS

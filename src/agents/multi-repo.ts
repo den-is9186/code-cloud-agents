@@ -19,6 +19,7 @@ import type {
 } from './types';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { logger } from '../utils/logger';
 
 export interface MultiRepoInput extends MultiRepoOperation {
   tier?: 'budget' | 'premium';
@@ -51,7 +52,7 @@ export class MultiRepoAgent implements Agent<MultiRepoInput, MultiRepoResult> {
     // Process each repository
     for (const repo of repos) {
       try {
-        console.log(`[multi-repo] Processing ${repo.name}...`);
+        logger.info('Processing repository', { agent: 'multi-repo', repo: repo.name });
 
         // Change to repo directory
         const repoPath = repo.path;
@@ -103,10 +104,20 @@ export class MultiRepoAgent implements Agent<MultiRepoInput, MultiRepoResult> {
           prUrl,
         });
 
-        console.log(`[multi-repo] ✓ ${repo.name} completed`);
+        logger.info('Repository processing completed', {
+          agent: 'multi-repo',
+          repo: repo.name,
+          filesChanged: fileChanges.length,
+        });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`[multi-repo] ✗ ${repo.name} failed:`, errorMessage);
+        const stack = error instanceof Error ? error.stack : undefined;
+        logger.error('Repository processing failed', {
+          agent: 'multi-repo',
+          repo: repo.name,
+          error: errorMessage,
+          stack,
+        });
         errors.push({
           repo: repo.name,
           error: errorMessage,
@@ -186,14 +197,20 @@ export class MultiRepoAgent implements Agent<MultiRepoInput, MultiRepoResult> {
           }
         }
       } catch (error) {
-        console.error('[multi-repo] Error walking directory:', error);
+        logger.error('Error walking directory', {
+          agent: 'multi-repo',
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     };
 
     try {
       await walk(repoPath);
     } catch (error) {
-      console.error('[multi-repo] Error walking directory:', error);
+      logger.error('Error walking directory', {
+        agent: 'multi-repo',
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     // Detect language and framework
@@ -230,34 +247,19 @@ export class MultiRepoAgent implements Agent<MultiRepoInput, MultiRepoResult> {
   }
 
   private getSystemPrompt(): string {
-    return `You are a Multi-Repo Agent that applies consistent changes across multiple repositories.
-
-Your job is to:
-1. Understand the requested change
-2. Generate appropriate file modifications for the current repository
-3. Ensure consistency with the overall task
-4. Handle edge cases specific to each repository
-
-Return your response as JSON with the following structure:
+    return `Sie sind ein Multi-Repo Agent, der Änderungen an mehreren Repositories koordiniert.
+Geben Sie Ihre Antwort **ausschließlich** als gültiges JSON zurück. Verwenden Sie das folgende Format:
 {
   "files": [
     {
-      "path": "relative/path/to/file.ext",
+      "path": "relativer/pfad/zur/datei.ext",
       "action": "create" | "modify" | "delete",
-      "content": "full file content (for create/modify)"
+      "content": "vollständiger Dateiinhalt (falls create oder modify)"
     }
   ],
-  "explanation": "Brief explanation of changes made"
+  "explanation": "Kurze Erklärung der Änderungen"
 }
-
-Guidelines:
-- Respect existing code style and conventions
-- Don't break existing functionality
-- Include proper error handling
-- Add comments where necessary
-- Consider repository-specific differences
-
-Return ONLY valid JSON, no markdown or explanations outside the JSON.`;
+KEINE zusätzlichen Erklärungen, Überschriften oder Markdown. Nur JSON!`;
   }
 
   private buildPrompt(task: string, changes: string, repoContext: any): string {
@@ -280,7 +282,10 @@ Please generate the necessary file changes for this repository.`;
       const parsed = JSON.parse(response);
       return parsed.files || [];
     } catch (error) {
-      console.error('[multi-repo] Failed to parse LLM response:', error);
+      logger.error('Failed to parse LLM response', {
+        agent: 'multi-repo',
+        error: error instanceof Error ? error.message : String(error),
+      });
       return [];
     }
   }
@@ -375,7 +380,10 @@ Please generate the necessary file changes for this repository.`;
 
       return stdout.trim();
     } catch (error) {
-      console.error('[multi-repo] Failed to create PR:', error);
+      logger.error('Failed to create PR', {
+        agent: 'multi-repo',
+        error: error instanceof Error ? error.message : String(error),
+      });
       return 'PR creation failed';
     }
   }
