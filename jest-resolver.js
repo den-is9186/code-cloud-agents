@@ -1,52 +1,34 @@
 /**
- * Custom Jest Resolver
- *
- * Resolves:
- * 1. ../dist/* -> ../src/* (for JS files importing from dist)
- * 2. .js extensions to .ts when .ts file exists (only for src files)
+ * Jest Module Resolver
+ * 
+ * Custom resolver to map dist/ imports to src/ during testing.
+ * Handles Windows path separators for cross-platform compatibility.
  */
-const path = require('path');
-const fs = require('fs');
 
 module.exports = (request, options) => {
-  // Skip node_modules - use default resolution
-  if (request.includes('node_modules') || options.basedir.includes('node_modules')) {
-    return options.defaultResolver(request, options);
-  }
-
-  // Skip non-relative imports (packages)
-  if (!request.startsWith('.') && !request.startsWith('/')) {
-    return options.defaultResolver(request, options);
-  }
-
-  let modifiedRequest = request;
-
-  // Handle dist -> src mapping
-  if (request.includes('/dist/')) {
-    modifiedRequest = request.replace('/dist/', '/src/');
-  }
-
-  // Try to resolve the file with different extensions
-  const extensions = ['.ts', '.tsx', '.js', '.jsx', ''];
-  const basePath = modifiedRequest.replace(/\.(js|ts|tsx|jsx)$/, '');
-
-  for (const ext of extensions) {
-    const fullPath = path.resolve(options.basedir, basePath + ext);
-    if (fs.existsSync(fullPath)) {
-      try {
-        return options.defaultResolver(basePath + ext, options);
-      } catch {
-        continue;
-      }
+  // Normalize path separators - replace backslashes with forward slashes
+  const modifiedRequest = request.replace(/\\/g, '/');
+  
+  // Only modify requests that include '/dist/'
+  if (modifiedRequest.includes('/dist/')) {
+    // Replace /dist/ with /src/
+    const srcRequest = modifiedRequest.replace('/dist/', '/src/');
+    
+    // Try with .ts extension first
+    try {
+      return options.defaultResolver(srcRequest.replace(/\.js$/, '.ts'), options);
+    } catch (e) {
+      // Fall through to try other extensions
+    }
+    
+    // Try with .js extension
+    try {
+      return options.defaultResolver(srcRequest, options);
+    } catch (e) {
+      // Fall through to original request
     }
   }
-
-  // Fallback: try original request
-  try {
-    return options.defaultResolver(modifiedRequest, options);
-  } catch {
-    // Try without extension
-    const noExt = modifiedRequest.replace(/\.js$/, '');
-    return options.defaultResolver(noExt, options);
-  }
+  
+  // Use default resolver for all other requests
+  return options.defaultResolver(request, options);
 };
