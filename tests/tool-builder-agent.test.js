@@ -4,18 +4,25 @@
  * Tests for the Tool Builder Agent that dynamically creates tool definitions
  */
 
+// Mock setup must be done before imports
+const mockChatFn = jest.fn();
+jest.mock('../dist/llm/client', () => ({
+  llmClient: {
+    chat: mockChatFn,
+  },
+}));
+jest.mock('../dist/tools');
+
 const { ToolBuilderAgent } = require('../dist/agents/tool-builder');
 const { llmClient } = require('../dist/llm/client');
 const { executeTool } = require('../dist/tools');
-
-jest.mock('../dist/llm/client');
-jest.mock('../dist/tools');
 
 describe('ToolBuilderAgent', () => {
   let agent;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockChatFn.mockClear();
     agent = new ToolBuilderAgent('claude-sonnet-4');
   });
 
@@ -35,7 +42,7 @@ describe('ToolBuilderAgent', () => {
 
   describe('execute()', () => {
     test('should create tool definition without files', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {
@@ -72,7 +79,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should create tool with file output', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {
@@ -110,7 +117,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should create multiple tools', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {
@@ -145,7 +152,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should validate tool names (snake_case)', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {
@@ -172,7 +179,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should validate tool description length', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {
@@ -199,7 +206,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should validate parameter types', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {
@@ -226,7 +233,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should validate implementation length', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {
@@ -253,7 +260,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should handle JSON parsing errors', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: 'Invalid JSON response',
         usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200, cost: 0.001 },
       });
@@ -269,7 +276,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should include existing tools in prompt', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [],
         }),
@@ -294,7 +301,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should generate valid TypeScript code', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {
@@ -329,7 +336,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should generate test code with test cases', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {
@@ -372,7 +379,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should skip test generation if no test cases', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {
@@ -405,7 +412,7 @@ describe('ToolBuilderAgent', () => {
     test('should use different models', async () => {
       const haiku = new ToolBuilderAgent('claude-haiku-3-5');
 
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [],
         }),
@@ -421,7 +428,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should include warnings from LLM', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {
@@ -448,7 +455,7 @@ describe('ToolBuilderAgent', () => {
     });
 
     test('should handle mixed valid and invalid tools', async () => {
-      llmClient.chat.mockResolvedValue({
+      mockChatFn.mockResolvedValue({
         content: JSON.stringify({
           tools: [
             {

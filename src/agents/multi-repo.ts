@@ -279,42 +279,12 @@ Please generate the necessary file changes for this repository.`;
 
   private parseChanges(response: string): FileChange[] {
     try {
-      // Robustes JSON-Parsing mit mehreren Strategien
-      let json = response.trim();
-
-      // Strategie 1: Entferne Markdown-Codeblöcke (```json, ```JSON, oder ```)
-      // Unterstützt auch Text vor/nach dem JSON-Block
-      const codeBlockMatch = json.match(/```(?:json|JSON)?\s*\n([\s\S]*?)\n```/i);
-      if (codeBlockMatch && codeBlockMatch[1]) {
-        json = codeBlockMatch[1].trim();
-      } else {
-        // Strategie 2: Entferne führende/trailing Backticks ohne Match
-        json = json
-          .replace(/^```(?:json|JSON)?\s*/i, '')
-          .replace(/\s*```$/i, '')
-          .trim();
-      }
-
-      // Strategie 3: Extrahiere JSON aus Text (suche nach erstem { bis letztem })
-      // Nur wenn kein gültiges JSON am Anfang steht
-      if (!json.startsWith('{') && !json.startsWith('[')) {
-        const jsonMatch = json.match(/(\{[\s\S]*\})/);
-        if (jsonMatch && jsonMatch[1]) {
-          json = jsonMatch[1].trim();
-        }
-      }
-
-      const parsed = JSON.parse(json);
+      const parsed = JSON.parse(response);
       return parsed.files || [];
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const responseSnippet = response.substring(0, 200).replace(/\n/g, '\\n');
-
       logger.error('Failed to parse LLM response', {
         agent: 'multi-repo',
-        error: errorMessage,
-        responseSnippet: responseSnippet + (response.length > 200 ? '...' : ''),
-        responseLength: response.length,
+        error: error instanceof Error ? error.message : String(error),
       });
       return [];
     }

@@ -11,14 +11,14 @@ const {
   sendNotification,
   NotificationType,
   getTeamNotificationChannels,
-} = require('./services/notification-service');
+} = require('../dist/services/notification-service.js');
 const {
   ExportFormat,
   exportBuildReport,
   exportCostReport,
   exportAgentPerformanceReport,
   exportBudgetReport,
-} = require('./services/export-service');
+} = require('../dist/services/export-service.js');
 const {
   createUser,
   authenticateUser,
@@ -26,21 +26,20 @@ const {
   revokeRefreshToken,
   createApiKey,
   Roles,
-} = require('./services/auth-service');
+} = require('../dist/services/auth-service.js');
 const {
   authenticate,
-  extractAuth,
   requireRole,
   requireTeamOwnership,
-} = require('./middleware/auth');
-const { cors } = require('./middleware/cors');
-const { csrfProtection, getCsrfTokenEndpoint } = require('./middleware/csrf');
+} = require('../dist/middleware/auth');
+const { cors } = require('../dist/middleware/cors');
+const { csrfProtection, getCsrfTokenEndpoint } = require('../dist/middleware/csrf');
 const {
   createGlobalRateLimiter,
   createTeamRateLimiter,
   createStrictRateLimiter,
   createBuildRateLimiter,
-} = require('./middleware/rate-limit');
+} = require('../dist/middleware/rate-limit');
 
 const app = express();
 
@@ -73,10 +72,6 @@ app.use(express.json({ limit: '10mb' }));
 
 // Make Redis available to middleware
 app.locals.redis = redis;
-
-// Extract auth info for rate limiting (optional, doesn't require auth)
-// This must run before the rate limiter so req.auth is populated for tiered limits
-app.use(extractAuth());
 
 // Global rate limiting (tiered: 10/100/1000 req/min based on auth)
 const globalRateLimiter = createGlobalRateLimiter(redis);
@@ -1359,8 +1354,8 @@ function validateTeamData(data, isUpdate = false) {
   }
 }
 
-// Create a new team (this triggers a build, so apply build rate limiter)
-app.post('/api/v1/teams', authenticate(), requireRole(Roles.DEVELOPER), buildRateLimiter, async (req, res) => {
+// Create a new team
+app.post('/api/v1/teams', authenticate(), requireRole(Roles.DEVELOPER), async (req, res) => {
   try {
     const validatedData = validateTeamData(req.body);
 
@@ -1486,7 +1481,7 @@ app.get('/api/v1/teams', authenticate(), requireRole(Roles.VIEWER), async (req, 
 });
 
 // Get team by ID
-app.get('/api/v1/teams/:id', authenticate(), requireRole(Roles.VIEWER), teamRateLimiter, async (req, res) => {
+app.get('/api/v1/teams/:id', authenticate(), requireRole(Roles.VIEWER), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1530,7 +1525,7 @@ app.get('/api/v1/teams/:id', authenticate(), requireRole(Roles.VIEWER), teamRate
 });
 
 // Update team
-app.put('/api/v1/teams/:id', authenticate(), requireTeamOwnership('id'), teamRateLimiter, async (req, res) => {
+app.put('/api/v1/teams/:id', authenticate(), requireTeamOwnership('id'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1586,7 +1581,7 @@ app.put('/api/v1/teams/:id', authenticate(), requireTeamOwnership('id'), teamRat
 });
 
 // Delete team
-app.delete('/api/v1/teams/:id', authenticate(), requireRole(Roles.ADMIN), teamRateLimiter, async (req, res) => {
+app.delete('/api/v1/teams/:id', authenticate(), requireRole(Roles.ADMIN), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1974,7 +1969,7 @@ const {
   getTeamBudgetLimit,
   getBudgetStatus,
   getBudgetAlertHistory,
-} = require('./services/budget-alert-service');
+} = require('../dist/services/budget-alert-service.js');
 
 /**
  * Set team budget limits

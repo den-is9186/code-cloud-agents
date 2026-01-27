@@ -71,6 +71,7 @@ export interface FileChange {
 // Review Types
 export interface Issue {
   severity: 'error' | 'warning' | 'info';
+  type?: 'security' | 'bug' | 'performance' | 'quality';
   file: string;
   line?: number;
   message: string;

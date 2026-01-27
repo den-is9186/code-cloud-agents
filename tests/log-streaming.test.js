@@ -280,12 +280,12 @@ describe('Log Streaming - Event Emitter Integration', () => {
 
   describe('Integration with Agent Orchestrator', () => {
     test('should import streamEmitter in agent-orchestrator', () => {
-      const orchestrator = require('../src/services/agent-orchestrator');
+      const orchestrator = require('../dist/services/agent-orchestrator');
       expect(orchestrator).toBeDefined();
     });
 
     test('should have orchestrateBuild function that uses streamEmitter', () => {
-      const orchestrator = require('../src/services/agent-orchestrator');
+      const orchestrator = require('../dist/services/agent-orchestrator');
       expect(typeof orchestrator.orchestrateBuild).toBe('function');
     });
   });

@@ -3,7 +3,7 @@ const Redis = require('ioredis');
 // Mock Redis before requiring modules
 jest.mock('ioredis');
 
-const { orchestrateBuild, executeAgentSequence, getBuildProgress } = require('../src/services/agent-orchestrator');
+const { orchestrateBuild, executeAgentSequence, getBuildProgress } = require('../dist/services/agent-orchestrator');
 
 const { getBuild, getAgentRun, getBuildAgentRuns } = require('../src/database/redis-schema');
 
@@ -169,7 +169,7 @@ describe('Agent Orchestrator', () => {
 
     test('failed build should be marked as failed in database', async () => {
       // Mock executeAgentSequence to throw an error
-      jest.spyOn(require('../src/services/agent-orchestrator'), 'executeAgentSequence').mockImplementation(() => {
+      jest.spyOn(require('../dist/services/agent-orchestrator'), 'executeAgentSequence').mockImplementation(() => {
         throw new Error('Agent execution failed');
       });
 
