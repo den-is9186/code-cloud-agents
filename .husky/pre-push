@@ -11,7 +11,8 @@ if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "develop" ]; then
   echo "ℹ️  On protected branch '$BRANCH' - tests must pass"
   npm test || exit 1
 else
-  # Non-blocking for feature branches
+  # Non-blocking for feature branches - run all tests
+  echo "🧪 Running tests on branch '$BRANCH'..."
   if ! npm test; then
     echo "⚠️  Tests failed, but allowing push to continue on branch '$BRANCH'"
     echo "ℹ️  Please fix tests before merging to main/develop"
