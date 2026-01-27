@@ -55,16 +55,6 @@
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.6"
   },
-  "jest": {
-    "testEnvironment": "node",
-    "coverageDirectory": "coverage",
-    "collectCoverageFrom": [
-      "src/**/*.js"
-    ],
-    "testMatch": [
-      "**/tests/**/*.test.js"
-    ]
-  },
   "directories": {
     "doc": "docs",
     "test": "tests"
