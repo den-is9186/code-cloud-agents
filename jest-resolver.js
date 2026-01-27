@@ -4,26 +4,30 @@
  * Resolves:
  * 1. ../dist/* -> ../src/* (for JS files importing from dist)
  * 2. .js extensions to .ts when .ts file exists (only for src files)
+ * 3. Handles Windows path separators for cross-platform compatibility
  */
 const path = require('path');
 const fs = require('fs');
 
 module.exports = (request, options) => {
+  // Normalize path separators for Windows compatibility
+  const normalizedRequest = request.replace(/\\/g, '/');
+
   // Skip node_modules - use default resolution
-  if (request.includes('node_modules') || options.basedir.includes('node_modules')) {
+  if (normalizedRequest.includes('node_modules') || options.basedir.includes('node_modules')) {
     return options.defaultResolver(request, options);
   }
 
   // Skip non-relative imports (packages)
-  if (!request.startsWith('.') && !request.startsWith('/')) {
+  if (!normalizedRequest.startsWith('.') && !normalizedRequest.startsWith('/')) {
     return options.defaultResolver(request, options);
   }
 
-  let modifiedRequest = request;
+  let modifiedRequest = normalizedRequest;
 
   // Handle dist -> src mapping
-  if (request.includes('/dist/')) {
-    modifiedRequest = request.replace('/dist/', '/src/');
+  if (normalizedRequest.includes('/dist/')) {
+    modifiedRequest = normalizedRequest.replace('/dist/', '/src/');
   }
 
   // Try to resolve the file with different extensions
