@@ -14,8 +14,8 @@ const { RedisStore } = require('rate-limit-redis');
 const rateLimit = require('express-rate-limit');
 const { logger } = require('../../dist/utils/logger');
 
-// Import ip helper for IPv6 support
-const { ip: ipKeyGenerator } = require('express-rate-limit');
+// Import ipKeyGenerator helper for IP-based key generation
+const { ipKeyGenerator } = require('express-rate-limit');
 
 /**
  * Create Redis-backed rate limiter
