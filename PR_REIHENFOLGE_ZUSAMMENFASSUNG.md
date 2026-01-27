@@ -1,6 +1,6 @@
 # 🎯 PR Reihenfolge - Zusammenfassung
 
-**Antwort auf:** "welche pr als nächste bitte gebe. in reihenfolge"
+**Antwort auf:** "welche pr als nächste, bitte geben, in reihenfolge"
 
 ---
 

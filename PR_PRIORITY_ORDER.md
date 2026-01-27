@@ -32,7 +32,7 @@
 
 ### 2️⃣ **PR #34** - Fix pre-push hook merge conflict
 **Priorität:** 🔴 KRITISCH
-**Grund:** Git Hooks blockiert sind (verhindert pushes)
+**Grund:** Git Hooks sind blockiert (verhindert pushes)
 **Status:** Open
 **Aktion:**
 - Resolve pre-push hook conflict
