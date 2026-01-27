@@ -302,7 +302,7 @@ function extractAuth() {
             // If redis not available, continue without auth
             return next();
           }
-          
+
           const apiKeyData = await verifyApiKey(redis, apiKey);
 
           req.auth = {
@@ -314,7 +314,7 @@ function extractAuth() {
           };
 
           return next();
-        } catch (error) {
+        } catch (_error) {
           // Silently continue without auth
         }
       }
@@ -333,14 +333,14 @@ function extractAuth() {
           };
 
           return next();
-        } catch (error) {
+        } catch (_error) {
           // Silently continue without auth
         }
       }
 
       // No valid authentication found - continue without auth
       return next();
-    } catch (error) {
+    } catch (_error) {
       // On any error, just continue without auth
       return next();
     }
