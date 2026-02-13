@@ -71,10 +71,7 @@ export interface BuildCostReport {
   budgetStatus?: BudgetStatus;
 }
 
-export function calculateBuildCost(
-  redis: Redis,
-  buildId: string
-): Promise<BuildCostSummary>;
+export function calculateBuildCost(redis: Redis, buildId: string): Promise<BuildCostSummary>;
 
 // Budget monitoring
 export function checkBudget(options: { currentCost: number; budgetLimit: number }): {

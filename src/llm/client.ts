@@ -287,13 +287,14 @@ export class LLMClient {
 
         // Convert Anthropic tool use blocks to our ToolCall format
         const toolUseBlocks = data.content.filter((c) => c.type === 'tool_use');
-        const toolCalls: ToolCall[] | undefined = toolUseBlocks.length > 0
-          ? toolUseBlocks.map((block) => ({
-              id: block.id || '',
-              name: block.name || '',
-              arguments: (block.input as Record<string, unknown>) || {},
-            }))
-          : undefined;
+        const toolCalls: ToolCall[] | undefined =
+          toolUseBlocks.length > 0
+            ? toolUseBlocks.map((block) => ({
+                id: block.id || '',
+                name: block.name || '',
+                arguments: (block.input as Record<string, unknown>) || {},
+              }))
+            : undefined;
 
         return {
           content: data.content[0]?.text || '',
@@ -357,7 +358,10 @@ export class LLMClient {
     return withRetry(fetchCall);
   }
 
-  private calculateUsage(usage: UsageStats | undefined, pricing: { input: number; output: number }): TokenUsage {
+  private calculateUsage(
+    usage: UsageStats | undefined,
+    pricing: { input: number; output: number }
+  ): TokenUsage {
     const inputTokens = usage?.prompt_tokens || usage?.input_tokens || 0;
     const outputTokens = usage?.completion_tokens || usage?.output_tokens || 0;
     const cost = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;

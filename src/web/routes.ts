@@ -11,34 +11,30 @@ const configDir = path.join(__dirname, '../../config');
 // GET /api/models - List all available models
 api.get('/models', (c) => {
   const raw = parse(fs.readFileSync(path.join(configDir, 'models.yml'), 'utf-8'));
-  const models = Object.entries(raw.models as Record<string, any>).map(
-    ([id, m]) => ({
-      id,
-      displayName: m.display_name,
-      tier: m.tier,
-      provider: m.provider,
-      pricing: {
-        input: m.pricing.input_per_million,
-        output: m.pricing.output_per_million,
-      },
-    })
-  );
+  const models = Object.entries(raw.models as Record<string, any>).map(([id, m]) => ({
+    id,
+    displayName: m.display_name,
+    tier: m.tier,
+    provider: m.provider,
+    pricing: {
+      input: m.pricing.input_per_million,
+      output: m.pricing.output_per_million,
+    },
+  }));
   return c.json(models);
 });
 
 // GET /api/presets - List all available presets
 api.get('/presets', (c) => {
   const raw = parse(fs.readFileSync(path.join(configDir, 'presets.yml'), 'utf-8'));
-  const presets = Object.entries(raw.presets as Record<string, any>).map(
-    ([id, p]) => ({
-      id,
-      name: p.name,
-      description: p.description,
-      estimatedCost: p.estimated_cost_per_build ?? null,
-      qualityScore: p.quality_score ?? null,
-      recommended: p.recommended ?? false,
-    })
-  );
+  const presets = Object.entries(raw.presets as Record<string, any>).map(([id, p]) => ({
+    id,
+    name: p.name,
+    description: p.description,
+    estimatedCost: p.estimated_cost_per_build ?? null,
+    qualityScore: p.quality_score ?? null,
+    recommended: p.recommended ?? false,
+  }));
   return c.json(presets);
 });
 
@@ -65,9 +61,7 @@ api.post('/run', async (c) => {
   }
 
   try {
-    const response = await llmClient.chat(modelId, [
-      { role: 'user', content: task.trim() },
-    ]);
+    const response = await llmClient.chat(modelId, [{ role: 'user', content: task.trim() }]);
 
     return c.json({
       ok: true,
