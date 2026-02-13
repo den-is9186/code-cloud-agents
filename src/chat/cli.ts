@@ -43,8 +43,9 @@ const prompt = () => {
       const response = await assistant.process(trimmed);
       console.log(`🤖 ${response}`);
       console.log('');
-    } catch (error: any) {
-      console.log(`\n❌ Fehler: ${error.message}\n`);
+    } catch (error) {
+      const err = error as Error;
+      console.log(`\n❌ Fehler: ${err.message}\n`);
     }
 
     prompt();

@@ -204,8 +204,9 @@ export const shellExec: Tool<
     try {
       const { stdout, stderr } = await execFileAsync(command, args, { cwd });
       return { stdout, stderr, exitCode: 0 };
-    } catch (error: any) {
-      return { stdout: '', stderr: error.message, exitCode: error.code || 1 };
+    } catch (error) {
+      const err = error as { message: string; code?: number };
+      return { stdout: '', stderr: err.message, exitCode: err.code || 1 };
     }
   },
 };

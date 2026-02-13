@@ -6,6 +6,19 @@ import { logger } from './logger';
 /**
  * Checkpoint data structure for saving build state
  */
+export interface RunbookStep {
+  id: string;
+  description: string;
+  dependencies?: string[];
+  estimatedTime?: number;
+}
+
+export interface ExecutionOrderItem {
+  step: string;
+  priority: number;
+  parallel?: boolean;
+}
+
 export interface Checkpoint {
   id: string;
   timestamp: number;
@@ -15,8 +28,8 @@ export interface Checkpoint {
   completedTasks: string[];
   pendingTasks: SubTask[];
   result: Partial<BuildResult>;
-  runbook?: any;
-  executionOrder?: any;
+  runbook?: RunbookStep[];
+  executionOrder?: ExecutionOrderItem[];
   errors?: string[];
 }
 

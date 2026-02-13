@@ -22,7 +22,7 @@ export const BuildConfigSchema = z.object({
 export function validate<T>(data: unknown, schema: z.ZodSchema<T>): T {
   const result = schema.safeParse(data);
   if (!result.success) {
-    const errors = result.error.issues.map((e: any) => `${e.path.join('.')}: ${e.message}`);
+    const errors = result.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`);
     throw new Error(`Validation failed:\n${errors.join('\n')}`);
   }
   return result.data;

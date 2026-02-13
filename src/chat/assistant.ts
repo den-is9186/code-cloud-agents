@@ -277,8 +277,9 @@ Fehler: ${result.errors?.join(', ') || 'Unbekannt'}
 
 Möchtest du es nochmal versuchen oder den Task anpassen?`;
       }
-    } catch (error: any) {
-      return `❌ Fehler beim Ausführen: ${error.message}`;
+    } catch (error) {
+      const err = error as Error;
+      return `❌ Fehler beim Ausführen: ${err.message}`;
     }
     */
   }

@@ -262,7 +262,7 @@ Geben Sie Ihre Antwort **ausschließlich** als gültiges JSON zurück. Verwenden
 KEINE zusätzlichen Erklärungen, Überschriften oder Markdown. Nur JSON!`;
   }
 
-  private buildPrompt(task: string, changes: string, repoContext: any): string {
+  private buildPrompt(task: string, changes: string, repoContext: { language?: string; framework?: string; fileCount: number; structure: string[] }): string {
     return `Task: ${task}
 
 Changes to apply:

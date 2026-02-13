@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node dist/index.js",
     "start:api": "node src/api-server.js",
+    "web": "node dist/web/server.js",
+    "dev:web": "tsc -p tsconfig.json && node dist/web/server.js",
     "dev": "tsx watch src/index.ts",
     "dev:api": "node --watch src/api-server.js",
     "test": "jest",
@@ -26,10 +28,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@hono/node-server": "^1.14.0",
     "@types/node": "^25.0.10",
     "axios": "^1.13.3",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "hono": "^4.7.0",
     "ioredis": "^5.3.2",
     "json2csv": "^6.0.0-alpha.2",
     "rate-limit-redis": "^4.3.1",

@@ -24,8 +24,8 @@ export interface ToolDefinition {
   implementation: string;
   validation?: string[];
   testCases?: Array<{
-    input: Record<string, any>;
-    expectedOutput?: any;
+    input: Record<string, unknown>;
+    expectedOutput?: unknown;
     shouldFail?: boolean;
   }>;
 }

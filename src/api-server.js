@@ -1,4 +1,5 @@
 const express = require('express');
+const helmet = require('helmet');
 const Redis = require('ioredis');
 const fs = require('fs').promises;
 const path = require('path');
@@ -65,10 +66,21 @@ redis.on('connect', () => {
   logger.info('Redis connected successfully', { host: redisConfig.host, port: redisConfig.port });
 });
 
+// Security headers
+app.use(helmet());
+
 // CORS middleware (must be early in the chain)
 app.use(cors());
 
 app.use(express.json({ limit: '10mb' }));
+
+// CSRF protection for state-changing routes (skip if API key auth or safe methods)
+app.use((req, res, next) => {
+  if (req.headers['x-api-key'] || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+  return csrfProtection({ ignoreMethods: ['GET', 'HEAD', 'OPTIONS'] })(req, res, next);
+});
 
 // Make Redis available to middleware
 app.locals.redis = redis;
@@ -2469,6 +2481,24 @@ app.get('/api/v1/export/budget/:teamId', authenticate(), requireTeamOwnership('t
       },
     });
   }
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    error: { code: 'NOT_FOUND', message: `Route ${req.method} ${req.path} not found` }
+  });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('[ERROR]', err.message, err.stack);
+  res.status(err.status || 500).json({
+    error: {
+      code: err.code || 'INTERNAL_ERROR',
+      message: process.env.NODE_ENV === 'production' ? 'Internal error' : err.message
+    }
+  });
 });
 
 // Declare server at module level for graceful shutdown
