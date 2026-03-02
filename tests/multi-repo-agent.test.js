@@ -7,7 +7,13 @@
 const path = require('path');
 const { promisify } = require('util');
 
-jest.mock('../dist/llm/client');
+// Mock llmClient with explicit factory (auto-mock doesn't work for class instances)
+const mockChatFn = jest.fn();
+jest.mock('../dist/llm/client', () => ({
+  llmClient: {
+    chat: mockChatFn,
+  },
+}));
 
 // Mock child_process with explicit mock factory
 const mockExecFile = jest.fn();

@@ -5,10 +5,9 @@
  */
 
 const request = require('supertest');
-const app = require('../src/api-server');
 const { getTestToken, Roles } = require('./helpers/auth-helper');
 
-// Mock export service with explicit mock factory
+// Mock export service with explicit mock factory - must be before requiring api-server
 const mockExportBuildReport = jest.fn();
 const mockExportCostReport = jest.fn();
 const mockExportAgentPerformanceReport = jest.fn();
@@ -20,6 +19,9 @@ jest.mock('../dist/services/export-service', () => ({
   exportAgentPerformanceReport: mockExportAgentPerformanceReport,
   exportBudgetReport: mockExportBudgetReport,
 }));
+
+// Import after mocks are set up
+const app = require('../src/api-server');
 
 const {
   exportBuildReport,

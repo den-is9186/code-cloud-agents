@@ -1,5 +1,9 @@
 // Shared Redis mock for all tests
-const mockRedisStore = new Map();
+// Use global to ensure a single store across module instances (Jest can load this twice)
+if (!global.__mockRedisStore) {
+  global.__mockRedisStore = new Map();
+}
+const mockRedisStore = global.__mockRedisStore;
 
 class RedisMock {
   constructor() {

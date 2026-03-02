@@ -5,18 +5,6 @@
  */
 
 const Redis = require('ioredis');
-const {
-  BudgetThreshold,
-  checkBudgetThreshold,
-  sendBudgetAlert,
-  storeBudgetAlert,
-  getBudgetAlertHistory,
-  setTeamBudgetLimit,
-  getTeamBudgetLimit,
-  getCurrentMonthSpending,
-  checkBudgetAfterBuild,
-  getBudgetStatus,
-} = require('../dist/services/budget-alert-service');
 
 // Mock dependencies - must be before require
 jest.mock('ioredis');
@@ -34,6 +22,20 @@ jest.mock('../dist/services/notification-service', () => ({
     AGENT_FAILED: 'agent.failed',
   },
 }));
+
+// Import after mocks are set up
+const {
+  BudgetThreshold,
+  checkBudgetThreshold,
+  sendBudgetAlert,
+  storeBudgetAlert,
+  getBudgetAlertHistory,
+  setTeamBudgetLimit,
+  getTeamBudgetLimit,
+  getCurrentMonthSpending,
+  checkBudgetAfterBuild,
+  getBudgetStatus,
+} = require('../dist/services/budget-alert-service');
 
 // Import mocked module - must be after jest.mock
 const notificationService = require('../dist/services/notification-service');
