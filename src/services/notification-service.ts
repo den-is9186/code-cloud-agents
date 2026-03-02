@@ -71,6 +71,8 @@ export interface WebhookResponse {
   status?: number;
   data?: unknown;
   error?: string;
+  placeholder?: boolean;
+  message?: string;
 }
 
 /**
@@ -367,10 +369,8 @@ export async function sendEmailNotification(
 
   return {
     success: true,
-    data: {
-      placeholder: true,
-      message: 'Email service not configured',
-    },
+    placeholder: true,
+    message: 'Email service not configured',
   };
 }
 
@@ -457,7 +457,7 @@ export async function sendNotification(
  * @param channel - Channel type
  * @param result - Delivery result
  */
-async function storeNotification(
+export async function storeNotification(
   redis: Redis,
   notification: Notification,
   channel: string,

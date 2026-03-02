@@ -10,6 +10,7 @@ const Redis = require('ioredis');
 const mockAxiosPost = jest.fn();
 jest.mock('axios', () => ({
   post: mockAxiosPost,
+  isAxiosError: (error) => error instanceof Error,
 }));
 
 const axios = require('axios');
