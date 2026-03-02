@@ -1,4 +1,4 @@
-import { Message, LLMResponse, TokenUsage } from '../agents/types';
+import { Message, LLMResponse, TokenUsage, ToolCall } from '../agents/types';
 import { RATE_LIMIT_CONFIG } from '../config/constants';
 import { logger } from '../utils/logger';
 
@@ -9,14 +9,38 @@ interface ModelConfig {
   pricing: { input: number; output: number };
 }
 
+interface ApiToolCall {
+  id: string;
+  type: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface UsageStats {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+}
+
 interface NovitaResponse {
-  choices: Array<{ message?: { content?: string; tool_calls?: any[] } }>;
-  usage?: any;
+  choices: Array<{ message?: { content?: string; tool_calls?: ApiToolCall[] } }>;
+  usage?: UsageStats;
+}
+
+interface ContentBlock {
+  text?: string;
+  type?: string;
+  id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
 }
 
 interface AnthropicResponse {
-  content: Array<{ text?: string; type?: string }>;
-  usage?: any;
+  content: Array<ContentBlock>;
+  usage?: UsageStats;
 }
 
 interface RetryConfig {
@@ -135,7 +159,7 @@ export class LLMClient {
   private totalCost = 0;
   private totalTokens = 0;
 
-  async chat(model: string, messages: Message[], tools?: any[]): Promise<LLMResponse> {
+  async chat(model: string, messages: Message[], tools?: unknown[]): Promise<LLMResponse> {
     // Check rate limit before making API call
     if (!llmRateLimiter.check()) {
       throw new Error('Rate limit exceeded');
@@ -175,7 +199,7 @@ export class LLMClient {
     config: ModelConfig,
     model: string,
     messages: Message[],
-    tools?: any[]
+    tools?: unknown[]
   ): Promise<LLMResponse> {
     const fetchCall = async (): Promise<LLMResponse> => {
       const controller = new AbortController();
@@ -205,9 +229,17 @@ export class LLMClient {
         const data = (await response.json()) as NovitaResponse;
         const usage = this.calculateUsage(data.usage, config.pricing);
 
+        // Convert API tool calls to our ToolCall format
+        const apiToolCalls = data.choices[0]?.message?.tool_calls;
+        const toolCalls: ToolCall[] | undefined = apiToolCalls?.map((tc) => ({
+          id: tc.id,
+          name: tc.function.name,
+          arguments: JSON.parse(tc.function.arguments) as Record<string, unknown>,
+        }));
+
         return {
           content: data.choices[0]?.message?.content || '',
-          toolCalls: data.choices[0]?.message?.tool_calls,
+          toolCalls,
           usage,
         };
       } finally {
@@ -222,7 +254,7 @@ export class LLMClient {
     config: ModelConfig,
     model: string,
     messages: Message[],
-    tools?: any[]
+    tools?: unknown[]
   ): Promise<LLMResponse> {
     const fetchCall = async (): Promise<LLMResponse> => {
       const controller = new AbortController();
@@ -253,9 +285,20 @@ export class LLMClient {
         const data = (await response.json()) as AnthropicResponse;
         const usage = this.calculateUsage(data.usage, config.pricing);
 
+        // Convert Anthropic tool use blocks to our ToolCall format
+        const toolUseBlocks = data.content.filter((c) => c.type === 'tool_use');
+        const toolCalls: ToolCall[] | undefined =
+          toolUseBlocks.length > 0
+            ? toolUseBlocks.map((block) => ({
+                id: block.id || '',
+                name: block.name || '',
+                arguments: (block.input as Record<string, unknown>) || {},
+              }))
+            : undefined;
+
         return {
           content: data.content[0]?.text || '',
-          toolCalls: data.content.filter((c: any) => c.type === 'tool_use') as any,
+          toolCalls,
           usage,
         };
       } finally {
@@ -269,7 +312,7 @@ export class LLMClient {
   private async callLocal(
     config: ModelConfig,
     messages: Message[],
-    tools?: any[]
+    tools?: unknown[]
   ): Promise<LLMResponse> {
     const fetchCall = async (): Promise<LLMResponse> => {
       const controller = new AbortController();
@@ -294,9 +337,17 @@ export class LLMClient {
 
         const data = (await response.json()) as NovitaResponse;
 
+        // Convert API tool calls to our ToolCall format
+        const apiToolCalls = data.choices[0]?.message?.tool_calls;
+        const toolCalls: ToolCall[] | undefined = apiToolCalls?.map((tc) => ({
+          id: tc.id,
+          name: tc.function.name,
+          arguments: JSON.parse(tc.function.arguments) as Record<string, unknown>,
+        }));
+
         return {
           content: data.choices[0]?.message?.content || '',
-          toolCalls: data.choices[0]?.message?.tool_calls,
+          toolCalls,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0 },
         };
       } finally {
@@ -307,7 +358,10 @@ export class LLMClient {
     return withRetry(fetchCall);
   }
 
-  private calculateUsage(usage: any, pricing: { input: number; output: number }): TokenUsage {
+  private calculateUsage(
+    usage: UsageStats | undefined,
+    pricing: { input: number; output: number }
+  ): TokenUsage {
     const inputTokens = usage?.prompt_tokens || usage?.input_tokens || 0;
     const outputTokens = usage?.completion_tokens || usage?.output_tokens || 0;
     const cost = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Code Cloud Agents</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #222;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      color: #111;
+    }
+    h1 span { color: #666; font-weight: 400; }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+      color: #444;
+    }
+    textarea {
+      width: 100%;
+      height: 10rem;
+      padding: 0.75rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.9rem;
+      resize: vertical;
+      background: #fff;
+    }
+    textarea:focus { outline: none; border-color: #555; }
+    .row {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .row > div { flex: 1; }
+    select {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      background: #fff;
+    }
+    select:focus { outline: none; border-color: #555; }
+    button {
+      display: block;
+      width: 100%;
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: #222;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #444; }
+    button:disabled {
+      background: #999;
+      cursor: not-allowed;
+    }
+    .response-box {
+      margin-top: 1.5rem;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      display: none;
+    }
+    .response-content {
+      padding: 1rem;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    .usage-bar {
+      display: flex;
+      gap: 1.5rem;
+      padding: 0.75rem 1rem;
+      border-top: 1px solid #eee;
+      font-size: 0.8rem;
+      color: #666;
+      background: #fafafa;
+      border-radius: 0 0 6px 6px;
+    }
+    .usage-bar strong { color: #333; }
+    .error-box {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: #fff0f0;
+      border: 1px solid #e88;
+      border-radius: 6px;
+      color: #a00;
+      font-size: 0.9rem;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Code Cloud Agents <span>Web UI</span></h1>
+
+    <label for="task">Task</label>
+    <textarea id="task" placeholder="Beschreibe deinen Task..."></textarea>
+
+    <div class="row">
+      <div>
+        <label for="model">Model</label>
+        <select id="model">
+          <option value="">Loading...</option>
+        </select>
+      </div>
+      <div>
+        <label for="preset">Preset</label>
+        <select id="preset">
+          <option value="">Loading...</option>
+        </select>
+      </div>
+    </div>
+
+    <button id="submit" type="button">Submit</button>
+
+    <div class="error-box" id="error"></div>
+
+    <div class="response-box" id="response">
+      <div class="response-content" id="content"></div>
+      <div class="usage-bar" id="usage"></div>
+    </div>
+  </div>
+
+  <script>
+    const $task = document.getElementById('task');
+    const $model = document.getElementById('model');
+    const $preset = document.getElementById('preset');
+    const $submit = document.getElementById('submit');
+    const $error = document.getElementById('error');
+    const $response = document.getElementById('response');
+    const $content = document.getElementById('content');
+    const $usage = document.getElementById('usage');
+
+    // Load models
+    fetch('/api/models')
+      .then(r => r.json())
+      .then(models => {
+        $model.innerHTML = '<option value="">(auto)</option>';
+        const tiers = {};
+        models.forEach(m => {
+          if (!tiers[m.tier]) tiers[m.tier] = [];
+          tiers[m.tier].push(m);
+        });
+        Object.keys(tiers).forEach(tier => {
+          const group = document.createElement('optgroup');
+          group.label = tier.charAt(0).toUpperCase() + tier.slice(1);
+          tiers[tier].forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.displayName + ' ($' + m.pricing.input + '/' + m.pricing.output + ')';
+            group.appendChild(opt);
+          });
+          $model.appendChild(group);
+        });
+      });
+
+    // Load presets
+    fetch('/api/presets')
+      .then(r => r.json())
+      .then(presets => {
+        $preset.innerHTML = '<option value="">(none)</option>';
+        presets.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          const star = p.recommended ? ' \u2605' : '';
+          const cost = p.estimatedCost != null ? ' ~$' + p.estimatedCost : '';
+          opt.textContent = p.id + ' - ' + p.name + cost + star;
+          $preset.appendChild(opt);
+        });
+      });
+
+    // Submit
+    $submit.addEventListener('click', async () => {
+      const task = $task.value.trim();
+      if (!task) return;
+
+      $submit.disabled = true;
+      $submit.textContent = 'Processing...';
+      $error.style.display = 'none';
+      $response.style.display = 'none';
+
+      try {
+        const body = { task };
+        if ($model.value) body.model = $model.value;
+        if ($preset.value) body.preset = $preset.value;
+
+        const res = await fetch('/api/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        const data = await res.json();
+
+        if (!data.ok) {
+          $error.textContent = data.error || 'Unknown error';
+          $error.style.display = 'block';
+          return;
+        }
+
+        $content.textContent = data.content;
+        const u = data.usage || {};
+        $usage.innerHTML =
+          '<span>Input: <strong>' + (u.inputTokens || 0) + '</strong></span>' +
+          '<span>Output: <strong>' + (u.outputTokens || 0) + '</strong></span>' +
+          '<span>Total: <strong>' + (u.totalTokens || 0) + '</strong></span>' +
+          '<span>Cost: <strong>$' + (u.cost != null ? u.cost.toFixed(6) : '0') + '</strong></span>';
+        $response.style.display = 'block';
+      } catch (err) {
+        $error.textContent = err.message;
+        $error.style.display = 'block';
+      } finally {
+        $submit.disabled = false;
+        $submit.textContent = 'Submit';
+      }
+    });
+
+    // Ctrl+Enter to submit
+    $task.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'Enter') $submit.click();
+    });
+  </script>
+</body>
+</html>
