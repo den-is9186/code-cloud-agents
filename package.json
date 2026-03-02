@@ -30,7 +30,7 @@
   "dependencies": {
     "@hono/node-server": "^1.14.0",
     "@types/node": "^25.0.10",
-    "axios": "^1.13.3",
+    "axios": "^1.13.6",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
