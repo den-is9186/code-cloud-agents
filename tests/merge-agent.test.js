@@ -4,18 +4,20 @@
  * Tests for the Merge Agent that intelligently merges code from different branches
  */
 
-const { MergeAgent } = require('../dist/agents/merge');
-const { llmClient } = require('../dist/llm/client');
-
-jest.mock('../dist/llm/client');
-
-// Mock tools with explicit mock factory
-const mockExecuteTool = jest.fn();
-jest.mock('../dist/tools', () => ({
-  executeTool: mockExecuteTool,
+// Mock llmClient with explicit factory (auto-mock doesn't work for class instances)
+const mockChatFn = jest.fn();
+jest.mock('../dist/llm/client', () => ({
+  llmClient: {
+    chat: mockChatFn,
+  },
 }));
 
-const { executeTool } = require('../dist/tools');
+// Auto-mock tools so all exports (executeTool, validatePath) become jest.fn()
+jest.mock('../dist/tools');
+
+const { MergeAgent } = require('../dist/agents/merge');
+const { llmClient } = require('../dist/llm/client');
+const { executeTool, validatePath } = require('../dist/tools');
 
 describe('MergeAgent', () => {
   let agent;
@@ -23,6 +25,8 @@ describe('MergeAgent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     agent = new MergeAgent('claude-sonnet-4');
+    // validatePath must return the path so sourceContent gets populated
+    validatePath.mockImplementation((p) => p);
   });
 
   describe('Agent Properties', () => {
@@ -42,7 +46,7 @@ describe('MergeAgent', () => {
   describe('execute()', () => {
     test('should merge files without conflicts', async () => {
       // Mock file reading
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'function hello() { return "Hello World"; }',
       });
 
@@ -64,7 +68,7 @@ describe('MergeAgent', () => {
       });
 
       // Mock file writing
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Merge feature branch',
@@ -113,7 +117,7 @@ describe('MergeAgent', () => {
         usage: { inputTokens: 120, outputTokens: 180, totalTokens: 300, cost: 0.0015 },
       });
 
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Merge with conflict resolution',
@@ -129,7 +133,7 @@ describe('MergeAgent', () => {
     });
 
     test('should handle "ours" strategy', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const ours = true;',
       });
 
@@ -149,7 +153,7 @@ describe('MergeAgent', () => {
         usage: { inputTokens: 100, outputTokens: 150, totalTokens: 250, cost: 0.001 },
       });
 
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Merge keeping our changes',
@@ -171,7 +175,7 @@ describe('MergeAgent', () => {
     });
 
     test('should handle "theirs" strategy', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const theirs = true;',
       });
 
@@ -191,7 +195,7 @@ describe('MergeAgent', () => {
         usage: { inputTokens: 100, outputTokens: 150, totalTokens: 250, cost: 0.001 },
       });
 
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Merge accepting their changes',
@@ -212,7 +216,7 @@ describe('MergeAgent', () => {
     });
 
     test('should handle "smart" strategy (default)', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const smart = true;',
       });
 
@@ -232,7 +236,7 @@ describe('MergeAgent', () => {
         usage: { inputTokens: 100, outputTokens: 150, totalTokens: 250, cost: 0.001 },
       });
 
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Smart merge',
@@ -252,7 +256,7 @@ describe('MergeAgent', () => {
     });
 
     test('should handle "manual" strategy requiring review', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const manual = true;',
       });
 
@@ -287,7 +291,7 @@ describe('MergeAgent', () => {
     });
 
     test('should handle structural conflicts', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'class MyClass { method1() {} }',
       });
 
@@ -316,7 +320,7 @@ describe('MergeAgent', () => {
         usage: { inputTokens: 150, outputTokens: 200, totalTokens: 350, cost: 0.002 },
       });
 
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Merge class changes',
@@ -329,7 +333,7 @@ describe('MergeAgent', () => {
     });
 
     test('should handle deletion conflicts', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'function removed() { return "exists"; }',
       });
 
@@ -385,7 +389,7 @@ describe('MergeAgent', () => {
         usage: { inputTokens: 200, outputTokens: 250, totalTokens: 450, cost: 0.002 },
       });
 
-      mockExecuteTool.mockResolvedValue({});
+      executeTool.mockResolvedValue({});
 
       const result = await agent.execute({
         task: 'Merge multiple files',
@@ -398,7 +402,7 @@ describe('MergeAgent', () => {
     });
 
     test('should handle file read errors gracefully', async () => {
-      mockExecuteTool.mockRejectedValueOnce(new Error('File not found'));
+      executeTool.mockRejectedValueOnce(new Error('File not found'));
 
       const result = await agent.execute({
         task: 'Merge non-existent file',
@@ -412,7 +416,7 @@ describe('MergeAgent', () => {
     });
 
     test('should handle LLM parsing errors', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const test = 1;',
       });
 
@@ -434,7 +438,7 @@ describe('MergeAgent', () => {
     test('should use different models', async () => {
       const budgetAgent = new MergeAgent('deepseek-r1-0528');
 
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const budget = true;',
       });
 
@@ -458,7 +462,7 @@ describe('MergeAgent', () => {
     });
 
     test('should provide confidence levels', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const test = 1;',
       });
 
@@ -487,7 +491,7 @@ describe('MergeAgent', () => {
         usage: { inputTokens: 100, outputTokens: 150, totalTokens: 250, cost: 0.001 },
       });
 
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Merge with confidence',
@@ -499,7 +503,7 @@ describe('MergeAgent', () => {
     });
 
     test('should create new files', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const newFile = true;',
       });
 
@@ -519,7 +523,7 @@ describe('MergeAgent', () => {
         usage: { inputTokens: 100, outputTokens: 150, totalTokens: 250, cost: 0.001 },
       });
 
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Merge new file',

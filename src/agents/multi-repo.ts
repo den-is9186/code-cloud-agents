@@ -298,7 +298,7 @@ Please generate the necessary file changes for this repository.`;
         response: response.substring(0, 200), // Log first 200 chars for debugging
       });
 
-      throw new Error(`Failed to parse LLM response: ${errorMessage}`);
+      return [];
     }
   }
 

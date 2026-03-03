@@ -4,18 +4,20 @@
  * Tests for the Refactor Agent that improves code quality without changing functionality
  */
 
-const { RefactorAgent } = require('../dist/agents/refactor');
-const { llmClient } = require('../dist/llm/client');
-
-jest.mock('../dist/llm/client');
-
-// Mock tools with explicit mock factory
-const mockExecuteTool = jest.fn();
-jest.mock('../dist/tools', () => ({
-  executeTool: mockExecuteTool,
+// Mock llmClient with explicit factory (auto-mock doesn't work for class instances)
+const mockChatFn = jest.fn();
+jest.mock('../dist/llm/client', () => ({
+  llmClient: {
+    chat: mockChatFn,
+  },
 }));
 
-const { executeTool } = require('../dist/tools');
+// Auto-mock tools so all exports (executeTool, validatePath) become jest.fn()
+jest.mock('../dist/tools');
+
+const { RefactorAgent } = require('../dist/agents/refactor');
+const { llmClient } = require('../dist/llm/client');
+const { executeTool, validatePath } = require('../dist/tools');
 
 describe('RefactorAgent', () => {
   let agent;
@@ -23,6 +25,8 @@ describe('RefactorAgent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     agent = new RefactorAgent('claude-sonnet-4');
+    // validatePath must return the path so files get read
+    validatePath.mockImplementation((p) => p);
   });
 
   describe('Agent Properties', () => {
@@ -42,7 +46,7 @@ describe('RefactorAgent', () => {
   describe('execute()', () => {
     test('should read and analyze files', async () => {
       // Mock file reading
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'function oldFunction() { return 1 + 1; }',
       });
 
@@ -67,7 +71,7 @@ describe('RefactorAgent', () => {
       });
 
       // Mock file writing
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Refactor this code for better readability',
@@ -118,7 +122,7 @@ describe('RefactorAgent', () => {
       });
 
       // Mock file writing
-      mockExecuteTool.mockResolvedValue({});
+      executeTool.mockResolvedValue({});
 
       const result = await agent.execute({
         task: 'Refactor variable names',
@@ -130,7 +134,7 @@ describe('RefactorAgent', () => {
     });
 
     test('should handle focus areas', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'function test() { /* code */ }',
       });
 
@@ -153,7 +157,7 @@ describe('RefactorAgent', () => {
         usage: { inputTokens: 120, outputTokens: 220, totalTokens: 340, cost: 0.0015 },
       });
 
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Improve error handling',
@@ -175,7 +179,7 @@ describe('RefactorAgent', () => {
 
     test('should handle file read errors gracefully', async () => {
       // Mock file read failure
-      mockExecuteTool.mockRejectedValueOnce(new Error('File not found'));
+      executeTool.mockRejectedValueOnce(new Error('File not found'));
 
       // Mock LLM should not be called since no files could be read
       const result = await agent.execute({
@@ -189,7 +193,7 @@ describe('RefactorAgent', () => {
     });
 
     test('should identify code smells', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: `
           function a(x) {
             if (x > 10) {
@@ -240,7 +244,7 @@ describe('RefactorAgent', () => {
         usage: { inputTokens: 200, outputTokens: 300, totalTokens: 500, cost: 0.003 },
       });
 
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Refactor complex function',
@@ -253,7 +257,7 @@ describe('RefactorAgent', () => {
     });
 
     test('should handle LLM parsing errors', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const test = 1;',
       });
 
@@ -282,7 +286,7 @@ function original() {
 }
       `.trim();
 
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: originalContent,
       });
 
@@ -312,7 +316,7 @@ function original(): number {
         usage: { inputTokens: 120, outputTokens: 180, totalTokens: 300, cost: 0.0015 },
       });
 
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Add type annotations',
@@ -327,7 +331,7 @@ function original(): number {
     test('should use correct model', async () => {
       const budgetAgent = new RefactorAgent('deepseek-r1-0528');
 
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const x = 1;',
       });
 
@@ -356,7 +360,7 @@ function original(): number {
     });
 
     test('should read files before refactoring', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const safe = true;',
       });
 
@@ -383,7 +387,7 @@ function original(): number {
     });
 
     test('should only modify files, not create or delete', async () => {
-      mockExecuteTool.mockResolvedValueOnce({
+      executeTool.mockResolvedValueOnce({
         content: 'const test = 1;',
       });
 
@@ -406,7 +410,7 @@ function original(): number {
         usage: { inputTokens: 100, outputTokens: 150, totalTokens: 250, cost: 0.0012 },
       });
 
-      mockExecuteTool.mockResolvedValueOnce({});
+      executeTool.mockResolvedValueOnce({});
 
       const result = await agent.execute({
         task: 'Add types',

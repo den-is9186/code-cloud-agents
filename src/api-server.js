@@ -74,9 +74,15 @@ app.use(cors());
 
 app.use(express.json({ limit: '10mb' }));
 
-// CSRF protection for state-changing routes (skip if API key auth or safe methods)
+// CSRF protection for state-changing routes
+// Skip for: API key auth, Bearer token auth (CSRF-safe by design), safe methods, auth endpoints
 app.use((req, res, next) => {
-  if (req.headers['x-api-key'] || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+  if (
+    req.headers['x-api-key'] ||
+    (req.headers['authorization'] && req.headers['authorization'].startsWith('Bearer ')) ||
+    ['GET', 'HEAD', 'OPTIONS'].includes(req.method) ||
+    req.path.startsWith('/api/v1/auth/')
+  ) {
     return next();
   }
   return csrfProtection({ ignoreMethods: ['GET', 'HEAD', 'OPTIONS'] })(req, res, next);
