@@ -29,7 +29,7 @@
   "license": "ISC",
   "dependencies": {
     "@hono/node-server": "^1.14.0",
-    "@types/node": "^25.0.10",
+    "@types/node": "^25.3.5",
     "axios": "^1.13.3",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
