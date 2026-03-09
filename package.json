@@ -28,7 +28,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@hono/node-server": "^1.14.0",
+    "@hono/node-server": "^1.19.11",
     "@types/node": "^25.0.10",
     "axios": "^1.13.3",
     "express": "^5.2.1",
